@@ -4,6 +4,8 @@ build/
 *.so
 *.dll
 *.h
+!vendor/**/*.dylib
+!vendor/**/*.so
 !vendor/**/*.h
 
 # Go
