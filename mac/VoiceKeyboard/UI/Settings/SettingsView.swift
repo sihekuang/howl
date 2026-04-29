@@ -12,7 +12,6 @@ struct SettingsView: View {
             HotkeyTab(
                 settings: $settings,
                 onSave: save,
-                recorder: composition.recorder,
                 conflictChecker: composition.conflictChecker
             )
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
