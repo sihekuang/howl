@@ -406,6 +406,12 @@ func TestConfig_RoundTrip(t *testing.T) {
 	if roundtripped.WhisperModelPath != original.WhisperModelPath {
 		t.Errorf("WhisperModelPath mismatch: got %q want %q", roundtripped.WhisperModelPath, original.WhisperModelPath)
 	}
+	if roundtripped.WhisperModelSize != original.WhisperModelSize {
+		t.Errorf("WhisperModelSize mismatch: got %q want %q", roundtripped.WhisperModelSize, original.WhisperModelSize)
+	}
+	if roundtripped.Language != original.Language {
+		t.Errorf("Language mismatch: got %q want %q", roundtripped.Language, original.Language)
+	}
 	if roundtripped.DeepFilterModelPath != original.DeepFilterModelPath {
 		t.Errorf("DeepFilterModelPath mismatch: got %q want %q", roundtripped.DeepFilterModelPath, original.DeepFilterModelPath)
 	}
@@ -414,6 +420,15 @@ func TestConfig_RoundTrip(t *testing.T) {
 	}
 	if len(roundtripped.CustomDict) != 2 || roundtripped.CustomDict[0] != "MCP" {
 		t.Errorf("CustomDict mismatch: %+v", roundtripped.CustomDict)
+	}
+	if roundtripped.LLMProvider != original.LLMProvider {
+		t.Errorf("LLMProvider mismatch: got %q want %q", roundtripped.LLMProvider, original.LLMProvider)
+	}
+	if roundtripped.LLMModel != original.LLMModel {
+		t.Errorf("LLMModel mismatch: got %q want %q", roundtripped.LLMModel, original.LLMModel)
+	}
+	if roundtripped.LLMAPIKey != original.LLMAPIKey {
+		t.Errorf("LLMAPIKey mismatch: got %q want %q", roundtripped.LLMAPIKey, original.LLMAPIKey)
 	}
 }
 
