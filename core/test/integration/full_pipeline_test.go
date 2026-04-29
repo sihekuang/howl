@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,6 +63,11 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 	}
 
 	p := pipeline.New(cap, d, tr, dy, cl)
+	var levelCount int32
+	p.LevelCallback = func(rms float32) {
+		atomic.AddInt32(&levelCount, 1)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	// Do not close stop — let FakeCapture exhaust its buffer and close
@@ -79,6 +85,9 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 		t.Errorf("Raw should be non-empty (whisper produced something)")
 	}
 	t.Logf("raw=%q cleaned=%q", res.Raw, res.Cleaned)
+	if atomic.LoadInt32(&levelCount) == 0 {
+		t.Errorf("expected at least one RMS level callback, got 0")
+	}
 }
 
 // loadFixtureAt48k reads a 16kHz WAV and naively upsamples 3x for the
