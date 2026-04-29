@@ -1,6 +1,9 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import os
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
 
 /// Global CGEventTap-based monitor for a single shortcut. Captures both
 /// keyDown and keyUp so push-to-talk semantics work cleanly.
@@ -32,6 +35,8 @@ public final class CGEventHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
                  | (1 << CGEventType.keyUp.rawValue)
                  | (1 << CGEventType.flagsChanged.rawValue)
 
+        log.info("PTT monitor.start key=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
+
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -46,8 +51,10 @@ public final class CGEventHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             },
             userInfo: userInfo
         ) else {
+            log.error("PTT monitor: tapCreate FAILED — Accessibility permission likely missing")
             throw HotkeyError.tapInstallFailed
         }
+        log.info("PTT monitor: event tap installed")
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
@@ -69,18 +76,22 @@ public final class CGEventHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
 
     private func handle(type: CGEventType, event: CGEvent) {
         guard var b = bound else { return }
+        let kc = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        let f = event.flags.rawValue
         if type == .keyDown {
-            if matches(event: event, shortcut: b.shortcut), !b.isHeld {
+            let m = matches(event: event, shortcut: b.shortcut)
+            log.debug("PTT keyDown kc=\(kc, privacy: .public) flags=\(String(format: "0x%llX", f), privacy: .public) match=\(m, privacy: .public) held=\(b.isHeld, privacy: .public)")
+            if m, !b.isHeld {
                 b.isHeld = true
                 bound = b
+                log.info("PTT press fired")
                 b.onPress()
             }
         } else if type == .keyUp || type == .flagsChanged {
             if b.isHeld, !matches(event: event, shortcut: b.shortcut) {
-                // Either the keyCode key went up or modifiers were dropped
-                // → treat as release.
                 b.isHeld = false
                 bound = b
+                log.info("PTT release fired (type=\(type.rawValue, privacy: .public))")
                 b.onRelease()
             }
         }

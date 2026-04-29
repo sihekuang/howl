@@ -1,7 +1,10 @@
 import SwiftUI
 import AppKit
 import Carbon
+import os
 import VoiceKeyboardCore
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
 
 struct HotkeyTab: View {
     @Binding var settings: UserSettings
@@ -10,12 +13,15 @@ struct HotkeyTab: View {
 
     @State private var isRecording = false
     @State private var conflicts: [SymbolicHotkeyConflict] = []
+    @State private var lastSeen: String? = nil
 
     var body: some View {
         Form {
             LabeledContent("Push-to-talk") {
                 Button {
                     isRecording.toggle()
+                    lastSeen = nil
+                    log.info("HotkeyTab: record toggled isRecording=\(isRecording, privacy: .public)")
                 } label: {
                     Text(isRecording ? "Press a shortcut… (Esc to cancel)" : settings.hotkey.displayString)
                         .font(.system(.body, design: .monospaced))
@@ -32,16 +38,29 @@ struct HotkeyTab: View {
                         if isRecording {
                             HotkeyListener(
                                 onRecord: { shortcut in
+                                    log.info("HotkeyTab: recorded kc=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
                                     settings.hotkey = shortcut
                                     onSave(settings)
                                     isRecording = false
                                     refreshConflicts()
                                 },
-                                onCancel: { isRecording = false }
+                                onCancel: {
+                                    log.info("HotkeyTab: record cancelled")
+                                    isRecording = false
+                                },
+                                onKeySeen: { description in
+                                    lastSeen = description
+                                }
                             )
                         }
                     }
                 )
+            }
+
+            if isRecording, let lastSeen {
+                Text("Last key seen: \(lastSeen)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
             }
 
             if !conflicts.isEmpty {
@@ -76,47 +95,65 @@ struct HotkeyTab: View {
 }
 
 // MARK: - NSView-based key listener
-//
-// SwiftUI doesn't give us an "intercept the next raw keystroke" hook, so we
-// drop down to AppKit. The view becomes first responder while recording is
-// active and overrides keyDown to capture the combo directly. This avoids
-// CGEventTap entirely — no Accessibility prompt, no event-tap fragility.
 
 private struct HotkeyListener: NSViewRepresentable {
     let onRecord: (VoiceKeyboardCore.KeyboardShortcut) -> Void
     let onCancel: () -> Void
+    let onKeySeen: (String) -> Void
 
     func makeNSView(context: Context) -> KeyListenerView {
         let view = KeyListenerView()
         view.onRecord = onRecord
         view.onCancel = onCancel
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+        view.onKeySeen = onKeySeen
+        log.info("HotkeyListener: makeNSView")
         return view
     }
 
     func updateNSView(_ nsView: KeyListenerView, context: Context) {
         nsView.onRecord = onRecord
         nsView.onCancel = onCancel
+        nsView.onKeySeen = onKeySeen
     }
 }
 
 final class KeyListenerView: NSView {
     var onRecord: ((VoiceKeyboardCore.KeyboardShortcut) -> Void)?
     var onCancel: (() -> Void)?
+    var onKeySeen: ((String) -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else {
+            log.error("KeyListenerView: viewDidMoveToWindow but no window")
+            return
+        }
+        // Defer until the run loop ticks once — the SwiftUI hosting view
+        // sometimes installs its own first responder right after we mount.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let ok = window.makeFirstResponder(self)
+            log.info("KeyListenerView: makeFirstResponder -> \(ok, privacy: .public). currentFirstResponder=\(String(describing: window.firstResponder), privacy: .public)")
+        }
+    }
+
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let desc = "kc=\(event.keyCode) flags=0x\(String(flags.rawValue, radix: 16))"
+        log.info("KeyListenerView.keyDown \(desc, privacy: .public)")
+        onKeySeen?(desc)
 
-        // Esc with no modifiers cancels.
         if event.keyCode == UInt16(kVK_Escape) && flags.isEmpty {
             onCancel?()
             return
         }
 
-        // Require at least one modifier so we don't capture plain typing.
-        guard !flags.isEmpty else { return }
+        guard !flags.isEmpty else {
+            log.debug("KeyListenerView: ignoring — no modifiers")
+            return
+        }
 
         var modifiers: ModifierFlags = []
         if flags.contains(.shift)   { modifiers.insert(.shift) }
@@ -125,5 +162,13 @@ final class KeyListenerView: NSView {
         if flags.contains(.command) { modifiers.insert(.command) }
 
         onRecord?(VoiceKeyboardCore.KeyboardShortcut(keyCode: event.keyCode, modifiers: modifiers))
+    }
+
+    // Some hosts route key events through performKeyEquivalent first
+    // (e.g. when Cmd is held). Capture them here too.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        log.info("KeyListenerView.performKeyEquivalent kc=\(event.keyCode, privacy: .public)")
+        keyDown(with: event)
+        return true
     }
 }
