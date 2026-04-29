@@ -25,7 +25,7 @@ build-cli:
 
 build-dylib:
 	mkdir -p $(BUILD_DIR)
-	$(GO) build -buildmode=c-shared -o $(BUILD_DIR)/libvkb.dylib ./cmd/libvkb
+	$(GO) build -tags="whispercpp deepfilter" -buildmode=c-shared -o $(BUILD_DIR)/libvkb.dylib ./cmd/libvkb
 
 test: test-unit
 
