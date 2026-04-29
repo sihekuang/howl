@@ -231,7 +231,11 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 cargo build --release -p deep_filter --features capi --target aarch64-apple-darwin
 ```
 
-Expected: produces `target/aarch64-apple-darwin/release/libdf.dylib` (~5–10MB). The `--features capi` flag enables the C ABI.
+Expected: produces `target/aarch64-apple-darwin/release/libdf.dylib` (~16MB on rustc 1.95). The `--features capi` flag enables the C ABI.
+
+**Two upstream gotchas verified during the original v0.5.6 build (April 2026):**
+1. The `time` crate v0.3.28 pinned in upstream's `Cargo.lock` doesn't compile on rustc 1.95+. Run `cargo update -p time` before `cargo build`.
+2. `libDF/Cargo.toml`'s `[lib]` section does NOT declare `crate-type`, so default cargo builds emit only an `rlib`. Either use `cargo cinstall` (requires `cargo install cargo-c`), or simpler: edit `libDF/Cargo.toml` to add `crate-type = ["cdylib", "rlib"]` to the `[lib]` section before building.
 
 If the upstream feature flag has changed, check `libDF/Cargo.toml` for the feature that builds the C library.
 
@@ -345,7 +349,7 @@ Run:
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
 otool -L vendor/deepfilter/lib/macos-arm64/libdf.dylib | head -5
 ```
-Expected: lists `libSystem`, `libc++`, etc. — confirms the binary is well-formed.
+Expected: lists `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib`. No `libc++` dependency is expected — Rust statically links its own standard library. Confirms the binary is well-formed.
 
 - [ ] **Step 9: Verify the header is non-empty and exposes the C ABI**
 
@@ -378,14 +382,15 @@ import (
 
 func TestConfig_RoundTrip(t *testing.T) {
 	original := Config{
-		WhisperModelPath: "/tmp/ggml-small.bin",
-		WhisperModelSize: "small",
-		Language:         "en",
-		NoiseSuppression: true,
-		LLMProvider:      "anthropic",
-		LLMModel:         "claude-sonnet-4-6",
-		LLMAPIKey:        "sk-ant-test",
-		CustomDict:       []string{"MCP", "WebRTC"},
+		WhisperModelPath:    "/tmp/ggml-small.bin",
+		WhisperModelSize:    "small",
+		Language:            "en",
+		NoiseSuppression:    true,
+		DeepFilterModelPath: "/tmp/DeepFilterNet3.tar.gz",
+		LLMProvider:         "anthropic",
+		LLMModel:            "claude-sonnet-4-6",
+		LLMAPIKey:           "sk-ant-test",
+		CustomDict:          []string{"MCP", "WebRTC"},
 	}
 
 	data, err := json.Marshal(original)
@@ -400,6 +405,9 @@ func TestConfig_RoundTrip(t *testing.T) {
 
 	if roundtripped.WhisperModelPath != original.WhisperModelPath {
 		t.Errorf("WhisperModelPath mismatch: got %q want %q", roundtripped.WhisperModelPath, original.WhisperModelPath)
+	}
+	if roundtripped.DeepFilterModelPath != original.DeepFilterModelPath {
+		t.Errorf("DeepFilterModelPath mismatch: got %q want %q", roundtripped.DeepFilterModelPath, original.DeepFilterModelPath)
 	}
 	if roundtripped.NoiseSuppression != original.NoiseSuppression {
 		t.Errorf("NoiseSuppression mismatch")
@@ -442,14 +450,15 @@ Write `core/internal/config/config.go`:
 package config
 
 type Config struct {
-	WhisperModelPath string   `json:"whisper_model_path"`
-	WhisperModelSize string   `json:"whisper_model_size"`
-	Language         string   `json:"language"`
-	NoiseSuppression bool     `json:"noise_suppression"`
-	LLMProvider      string   `json:"llm_provider"`
-	LLMModel         string   `json:"llm_model"`
-	LLMAPIKey        string   `json:"llm_api_key"`
-	CustomDict       []string `json:"custom_dict"`
+	WhisperModelPath    string   `json:"whisper_model_path"`
+	WhisperModelSize    string   `json:"whisper_model_size"`
+	Language            string   `json:"language"`
+	NoiseSuppression    bool     `json:"noise_suppression"`
+	DeepFilterModelPath string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
+	LLMProvider         string   `json:"llm_provider"`
+	LLMModel            string   `json:"llm_model"`
+	LLMAPIKey           string   `json:"llm_api_key"`
+	CustomDict          []string `json:"custom_dict"`
 }
 
 func WithDefaults(c *Config) {
@@ -1741,7 +1750,12 @@ func (p *Passthrough) Close() error { return nil }
 
 - [ ] **Step 3: Write the failing tests**
 
-Write `core/internal/denoise/denoise_test.go`:
+Write **two** test files (Go build tags must be at the top of a file, so the DeepFilter test cannot live in the same file as the always-on Passthrough test):
+
+1. `core/internal/denoise/denoise_test.go` — Passthrough only, no build tag
+2. `core/internal/denoise/denoise_deepfilter_test.go` — `//go:build deepfilter` at the top, contains the DeepFilter test
+
+The combined source is shown below; split it into the two files at the marked boundary.
 
 ```go
 package denoise
@@ -1773,19 +1787,39 @@ func TestPassthrough_ReturnsCopyUnchanged(t *testing.T) {
 	}
 }
 
-// TestDeepFilter_AttenuatesNoise is a build-tagged integration test that
-// requires libdf.dylib on the link path. Run with:
+// TestDeepFilter_AttenuatesNoise lives in a separate file with its own
+// build tag, so the unit suite stays CGo-free for fast iteration. The
+// build-tagged test requires libdf.dylib AND the vendored model file at
+// vendor/deepfilter/models/DeepFilterNet3.tar.gz. Run with:
 //   go test -tags=deepfilter ./internal/denoise/...
 //
 // It generates a noisy sine wave, runs DeepFilterNet over it, and checks
 // the denoised RMS is lower than the input RMS.
-//
-// Without the build tag, this test is skipped so the unit suite stays
-// CGo-free for fast iteration.
+
+// Note: write this in a separate file `denoise_deepfilter_test.go` (NOT
+// in `denoise_test.go`) so the `//go:build deepfilter` directive at the
+// top of the file is the first non-blank line, which is how Go build
+// tags must be placed.
+
+// File: core/internal/denoise/denoise_deepfilter_test.go
 //go:build deepfilter
 
+package denoise
+
+import (
+	"math"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
 func TestDeepFilter_AttenuatesNoise(t *testing.T) {
-	d, err := NewDeepFilter()
+	// Resolve the vendored model path relative to the package dir.
+	modelPath := filepath.Join("..", "..", "vendor", "deepfilter", "models", "DeepFilterNet3.tar.gz")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not vendored at %s; see Task 11 Step 5b", modelPath)
+	}
+	d, err := NewDeepFilter(modelPath, 100)
 	if err != nil {
 		t.Fatalf("NewDeepFilter: %v", err)
 	}
@@ -1829,21 +1863,55 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 Run: `cd /Users/daniel/Documents/Projects/voice-keyboard/core && go test ./internal/denoise/...`
 Expected: PASS — only `TestPassthrough_ReturnsCopyUnchanged` runs.
 
-- [ ] **Step 5: Read the deep_filter.h header to learn the actual API**
+- [ ] **Step 5: Confirm the deep_filter.h API**
 
 Run: `cat /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/deep_filter.h`
 
-Read the header carefully to identify:
-- The opaque state type (likely `DFState` or similar)
-- The constructor (likely `df_create_*` taking model bytes or a model path)
-- The frame-process function (likely `df_process_frame` returning attenuation in dB or a void return)
-- The destructor (likely `df_free` or `df_destroy`)
+Verified API (from the v0.5.6 cbindgen-generated header committed in Task 3):
 
-Record the exact signatures. The DeepFilterNet C ABI has changed across versions — Step 6 must reflect what the actual header says.
+```c
+typedef struct DFState DFState;
+
+DFState *df_create(const char *path, float atten_lim);
+uintptr_t df_get_frame_length(DFState *st);
+void df_set_atten_lim(DFState *st, float lim_db);
+void df_set_post_filter_beta(DFState *st, float beta);
+float df_process_frame(DFState *st, float *input, float *output);
+float df_process_frame_raw(DFState *st, float *input, float **out_gains_p, float **out_coefs_p);
+void df_free(DFState *model);
+```
+
+Notable points:
+- `df_create` requires a path to an unpacked model directory (or a `.tar.gz`) — there is no zero-arg constructor with a built-in model. Pass `atten_lim` in dB (use 100.0 for "no attenuation cap" / let the network decide).
+- `df_process_frame` returns the local SNR as a float — useful for diagnostics, can be ignored.
+- The destructor is `df_free` (not `df_destroy`).
+
+- [ ] **Step 5b: Acquire a DeepFilterNet model file**
+
+The dylib does NOT embed weights — `df_create` needs an actual model path. Two options:
+
+**Option A (preferred for v1):** Vendor the official DeepFilterNet3 model into the repo so the build is self-contained.
+
+```bash
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/models
+cd /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/models
+# DeepFilterNet3 model — small enough to commit (~5MB).
+curl -L https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/DeepFilterNet3_onnx.tar.gz \
+  -o DeepFilterNet3.tar.gz
+ls -lh DeepFilterNet3.tar.gz
+```
+
+If the URL has changed since this plan was written, look in upstream releases for an "_onnx.tar.gz" asset.
+
+After downloading, run `git check-ignore vendor/deepfilter/models/DeepFilterNet3.tar.gz` — should exit non-zero (file is tracked). The `.gitignore` rules already permit `vendor/**/*.dylib` and `*.h` and don't restrict `*.tar.gz`.
+
+**Option B (deferred):** Have the Mac app download the model on first run alongside the Whisper model. Would require changes to the engine state and a "model not loaded" error path. Not v1 scope.
+
+This task uses Option A.
 
 - [ ] **Step 6: Implement the CGo binding**
 
-Write `core/internal/denoise/deepfilter_cgo.go`. The skeleton below assumes a typical DFN C ABI; **adjust function names and signatures to match the header read in Step 5**:
+Write `core/internal/denoise/deepfilter_cgo.go`:
 
 ```go
 //go:build deepfilter
@@ -1864,6 +1932,8 @@ import (
 	"unsafe"
 )
 
+const defaultAttenLimDB = 100.0 // no attenuation cap; let the network decide
+
 // DeepFilter wraps a libdf state. Each instance is single-threaded;
 // concurrent callers must serialize externally or construct one per
 // goroutine.
@@ -1871,31 +1941,44 @@ type DeepFilter struct {
 	state *C.DFState
 }
 
-// NewDeepFilter constructs a denoiser using the model embedded in libdf.
-// If the upstream API requires a model path, expose it as an option here.
-func NewDeepFilter() (*DeepFilter, error) {
-	// ADJUST: the actual constructor signature depends on the libdf version.
-	// Common forms:
-	//   df_create_default()             -> *DFState
-	//   df_create(model_path: *c_char)  -> *DFState
-	st := C.df_create_default()
-	if st == nil {
-		return nil, errors.New("deep filter: df_create_default returned NULL")
+// NewDeepFilter constructs a denoiser from a DeepFilterNet model archive
+// (.tar.gz file or unpacked directory). Use `attenLimDB` to cap how much
+// gain reduction the network applies; pass defaultAttenLimDB (100) for no cap.
+func NewDeepFilter(modelPath string, attenLimDB float32) (*DeepFilter, error) {
+	if modelPath == "" {
+		return nil, errors.New("deep filter: modelPath is required")
 	}
+	cPath := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	st := C.df_create(cPath, C.float(attenLimDB))
+	if st == nil {
+		return nil, errors.New("deep filter: df_create returned NULL (bad model path?)")
+	}
+
+	// libdf's frame length is fixed at 480 samples for 48kHz mono. Verify
+	// at runtime so we fail loudly if a future libdf version changes that.
+	if got := C.df_get_frame_length(st); int(got) != FrameSize {
+		C.df_free(st)
+		return nil, errors.New("deep filter: unexpected frame length from libdf")
+	}
+
 	d := &DeepFilter{state: st}
 	runtime.SetFinalizer(d, func(d *DeepFilter) { _ = d.Close() })
 	return d, nil
 }
 
 // Process runs one 480-sample frame through DeepFilterNet. Returns a
-// fresh slice; caller may mutate the returned buffer.
+// fresh slice; the caller owns it.
 func (d *DeepFilter) Process(frame []float32) []float32 {
 	if d.state == nil || len(frame) != FrameSize {
-		return frame
+		// degrade to passthrough on any precondition failure
+		out := make([]float32, len(frame))
+		copy(out, frame)
+		return out
 	}
 	out := make([]float32, FrameSize)
-	// ADJUST: the actual signature is typically:
-	//   df_process_frame(state, in_ptr, out_ptr) -> SNR estimate or void
+	// df_process_frame returns the local SNR as a float; we ignore it.
 	C.df_process_frame(
 		d.state,
 		(*C.float)(unsafe.Pointer(&frame[0])),
@@ -1906,7 +1989,6 @@ func (d *DeepFilter) Process(frame []float32) []float32 {
 
 func (d *DeepFilter) Close() error {
 	if d.state != nil {
-		// ADJUST: actual destructor name (df_free / df_destroy)
 		C.df_free(d.state)
 		d.state = nil
 	}
@@ -1914,7 +1996,7 @@ func (d *DeepFilter) Close() error {
 }
 ```
 
-After writing, **edit the function names (`df_create_default`, `df_process_frame`, `df_free`) to match the real ABI from the header**. If the header exposes a different constructor flow (for example, requiring a model path string), pass it through `NewDeepFilter`'s options and convert with `C.CString` / `C.free`.
+Then update the test from Step 3 — change `NewDeepFilter()` (zero-arg) to `NewDeepFilter("vendor/deepfilter/models/DeepFilterNet3.tar.gz", 100)`. The relative path works because `go test` runs in the package directory; the `${SRCDIR}/../../vendor/...` C path is wired through `#cgo CFLAGS`/`LDFLAGS`.
 
 - [ ] **Step 7: Build the CGo binding**
 
@@ -3133,7 +3215,7 @@ func (e *engine) buildPipeline() error {
 
 	var d denoise.Denoiser
 	if e.cfg.NoiseSuppression {
-		d = newDeepFilterOrPassthrough()
+		d = newDeepFilterOrPassthrough(e.cfg.DeepFilterModelPath)
 	} else {
 		d = denoise.NewPassthrough()
 	}
@@ -3155,7 +3237,8 @@ package main
 
 import "github.com/voice-keyboard/core/internal/denoise"
 
-func newDeepFilterOrPassthrough() denoise.Denoiser {
+// modelPath ignored in the CGo-free build.
+func newDeepFilterOrPassthrough(modelPath string) denoise.Denoiser {
 	// CGo-free build (development). Use passthrough.
 	return denoise.NewPassthrough()
 }
@@ -3170,8 +3253,14 @@ package main
 
 import "github.com/voice-keyboard/core/internal/denoise"
 
-func newDeepFilterOrPassthrough() denoise.Denoiser {
-	d, err := denoise.NewDeepFilter()
+const dfDefaultAttenLimDB = 100.0
+
+func newDeepFilterOrPassthrough(modelPath string) denoise.Denoiser {
+	if modelPath == "" {
+		// no model path configured — degrade to passthrough silently
+		return denoise.NewPassthrough()
+	}
+	d, err := denoise.NewDeepFilter(modelPath, dfDefaultAttenLimDB)
 	if err != nil {
 		// fall back if the libdf init fails at runtime
 		return denoise.NewPassthrough()

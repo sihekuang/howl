@@ -517,14 +517,15 @@ The Config struct travels across the C ABI as JSON. Stored on disk in `~/Library
 
 ```go
 type Config struct {
-    WhisperModelPath  string   // absolute path to Whisper model file
-    WhisperModelSize  string   // "tiny" | "base" | "small" | "medium" | "large"
-    Language          string   // "en", "es", etc. ("auto" = let Whisper detect)
-    NoiseSuppression  bool     // default true
-    LLMProvider       string   // "anthropic" (v1)
-    LLMModel          string   // e.g. "claude-sonnet-4-6"
-    LLMAPIKey         string   // injected by Swift from Keychain at configure time
-    CustomDict        []string // user vocabulary
+    WhisperModelPath    string   // absolute path to Whisper model file
+    WhisperModelSize    string   // "tiny" | "base" | "small" | "medium" | "large"
+    Language            string   // "en", "es", etc. ("auto" = let Whisper detect)
+    NoiseSuppression    bool     // default true
+    DeepFilterModelPath string   // absolute path to DeepFilterNet model archive (.tar.gz)
+    LLMProvider         string   // "anthropic" (v1)
+    LLMModel            string   // e.g. "claude-sonnet-4-6"
+    LLMAPIKey           string   // injected by Swift from Keychain at configure time
+    CustomDict          []string // user vocabulary
 }
 ```
 
