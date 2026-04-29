@@ -6,11 +6,19 @@ struct VoiceKeyboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("VoiceKeyboard", systemImage: "mic") {
-            // Replaced in Task 9 with the real menu bar UI.
-            Text("VoiceKeyboard")
-                .padding()
+        MenuBarExtra {
+            MenuBarMenu(
+                appState: appDelegate.composition.appState,
+                openSettings: {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                },
+                quit: { NSApp.terminate(nil) }
+            )
+        } label: {
+            MenuBarIcon(appState: appDelegate.composition.appState)
         }
         .menuBarExtraStyle(.window)
+
+        // Settings scene wired in Task 11.
     }
 }
