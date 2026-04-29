@@ -48,9 +48,9 @@ All paths relative to `/Users/daniel/Documents/Projects/voice-keyboard/core/`.
 | `internal/cabi/exports.go` | `//export` C ABI functions, lives inside `cmd/libvkb` package |
 | `test/integration/full_pipeline_test.go` | Real impls + fake capture from a WAV fixture |
 | `test/integration/testdata/hello-world.wav` | 16kHz mono WAV fixture, ~2 seconds |
-| `vendor/deepfilter/lib/macos-arm64/libdf.dylib` | Prebuilt DeepFilterNet C library |
-| `vendor/deepfilter/include/deep_filter.h` | C header for CGo binding |
-| `vendor/deepfilter/VERSION.md` | Pin info: upstream tag, commit, build date |
+| `third_party/deepfilter/lib/macos-arm64/libdf.dylib` | Prebuilt DeepFilterNet C library |
+| `third_party/deepfilter/include/deep_filter.h` | C header for CGo binding |
+| `third_party/deepfilter/VERSION.md` | Pin info: upstream tag, commit, build date |
 
 The `internal/` boundary enforces hex/ports: only `cmd/` packages may construct concrete impls. Inter-package deps inside `internal/` are interface-only.
 
@@ -103,15 +103,14 @@ build/
 *.so
 *.dll
 *.h
-!vendor/**/*.dylib
-!vendor/**/*.so
-!vendor/**/*.h
+!third_party/**/*.dylib
+!third_party/**/*.so
+!third_party/**/*.h
 
 # Go
 *.test
 *.out
 coverage.out
-vendor-go/
 
 # IDE
 .vscode/
@@ -121,7 +120,7 @@ vendor-go/
 .DS_Store
 ```
 
-The `!vendor/**/*.dylib` and `!vendor/**/*.so` negations are critical: without them the `*.dylib` rule would silently prevent committing `vendor/deepfilter/lib/macos-arm64/libdf.dylib` in Task 3.
+The `!third_party/**/*.dylib` and `!third_party/**/*.so` negations are critical: without them the `*.dylib` rule would silently prevent committing `third_party/deepfilter/lib/macos-arm64/libdf.dylib` in Task 3.
 
 - [ ] **Step 5: Verify it compiles**
 
@@ -148,7 +147,7 @@ SHELL := /bin/bash
 BUILD_DIR := build
 GO := go
 WHISPER_PREFIX := /opt/homebrew/opt/whisper-cpp
-DEEPFILTER_DIR := vendor/deepfilter
+DEEPFILTER_DIR := third_party/deepfilter
 
 # Used by CGo to find headers and libraries
 export CGO_CFLAGS  := -I$(WHISPER_PREFIX)/include -I$(CURDIR)/$(DEEPFILTER_DIR)/include
@@ -203,9 +202,9 @@ Expected: dry-run prints commands without executing; no syntax error.
 This is the one-time setup that requires Rust. Once done, the binary is committed and Rust is no longer required.
 
 **Files:**
-- Create: `core/vendor/deepfilter/lib/macos-arm64/libdf.dylib`
-- Create: `core/vendor/deepfilter/include/deep_filter.h`
-- Create: `core/vendor/deepfilter/VERSION.md`
+- Create: `core/third_party/deepfilter/lib/macos-arm64/libdf.dylib`
+- Create: `core/third_party/deepfilter/include/deep_filter.h`
+- Create: `core/third_party/deepfilter/VERSION.md`
 - Create: `core/BUILDING_DENOISE.md`
 
 - [ ] **Step 1: Install Rust temporarily**
@@ -242,18 +241,18 @@ If the upstream feature flag has changed, check `libDF/Cargo.toml` for the featu
 - [ ] **Step 4: Copy artifacts into the vendor directory**
 
 ```bash
-mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64
-mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include
 cp target/aarch64-apple-darwin/release/libdf.dylib \
-   /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64/
+   /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64/
 cp libDF/include/deep_filter.h \
-   /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/
+   /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/
 ```
 
 - [ ] **Step 5: Set the install name on the dylib**
 
 ```bash
-cd /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64
+cd /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64
 install_name_tool -id "@rpath/libdf.dylib" libdf.dylib
 otool -D libdf.dylib
 ```
@@ -262,7 +261,7 @@ Expected: `otool -D` prints `@rpath/libdf.dylib`. This makes the dylib relocatab
 
 - [ ] **Step 6: Write VERSION.md**
 
-Write `core/vendor/deepfilter/VERSION.md`:
+Write `core/third_party/deepfilter/VERSION.md`:
 
 ```markdown
 # DeepFilterNet vendored binary
@@ -292,7 +291,7 @@ Write `core/BUILDING_DENOISE.md`:
 ```markdown
 # Rebuilding libdf.dylib
 
-The `libdf.dylib` shipped under `vendor/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
+The `libdf.dylib` shipped under `third_party/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
 
 This document describes how to regenerate the binary when bumping DeepFilterNet versions.
 
@@ -322,18 +321,18 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 4. Copy the artifacts into the vendor directory:
    ```bash
    cp target/aarch64-apple-darwin/release/libdf.dylib \
-      <REPO>/core/vendor/deepfilter/lib/macos-arm64/
+      <REPO>/core/third_party/deepfilter/lib/macos-arm64/
    cp libDF/include/deep_filter.h \
-      <REPO>/core/vendor/deepfilter/include/
+      <REPO>/core/third_party/deepfilter/include/
    ```
 
 5. Rewrite the install name:
    ```bash
-   cd <REPO>/core/vendor/deepfilter/lib/macos-arm64
+   cd <REPO>/core/third_party/deepfilter/lib/macos-arm64
    install_name_tool -id "@rpath/libdf.dylib" libdf.dylib
    ```
 
-6. Update `vendor/deepfilter/VERSION.md` with the new tag, commit hash, build date, and Rust version.
+6. Update `third_party/deepfilter/VERSION.md` with the new tag, commit hash, build date, and Rust version.
 
 7. Run the denoise tests:
    ```bash
@@ -347,13 +346,13 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-otool -L vendor/deepfilter/lib/macos-arm64/libdf.dylib | head -5
+otool -L third_party/deepfilter/lib/macos-arm64/libdf.dylib | head -5
 ```
 Expected: lists `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib`. No `libc++` dependency is expected — Rust statically links its own standard library. Confirms the binary is well-formed.
 
 - [ ] **Step 9: Verify the header is non-empty and exposes the C ABI**
 
-Run: `head -50 /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/deep_filter.h`
+Run: `head -50 /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/deep_filter.h`
 Expected: contains declarations like `DFState* df_create(...)`, `df_process_frame(...)`, `df_free(...)`. Note the exact function names and signatures — they are needed in Task 11.
 
 - [ ] **Step 10: Commit**
@@ -1808,7 +1807,7 @@ func TestPassthrough_ReturnsCopyUnchanged(t *testing.T) {
 // TestDeepFilter_AttenuatesNoise lives in a separate file with its own
 // build tag, so the unit suite stays CGo-free for fast iteration. The
 // build-tagged test requires libdf.dylib AND the vendored model file at
-// vendor/deepfilter/models/DeepFilterNet3.tar.gz. Run with:
+// third_party/deepfilter/models/DeepFilterNet3.tar.gz. Run with:
 //   go test -tags=deepfilter ./internal/denoise/...
 //
 // It generates a noisy sine wave, runs DeepFilterNet over it, and checks
@@ -1833,7 +1832,7 @@ import (
 
 func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 	// Resolve the vendored model path relative to the package dir.
-	modelPath := filepath.Join("..", "..", "vendor", "deepfilter", "models", "DeepFilterNet3.tar.gz")
+	modelPath := filepath.Join("..", "..", "third_party", "deepfilter", "models", "DeepFilterNet3.tar.gz")
 	if _, err := os.Stat(modelPath); err != nil {
 		t.Skipf("model not vendored at %s; see Task 11 Step 5b", modelPath)
 	}
@@ -1883,7 +1882,7 @@ Expected: PASS — only `TestPassthrough_ReturnsCopyUnchanged` runs.
 
 - [ ] **Step 5: Confirm the deep_filter.h API**
 
-Run: `cat /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/deep_filter.h`
+Run: `cat /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/deep_filter.h`
 
 Verified API (from the v0.5.6 cbindgen-generated header committed in Task 3):
 
@@ -1911,8 +1910,8 @@ The dylib does NOT embed weights — `df_create` needs an actual model path. Two
 **Option A (preferred for v1):** Vendor the official DeepFilterNet3 model into the repo so the build is self-contained.
 
 ```bash
-mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/models
-cd /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/models
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
+cd /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
 # DeepFilterNet3 model — small enough to commit (~5MB).
 curl -L https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/DeepFilterNet3_onnx.tar.gz \
   -o DeepFilterNet3.tar.gz
@@ -1921,7 +1920,7 @@ ls -lh DeepFilterNet3.tar.gz
 
 If the URL has changed since this plan was written, look in upstream releases for an "_onnx.tar.gz" asset.
 
-After downloading, run `git check-ignore vendor/deepfilter/models/DeepFilterNet3.tar.gz` — should exit non-zero (file is tracked). The `.gitignore` rules already permit `vendor/**/*.dylib` and `*.h` and don't restrict `*.tar.gz`.
+After downloading, run `git check-ignore third_party/deepfilter/models/DeepFilterNet3.tar.gz` — should exit non-zero (file is tracked). The `.gitignore` rules already permit `third_party/**/*.dylib` and `*.h` and don't restrict `*.tar.gz`.
 
 **Option B (deferred):** Have the Mac app download the model on first run alongside the Whisper model. Would require changes to the engine state and a "model not loaded" error path. Not v1 scope.
 
@@ -1937,8 +1936,8 @@ Write `core/internal/denoise/deepfilter_cgo.go`:
 package denoise
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../vendor/deepfilter/include
-#cgo LDFLAGS: -L${SRCDIR}/../../vendor/deepfilter/lib/macos-arm64 -ldf
+#cgo CFLAGS: -I${SRCDIR}/../../third_party/deepfilter/include
+#cgo LDFLAGS: -L${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64 -ldf
 #include <stdlib.h>
 #include "deep_filter.h"
 */
@@ -2014,14 +2013,14 @@ func (d *DeepFilter) Close() error {
 }
 ```
 
-Then update the test from Step 3 — change `NewDeepFilter()` (zero-arg) to `NewDeepFilter("vendor/deepfilter/models/DeepFilterNet3.tar.gz", 100)`. The relative path works because `go test` runs in the package directory; the `${SRCDIR}/../../vendor/...` C path is wired through `#cgo CFLAGS`/`LDFLAGS`.
+Then update the test from Step 3 — change `NewDeepFilter()` (zero-arg) to `NewDeepFilter("third_party/deepfilter/models/DeepFilterNet3.tar.gz", 100)`. The relative path works because `go test` runs in the package directory; the `${SRCDIR}/../../third_party/...` C path is wired through `#cgo CFLAGS`/`LDFLAGS`.
 
 - [ ] **Step 7: Build the CGo binding**
 
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-DYLD_LIBRARY_PATH=$PWD/vendor/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
+DYLD_LIBRARY_PATH=$PWD/third_party/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
   go build -tags=deepfilter ./internal/denoise/...
 ```
 Expected: success. If the linker complains about missing symbols, the function names in the binding don't match the real ABI from the header — fix and re-run.
@@ -2031,7 +2030,7 @@ Expected: success. If the linker complains about missing symbols, the function n
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-DYLD_LIBRARY_PATH=$PWD/vendor/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
+DYLD_LIBRARY_PATH=$PWD/third_party/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
   go test -tags=deepfilter ./internal/denoise/... -v
 ```
 Expected: `TestPassthrough_ReturnsCopyUnchanged` PASS, `TestDeepFilter_AttenuatesNoise` PASS.

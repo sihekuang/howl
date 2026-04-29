@@ -1,6 +1,6 @@
 # Rebuilding libdf.dylib
 
-The `libdf.dylib` shipped under `vendor/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
+The `libdf.dylib` shipped under `third_party/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
 
 This document describes how to regenerate the binary when bumping DeepFilterNet versions.
 
@@ -28,7 +28,7 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
    cd DeepFilterNet
    ```
 
-4. Apply the two local patches required as of `v0.5.6` (see `vendor/deepfilter/VERSION.md` for the latest known-good values):
+4. Apply the two local patches required as of `v0.5.6` (see `third_party/deepfilter/VERSION.md` for the latest known-good values):
 
    a. Refresh the `time` crate so it builds on modern rustc:
    ```bash
@@ -61,19 +61,19 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 7. Copy the artifacts into the vendor directory:
    ```bash
    cp target/aarch64-apple-darwin/release/libdf.dylib \
-      <REPO>/core/vendor/deepfilter/lib/macos-arm64/
+      <REPO>/core/third_party/deepfilter/lib/macos-arm64/
    cp deep_filter.h \
-      <REPO>/core/vendor/deepfilter/include/
+      <REPO>/core/third_party/deepfilter/include/
    ```
 
 8. Rewrite the install name:
    ```bash
-   cd <REPO>/core/vendor/deepfilter/lib/macos-arm64
+   cd <REPO>/core/third_party/deepfilter/lib/macos-arm64
    install_name_tool -id "@rpath/libdf.dylib" libdf.dylib
    otool -D libdf.dylib   # should print @rpath/libdf.dylib
    ```
 
-9. Update `vendor/deepfilter/VERSION.md` with the new tag, commit hash, build date, Rust version, and any new local patches.
+9. Update `third_party/deepfilter/VERSION.md` with the new tag, commit hash, build date, Rust version, and any new local patches.
 
 10. Run the denoise tests:
     ```bash

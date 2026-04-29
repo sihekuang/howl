@@ -4,15 +4,14 @@ build/
 *.so
 *.dll
 *.h
-!vendor/**/*.dylib
-!vendor/**/*.so
-!vendor/**/*.h
+!third_party/**/*.dylib
+!third_party/**/*.so
+!third_party/**/*.h
 
 # Go
 *.test
 *.out
 coverage.out
-vendor-go/
 
 # IDE
 .vscode/

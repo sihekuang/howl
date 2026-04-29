@@ -2,7 +2,7 @@ SHELL := /bin/bash
 BUILD_DIR := build
 GO := go
 WHISPER_PREFIX := /opt/homebrew/opt/whisper-cpp
-DEEPFILTER_DIR := vendor/deepfilter
+DEEPFILTER_DIR := third_party/deepfilter
 
 # Used by CGo to find headers and libraries
 export CGO_CFLAGS  := -I$(WHISPER_PREFIX)/include -I$(CURDIR)/$(DEEPFILTER_DIR)/include

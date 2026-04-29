@@ -400,7 +400,7 @@ Paste injection during a held hotkey is broken: synthesizing ⌘V while the user
 ### Vendored dependencies
 
 ```
-vendor/deepfilter/
+third_party/deepfilter/
 ├── lib/macos-arm64/libdf.dylib    # ~5–10MB, prebuilt by maintainer once
 ├── include/deep_filter.h          # C header for CGo
 └── VERSION.md                     # upstream tag, commit, build date, deployment target
