@@ -18,9 +18,6 @@ struct VoiceKeyboardApp: App {
             MenuBarMenu(
                 appState: appDelegate.composition.appState,
                 hotkey: shortcut,
-                openSettings: {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                },
                 quit: { NSApp.terminate(nil) }
             )
         } label: {

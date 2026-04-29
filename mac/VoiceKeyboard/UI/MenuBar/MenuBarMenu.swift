@@ -4,7 +4,6 @@ import VoiceKeyboardCore
 struct MenuBarMenu: View {
     let appState: AppState
     let hotkey: String
-    let openSettings: () -> Void
     let quit: () -> Void
 
     var body: some View {
@@ -15,8 +14,14 @@ struct MenuBarMenu: View {
                 Text(warning).font(.caption).foregroundStyle(.orange)
             }
             Divider()
-            Button("Settings…") { openSettings() }
-                .keyboardShortcut(",", modifiers: [.command])
+            // SettingsLink is the SwiftUI-native way to open the Settings
+            // scene from inside a MenuBarExtra; using NSApp.sendAction on
+            // the private "showSettingsWindow:" selector triggers a runtime
+            // warning on macOS 14+.
+            SettingsLink {
+                Text("Settings…")
+            }
+            .keyboardShortcut(",", modifiers: [.command])
             Divider()
             Button("Quit VoiceKeyboard") { quit() }
                 .keyboardShortcut("q", modifiers: [.command])
