@@ -152,6 +152,10 @@ finalize:
 		last := make([]float32, denoise.FrameSize)
 		copy(last, pending)
 		out = append(out, d.Process(last)...)
+		if levelCb != nil {
+			denoisedTail := out[len(out)-denoise.FrameSize:]
+			levelCb(audio.RMS(denoisedTail))
+		}
 	}
 	return out
 }

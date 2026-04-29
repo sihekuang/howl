@@ -112,6 +112,7 @@ func vkb_start_capture() C.int {
 		levelMax    float32
 		levelLastAt time.Time
 	)
+	levelLastAt = time.Now()
 	pipe.LevelCallback = func(rms float32) {
 		levelMu.Lock()
 		defer levelMu.Unlock()

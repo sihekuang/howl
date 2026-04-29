@@ -33,7 +33,7 @@ type engine struct {
 //	            and a "result" event with the dict-corrected fallback
 //	            text is emitted alongside it
 //	"error"   — terminal failure for this capture cycle; Msg has detail
-//	"level"   — periodic RMS level (TODO: not yet emitted)
+//	"level"   — periodic RMS level (~30 Hz), RMS field carries the value
 type event struct {
 	Kind string  `json:"kind"`
 	RMS  float32 `json:"rms,omitempty"`
