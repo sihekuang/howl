@@ -10,13 +10,28 @@ struct HotkeyTab: View {
     @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
     let conflictChecker: any SymbolicHotkeyChecker
+    let permissions: any AccessibilityPermissions
 
     @State private var isRecording = false
     @State private var conflicts: [SymbolicHotkeyConflict] = []
     @State private var lastSeen: String? = nil
+    @State private var isTrusted = false
 
     var body: some View {
         Form {
+            LabeledContent("Accessibility") {
+                HStack(spacing: 8) {
+                    Image(systemName: isTrusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(isTrusted ? .green : .orange)
+                    Text(isTrusted ? "Granted" : "Required for global hotkey")
+                        .font(.caption)
+                    Spacer()
+                    Button("Open System Settings…") {
+                        permissions.openSystemSettings()
+                    }
+                }
+            }
+
             LabeledContent("Push-to-talk") {
                 Button {
                     isRecording.toggle()
@@ -86,6 +101,10 @@ struct HotkeyTab: View {
         .padding()
         .task {
             refreshConflicts()
+            isTrusted = permissions.isTrusted()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isTrusted = permissions.isTrusted()
         }
     }
 
