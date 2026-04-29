@@ -2027,12 +2027,12 @@ The dylib does NOT embed weights — `df_create` needs an actual model path. Two
 mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
 cd /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
 # DeepFilterNet3 model — small enough to commit (~5MB).
-curl -L https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/DeepFilterNet3_onnx.tar.gz \
+curl -L https://raw.githubusercontent.com/Rikorose/DeepFilterNet/main/models/DeepFilterNet3_onnx.tar.gz \
   -o DeepFilterNet3.tar.gz
 ls -lh DeepFilterNet3.tar.gz
 ```
 
-If the URL has changed since this plan was written, look in upstream releases for an "_onnx.tar.gz" asset.
+**Note:** the DeepFilterNet v0.5.6 release page does NOT host the ONNX model archive — releases only contain the `deep-filter` CLI binaries and LADSPA plugins. The actual model archives live in the upstream repo's `models/` directory on the `main` branch (raw URL above). If the path changes, browse https://github.com/Rikorose/DeepFilterNet/tree/main/models for `DeepFilterNet3_onnx.tar.gz`.
 
 After downloading, run `git check-ignore third_party/deepfilter/models/DeepFilterNet3.tar.gz` — should exit non-zero (file is tracked). The `.gitignore` rules already permit `third_party/**/*.dylib` and `*.h` and don't restrict `*.tar.gz`.
 
