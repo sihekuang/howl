@@ -51,12 +51,15 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 	}
 	defer tr.Close()
 	dy := dict.NewFuzzy(nil, 1)
-	cl := llm.NewAnthropic(llm.AnthropicOptions{
+	cl, err := llm.NewAnthropic(llm.AnthropicOptions{
 		APIKey:  "sk-ant-test",
 		Model:   "claude-sonnet-4-6",
 		BaseURL: srv.URL,
 		Timeout: 5 * time.Second,
 	})
+	if err != nil {
+		t.Fatalf("NewAnthropic: %v", err)
+	}
 
 	p := pipeline.New(cap, d, tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
