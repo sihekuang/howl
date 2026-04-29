@@ -1,0 +1,380 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */; };
+		87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
+		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
+		F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceKeyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B1C913F6CEDB9C5FCEDCC1A4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		338FA19A1CA6AD7AFC52D9AA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				251226AFC921562507D69444 /* VoiceKeyboardCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		692595C215D369602D2B308F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		77FC1DB6661B7B7F21B80843 /* VoiceKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */,
+			);
+			path = VoiceKeyboard;
+			sourceTree = "<group>";
+		};
+		F43C5AECB42C18347426326A = {
+			isa = PBXGroup;
+			children = (
+				338FA19A1CA6AD7AFC52D9AA /* Packages */,
+				77FC1DB6661B7B7F21B80843 /* VoiceKeyboard */,
+				692595C215D369602D2B308F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C252467323F8F0A73E2E9C12 /* VoiceKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 76A098DCA3E6397F7520852F /* Build configuration list for PBXNativeTarget "VoiceKeyboard" */;
+			buildPhases = (
+				AD500750EC43DB6F01CA3790 /* Build Go core */,
+				428DFA0117395DEF6985FF9E /* Sources */,
+				785F51127C50D361A8BB78C5 /* Copy libvkb.dylib into Frameworks */,
+				B1C913F6CEDB9C5FCEDCC1A4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoiceKeyboard;
+			packageProductDependencies = (
+				39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */,
+			);
+			productName = VoiceKeyboard;
+			productReference = F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F626CD2105B014B2D60736FA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C252467323F8F0A73E2E9C12 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 851E0E1603DC950120B346FB /* Build configuration list for PBXProject "VoiceKeyboard" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F43C5AECB42C18347426326A;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9C18F350D1EE5C5DBB52330C /* XCLocalSwiftPackageReference "Packages/VoiceKeyboardCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 692595C215D369602D2B308F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C252467323F8F0A73E2E9C12 /* VoiceKeyboard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		785F51127C50D361A8BB78C5 /* Copy libvkb.dylib into Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../core/build/libvkb.dylib",
+			);
+			name = "Copy libvkb.dylib into Frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nmkdir -p \"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\ncp -f \"$SRCROOT/../core/build/libvkb.dylib\" \\\n      \"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/\"\ninstall_name_tool -id \"@rpath/libvkb.dylib\" \\\n      \"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/libvkb.dylib\"\n";
+		};
+		AD500750EC43DB6F01CA3790 /* Build Go core */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Go core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/../core/build/libvkb.dylib",
+				"$(SRCROOT)/../core/build/libvkb.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\ncd \"$SRCROOT/../core\"\nunset GOFLAGS\nmake build-dylib\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		428DFA0117395DEF6985FF9E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		59BF5329AB88AB26D27DAFF5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VoiceKeyboard/VoiceKeyboard.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = VoiceKeyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../core/build";
+				OTHER_LDFLAGS = "-lvkb";
+				PRODUCT_BUNDLE_IDENTIFIER = com.voicekeyboard.app;
+				PRODUCT_NAME = VoiceKeyboard;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6A429A52F25F277F999C989B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		888071B2EE635B95C74B2267 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A2D3F047994A606D874F7835 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VoiceKeyboard/VoiceKeyboard.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = VoiceKeyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../core/build";
+				OTHER_LDFLAGS = "-lvkb";
+				PRODUCT_BUNDLE_IDENTIFIER = com.voicekeyboard.app;
+				PRODUCT_NAME = VoiceKeyboard;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		76A098DCA3E6397F7520852F /* Build configuration list for PBXNativeTarget "VoiceKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				59BF5329AB88AB26D27DAFF5 /* Debug */,
+				A2D3F047994A606D874F7835 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		851E0E1603DC950120B346FB /* Build configuration list for PBXProject "VoiceKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A429A52F25F277F999C989B /* Debug */,
+				888071B2EE635B95C74B2267 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		9C18F350D1EE5C5DBB52330C /* XCLocalSwiftPackageReference "Packages/VoiceKeyboardCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/VoiceKeyboardCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceKeyboardCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = F626CD2105B014B2D60736FA /* Project object */;
+}
