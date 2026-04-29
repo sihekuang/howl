@@ -21,7 +21,7 @@ build: build-cli build-dylib
 
 build-cli:
 	mkdir -p $(BUILD_DIR)
-	$(GO) build -o $(BUILD_DIR)/vkb-cli ./cmd/vkb-cli
+	$(GO) build -tags="whispercpp deepfilter" -o $(BUILD_DIR)/vkb-cli ./cmd/vkb-cli
 
 build-dylib:
 	mkdir -p $(BUILD_DIR)
