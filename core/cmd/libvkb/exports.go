@@ -8,12 +8,28 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"os"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/voice-keyboard/core/internal/config"
 )
+
+// Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
+// how the app was launched (stderr is invisible when launched from
+// Finder / LaunchServices). Best-effort: if file open fails, just keep
+// stderr.
+func init() {
+	if f, err := os.OpenFile("/tmp/vkb.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		log.SetOutput(io.MultiWriter(os.Stderr, f))
+	}
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.Printf("[vkb] libvkb loaded pid=%d", os.Getpid())
+}
 
 // vkb_init initializes the engine. Idempotent: calling it again on an
 // already-initialized engine is a no-op and returns 0.
@@ -88,13 +104,16 @@ func vkb_start_capture() C.int {
 	if e == nil {
 		return 1
 	}
+	log.Printf("[vkb] vkb_start_capture: entering")
 	e.mu.Lock()
 	if e.pipeline == nil {
 		e.mu.Unlock()
+		log.Printf("[vkb] vkb_start_capture: REJECTED — pipeline is nil")
 		return 1
 	}
 	if e.stopCh != nil {
 		e.mu.Unlock()
+		log.Printf("[vkb] vkb_start_capture: REJECTED — capture already in flight")
 		return 2
 	}
 	stopCh := make(chan struct{})
@@ -133,11 +152,18 @@ func vkb_start_capture() C.int {
 	}
 
 	go func() {
+		log.Printf("[vkb] capture goroutine: started")
 		defer func() {
+			if r := recover(); r != nil {
+				msg := fmt.Sprintf("panic: %v", r)
+				log.Printf("[vkb] capture goroutine: PANIC %s", msg)
+				e.events <- event{Kind: "error", Msg: msg}
+			}
 			e.mu.Lock()
 			e.stopCh = nil
 			e.cancel = nil
 			e.mu.Unlock()
+			log.Printf("[vkb] capture goroutine: exited")
 		}()
 		res, err := pipe.Run(ctx, stopCh)
 		// Terminal events (error/warning/result) MUST NOT be dropped: if
@@ -145,13 +171,17 @@ func vkb_start_capture() C.int {
 		// here — by the time we're stopping, level emission is over and
 		// the channel will drain quickly.
 		if err != nil {
+			log.Printf("[vkb] capture goroutine: pipe.Run error: %v", err)
 			e.events <- event{Kind: "error", Msg: err.Error()}
 			return
 		}
 		if res.LLMError != nil {
+			log.Printf("[vkb] capture goroutine: emitting warning + fallback result")
 			e.events <- event{Kind: "warning", Msg: "llm: " + res.LLMError.Error()}
 		}
+		log.Printf("[vkb] capture goroutine: emitting result (len=%d)", len(res.Cleaned))
 		e.events <- event{Kind: "result", Text: res.Cleaned}
+		log.Printf("[vkb] capture goroutine: result event delivered")
 	}()
 	return 0
 }
@@ -168,6 +198,7 @@ func vkb_stop_capture() C.int {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	log.Printf("[vkb] vkb_stop_capture: closing stopCh+cancel")
 	if e.stopCh != nil {
 		close(e.stopCh)
 		e.stopCh = nil

@@ -9,6 +9,8 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"log"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/denoise"
@@ -56,32 +58,50 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 		return Result{}, errors.New("pipeline: nil receiver")
 	}
 
+	log.Printf("[vkb] pipeline.Run: starting capture sr=%d", inputSampleRate)
+	tStart := time.Now()
 	frames, err := p.capture.Start(ctx, inputSampleRate)
 	if err != nil {
+		log.Printf("[vkb] pipeline.Run: capture.Start FAILED: %v", err)
 		return Result{}, err
 	}
-	defer p.capture.Stop()
+	defer func() {
+		log.Printf("[vkb] pipeline.Run: stopping capture")
+		p.capture.Stop()
+		log.Printf("[vkb] pipeline.Run: total elapsed %v", time.Since(tStart))
+	}()
 
 	denoised := captureAndDenoise(ctx, frames, stopCh, p.denoiser, p.LevelCallback)
+	log.Printf("[vkb] pipeline.Run: capture+denoise done samples=%d (%.2fs of audio)", len(denoised), float64(len(denoised))/float64(inputSampleRate))
 
 	dec := resample.NewDecimate3()
 	pcm16k := dec.Process(denoised)
+	log.Printf("[vkb] pipeline.Run: decimated to 16k samples=%d", len(pcm16k))
 
+	tTrans := time.Now()
+	log.Printf("[vkb] pipeline.Run: transcribing…")
 	raw, err := p.transcriber.Transcribe(ctx, pcm16k)
 	if err != nil {
+		log.Printf("[vkb] pipeline.Run: transcribe FAILED after %v: %v", time.Since(tTrans), err)
 		return Result{}, err
 	}
+	log.Printf("[vkb] pipeline.Run: transcribe done in %v rawLen=%d raw=%q", time.Since(tTrans), len(raw), raw)
 	if raw == "" {
+		log.Printf("[vkb] pipeline.Run: empty transcription; skipping LLM")
 		return Result{}, nil
 	}
 
 	corrected, terms := p.dict.Match(raw)
+	log.Printf("[vkb] pipeline.Run: dict matched %d terms", len(terms))
 
+	tLLM := time.Now()
+	log.Printf("[vkb] pipeline.Run: cleaning via LLM…")
 	cleaned, llmErr := p.cleaner.Clean(ctx, corrected, terms)
 	if llmErr != nil {
-		// graceful degradation: ship the dict-corrected text
+		log.Printf("[vkb] pipeline.Run: LLM FAILED after %v: %v (using dict-corrected fallback)", time.Since(tLLM), llmErr)
 		return Result{Raw: raw, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
 	}
+	log.Printf("[vkb] pipeline.Run: LLM done in %v cleanedLen=%d", time.Since(tLLM), len(cleaned))
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 

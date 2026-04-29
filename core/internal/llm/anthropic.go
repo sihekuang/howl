@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-const defaultTimeout = 30 * time.Second
+const defaultTimeout = 3 * time.Second
 
 // AnthropicOptions configures the Anthropic Cleaner.
 type AnthropicOptions struct {
@@ -63,6 +64,8 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	}
 	prompt := renderPrompt(raw, preserveTerms)
 
+	t0 := time.Now()
+	log.Printf("[vkb] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
 	msg, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: 1024,
@@ -71,8 +74,10 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 		},
 	})
 	if err != nil {
+		log.Printf("[vkb] anthropic.Clean: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("anthropic: %w", err)
 	}
+	log.Printf("[vkb] anthropic.Clean: response in %v, blocks=%d", time.Since(t0), len(msg.Content))
 	if len(msg.Content) == 0 {
 		return "", errors.New("anthropic: empty response")
 	}
