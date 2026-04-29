@@ -31,8 +31,12 @@ import (
 	"unsafe"
 )
 
-// backendsOnce ensures ggml's dynamic backends (Metal, BLAS, CPU
-// micro-arch variants, …) are loaded exactly once per process.
+// whisper-cpp v1.8.4 splits its compute backends (Metal, BLAS, CPU
+// micro-arch) into dynamically-loaded .so files in
+// /opt/homebrew/Cellar/ggml/0.10.0/libexec/. Without calling
+// ggml_backend_load_all() once per process, whisper_init_from_file_*
+// aborts with GGML_ASSERT(device) failed because make_buft_list finds
+// no registered devices. sync.Once ensures we load exactly once.
 var backendsOnce sync.Once
 
 func loadBackends() {
@@ -82,6 +86,11 @@ func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	return &WhisperCpp{ctx: ctx, lang: lang, threads: threads}, nil
 }
 
+// Transcribe runs whisper.cpp inference synchronously. NOTE: ctx is
+// accepted to satisfy the Transcriber interface, but whisper_full is
+// a blocking C call that does not honor cancellation. Cancellation
+// support would require wiring whisper_full_params.abort_callback to
+// poll ctx.Done() — out of scope for v1.
 func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, error) {
 	if w.ctx == nil {
 		return "", errors.New("whisper: closed")

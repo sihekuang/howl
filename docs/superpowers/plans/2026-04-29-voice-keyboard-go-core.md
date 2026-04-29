@@ -2185,6 +2185,11 @@ type Transcriber interface {
 	// Transcribe accepts mono 16kHz float32 PCM and returns the
 	// recognized text. Empty audio (or audio detected as silence)
 	// yields ("", nil) — silence is not an error.
+	//
+	// Implementations may or may not honor ctx cancellation; the v1
+	// WhisperCpp impl does not (whisper_full is a blocking C call).
+	// Callers should size audio buffers to bounded utterances rather
+	// than rely on context-driven timeouts.
 	Transcribe(ctx context.Context, pcm16k []float32) (string, error)
 
 	// Close releases the underlying model. Safe to call multiple times.
@@ -2308,6 +2313,11 @@ func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	return &WhisperCpp{ctx: ctx, lang: lang, threads: threads}, nil
 }
 
+// Transcribe runs whisper.cpp inference synchronously. NOTE: ctx is
+// accepted to satisfy the Transcriber interface, but whisper_full is
+// a blocking C call that does not honor cancellation. Cancellation
+// support would require wiring whisper_full_params.abort_callback to
+// poll ctx.Done() — out of scope for v1.
 func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, error) {
 	if w.ctx == nil {
 		return "", errors.New("whisper: closed")
