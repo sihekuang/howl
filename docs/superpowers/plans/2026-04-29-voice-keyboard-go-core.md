@@ -17,7 +17,7 @@ All paths relative to `/Users/daniel/Documents/Projects/voice-keyboard/core/`.
 | File | Responsibility |
 |---|---|
 | `go.mod` | Module declaration, dependency versions |
-| `Makefile` | `bootstrap`, `build`, `build-go`, `build-cli`, `build-dylib`, `test`, `clean` |
+| `Makefile` | `bootstrap`, `build`, `build-cli`, `build-dylib`, `test`, `test-unit`, `test-integration`, `clean`, `rebuild-denoise` |
 | `BUILDING_DENOISE.md` | Maintainer doc: how to rebuild `libdf.dylib` from source |
 | `cmd/vkb-cli/main.go` | CLI test harness, composition root #1 |
 | `cmd/libvkb/main.go` | C ABI surface, composition root #2, c-shared build |
