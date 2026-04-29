@@ -8,7 +8,21 @@ package transcribe
 
 #include <stdlib.h>
 #include "whisper.h"
+#include "ggml.h"
 #include "ggml-backend.h"
+
+// noop_log is a no-op ggml/whisper log callback that discards all output.
+static void noop_log(enum ggml_log_level level, const char *text, void *user_data) {
+    (void)level; (void)text; (void)user_data;
+}
+
+// silence_whisper_logs disables whisper.cpp and ggml's default stderr
+// logger by installing a no-op callback. Call once per process, before
+// whisper_init_* and ggml_backend_load_all.
+static void silence_whisper_logs(void) {
+    whisper_log_set(noop_log, NULL);
+    ggml_log_set(noop_log, NULL);
+}
 
 // Helper that calls whisper_full and returns the segment count.
 // Lives here so we can pass Go-allocated float buffers cleanly.
@@ -41,6 +55,7 @@ var backendsOnce sync.Once
 
 func loadBackends() {
 	backendsOnce.Do(func() {
+		C.silence_whisper_logs()
 		C.ggml_backend_load_all()
 	})
 }
