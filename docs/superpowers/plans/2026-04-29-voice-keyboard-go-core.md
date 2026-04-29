@@ -3900,8 +3900,12 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 	p := pipeline.New(cap, d, tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	// Don't pre-close stop: with the real Whisper transcriber, an
+	// already-closed stopCh causes captureAndDenoise to exit before
+	// any audio is consumed (empty PCM → empty transcription). Let
+	// FakeCapture drain its buffer naturally; the channel close from
+	// FakeCapture's goroutine ends the drain loop.
 	stop := make(chan struct{})
-	close(stop)
 
 	res, err := p.Run(ctx, stop)
 	if err != nil {
