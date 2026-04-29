@@ -56,6 +56,7 @@ func (d *DeepFilter) Process(frame []float32) []float32 {
 		return out
 	}
 	out := make([]float32, FrameSize)
+	// df_process_frame returns the local SNR as a float; we ignore it.
 	C.df_process_frame(
 		d.state,
 		(*C.float)(unsafe.Pointer(&frame[0])),

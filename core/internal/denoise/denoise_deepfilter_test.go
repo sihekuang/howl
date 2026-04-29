@@ -28,8 +28,8 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 	for f := 0; f < frames; f++ {
 		frame := make([]float32, FrameSize)
 		for i := 0; i < FrameSize; i++ {
-			t := float64(f*FrameSize+i) / float64(sr)
-			tone := 0.3 * math.Sin(2*math.Pi*1000*t)
+			ts := float64(f*FrameSize+i) / float64(sr)
+			tone := 0.3 * math.Sin(2*math.Pi*1000*ts)
 			noise := 0.3 * (math.Mod(float64(i*9301+49297), 233280)/233280 - 0.5) * 2
 			frame[i] = float32(tone + noise)
 			noisyRMS += float64(frame[i] * frame[i])
@@ -49,5 +49,12 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 
 	if cleanRMS >= noisyRMS {
 		t.Errorf("denoised RMS (%f) should be lower than noisy RMS (%f)", cleanRMS, noisyRMS)
+	}
+}
+
+func TestNewDeepFilter_EmptyModelPathErrors(t *testing.T) {
+	_, err := NewDeepFilter("", 100)
+	if err == nil {
+		t.Fatalf("expected error for empty modelPath, got nil")
 	}
 }
