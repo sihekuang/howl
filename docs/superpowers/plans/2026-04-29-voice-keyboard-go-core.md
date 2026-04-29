@@ -1200,8 +1200,9 @@ func TestDecimate3_DCSignalPreserved(t *testing.T) {
 	d := NewDecimate3()
 	out := d.Process(in)
 
-	// Check the steady-state samples (skip initial filter delay).
-	const skip = 200
+	// Check the steady-state samples (skip initial filter delay; group delay is
+	// ~5 output samples for a 33-tap FIR, 20 leaves comfortable headroom).
+	const skip = 20
 	if len(out) <= skip+10 {
 		t.Fatalf("output too short for steady-state check: %d", len(out))
 	}
@@ -1258,6 +1259,33 @@ func TestDecimate3_HighFrequencyAttenuated(t *testing.T) {
 		t.Errorf("12kHz peak amplitude %f, expected < 0.2", peak)
 	}
 }
+
+func TestDecimate3_ResetEqualsFreshConstruction(t *testing.T) {
+	// Same input fed through a fresh decimator and a Reset-ed decimator
+	// must produce identical output, byte-for-byte.
+	in := make([]float32, 4800)
+	for i := range in {
+		in[i] = float32(math.Sin(2 * math.Pi * 1000 * float64(i) / 48000.0))
+	}
+
+	fresh := NewDecimate3()
+	freshOut := fresh.Process(in)
+
+	reused := NewDecimate3()
+	reused.Process(in)  // dirty its state
+	reused.Reset()
+	resetOut := reused.Process(in)
+
+	if len(freshOut) != len(resetOut) {
+		t.Fatalf("output lengths differ: fresh=%d reset=%d", len(freshOut), len(resetOut))
+	}
+	for i := range freshOut {
+		if freshOut[i] != resetOut[i] {
+			t.Errorf("sample %d: fresh=%f reset=%f", i, freshOut[i], resetOut[i])
+			break
+		}
+	}
+}
 ```
 
 - [ ] **Step 2: Run the tests to confirm they fail**
@@ -1270,19 +1298,23 @@ Expected: FAIL — `NewDecimate3`, `Process` undefined.
 Write `core/internal/resample/decimate3.go`:
 
 ```go
-// Package resample provides sample-rate conversion. decimate3 implements
-// a 3:1 polyphase FIR low-pass + decimator suitable for 48kHz → 16kHz.
+// Package resample provides sample-rate conversion. Decimate3 implements
+// a 3:1 FIR low-pass + decimator suitable for 48kHz → 16kHz.
 //
 // The filter is a 33-tap Hamming-windowed sinc with cutoff at 7.5kHz
 // (slightly below the 8kHz post-decimation Nyquist to leave headroom).
-// Polyphase commutator splits the FIR across three sub-filters so we
-// only compute one out of every three output samples.
+// On each output sample (every 3rd input), the full 33-tap FIR is
+// computed against the rolling delay line. A true polyphase decomposition
+// would split the FIR into 3 sub-filters of 11 taps each and select one
+// per output; the output is mathematically identical, the chosen
+// direct-form is simpler. The 33-tap length keeps polyphase as a
+// drop-in optimization later if needed.
 package resample
 
 import "math"
 
 const (
-	taps   = 33      // FIR length, must be a multiple of decimation factor for clean polyphase
+	taps   = 33      // FIR length; 33 = 3×11 keeps a polyphase split as a future drop-in option
 	decim  = 3       // 48000 / 16000
 	cutoff = 7500.0  // Hz, slightly below 8kHz post-decim Nyquist
 	srIn   = 48000.0 // input sample rate

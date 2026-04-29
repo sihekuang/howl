@@ -24,8 +24,9 @@ func TestDecimate3_DCSignalPreserved(t *testing.T) {
 	d := NewDecimate3()
 	out := d.Process(in)
 
-	// Check the steady-state samples (skip initial filter delay).
-	const skip = 200
+	// Check the steady-state samples (skip initial filter delay; group delay is
+	// ~5 output samples for a 33-tap FIR, 20 leaves comfortable headroom).
+	const skip = 20
 	if len(out) <= skip+10 {
 		t.Fatalf("output too short for steady-state check: %d", len(out))
 	}
@@ -80,5 +81,32 @@ func TestDecimate3_HighFrequencyAttenuated(t *testing.T) {
 	}
 	if peak > 0.2 {
 		t.Errorf("12kHz peak amplitude %f, expected < 0.2", peak)
+	}
+}
+
+func TestDecimate3_ResetEqualsFreshConstruction(t *testing.T) {
+	// Same input fed through a fresh decimator and a Reset-ed decimator
+	// must produce identical output, byte-for-byte.
+	in := make([]float32, 4800)
+	for i := range in {
+		in[i] = float32(math.Sin(2 * math.Pi * 1000 * float64(i) / 48000.0))
+	}
+
+	fresh := NewDecimate3()
+	freshOut := fresh.Process(in)
+
+	reused := NewDecimate3()
+	reused.Process(in)  // dirty its state
+	reused.Reset()
+	resetOut := reused.Process(in)
+
+	if len(freshOut) != len(resetOut) {
+		t.Fatalf("output lengths differ: fresh=%d reset=%d", len(freshOut), len(resetOut))
+	}
+	for i := range freshOut {
+		if freshOut[i] != resetOut[i] {
+			t.Errorf("sample %d: fresh=%f reset=%f", i, freshOut[i], resetOut[i])
+			break
+		}
 	}
 }

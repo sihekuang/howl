@@ -1,16 +1,20 @@
-// Package resample provides sample-rate conversion. decimate3 implements
-// a 3:1 polyphase FIR low-pass + decimator suitable for 48kHz → 16kHz.
+// Package resample provides sample-rate conversion. Decimate3 implements
+// a 3:1 FIR low-pass + decimator suitable for 48kHz → 16kHz.
 //
 // The filter is a 33-tap Hamming-windowed sinc with cutoff at 7.5kHz
 // (slightly below the 8kHz post-decimation Nyquist to leave headroom).
-// Polyphase commutator splits the FIR across three sub-filters so we
-// only compute one out of every three output samples.
+// On each output sample (every 3rd input), the full 33-tap FIR is
+// computed against the rolling delay line. A true polyphase decomposition
+// would split the FIR into 3 sub-filters of 11 taps each and select one
+// per output; the output is mathematically identical, the chosen
+// direct-form is simpler. The 33-tap length keeps polyphase as a
+// drop-in optimization later if needed.
 package resample
 
 import "math"
 
 const (
-	taps   = 33      // FIR length, must be a multiple of decimation factor for clean polyphase
+	taps   = 33      // FIR length; 33 = 3×11 keeps a polyphase split as a future drop-in option
 	decim  = 3       // 48000 / 16000
 	cutoff = 7500.0  // Hz, slightly below 8kHz post-decim Nyquist
 	srIn   = 48000.0 // input sample rate
