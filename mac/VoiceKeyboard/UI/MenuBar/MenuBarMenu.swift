@@ -3,6 +3,7 @@ import VoiceKeyboardCore
 
 struct MenuBarMenu: View {
     let appState: AppState
+    let hotkey: String
     let openSettings: () -> Void
     let quit: () -> Void
 
@@ -29,7 +30,7 @@ struct MenuBarMenu: View {
         case .ready:
             switch appState.engineState {
             case .idle:
-                Label("Ready — hold ⌥⌘Space to dictate", systemImage: "mic")
+                Label("Ready — hold \(hotkey) to dictate", systemImage: "mic")
             case .recording:
                 Label("Listening…", systemImage: "waveform.circle.fill")
                     .foregroundStyle(.red)
