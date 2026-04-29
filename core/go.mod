@@ -2,7 +2,10 @@ module github.com/voice-keyboard/core
 
 go 1.26.2
 
-require github.com/anthropics/anthropic-sdk-go v1.38.0
+require (
+	github.com/anthropics/anthropic-sdk-go v1.38.0
+	github.com/gen2brain/malgo v0.11.24
+)
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
