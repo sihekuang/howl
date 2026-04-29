@@ -171,6 +171,7 @@ build-cli:
 build-dylib:
 	mkdir -p $(BUILD_DIR)
 	$(GO) build -buildmode=c-shared -o $(BUILD_DIR)/libvkb.dylib ./cmd/libvkb
+	install_name_tool -id "@rpath/libvkb.dylib" $(BUILD_DIR)/libvkb.dylib
 
 test: test-unit
 
@@ -3669,16 +3670,7 @@ ls -lh build/libvkb.dylib build/libvkb.h
 ```
 Expected: produces `build/libvkb.dylib` and `build/libvkb.h`. The header declares `vkb_init`, `vkb_configure`, etc.
 
-- [ ] **Step 6: Set the dylib install name**
-
-```bash
-cd /Users/daniel/Documents/Projects/voice-keyboard/core
-install_name_tool -id "@rpath/libvkb.dylib" build/libvkb.dylib
-otool -D build/libvkb.dylib
-```
-Expected: `otool -D` prints `@rpath/libvkb.dylib`.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 `git add cmd/libvkb Makefile && git commit -m "feat(cabi): add libvkb.dylib C ABI exports"`
 
