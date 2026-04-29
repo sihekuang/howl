@@ -4,11 +4,12 @@ import Testing
 
 @Suite("KeyboardShortcut")
 struct KeyboardShortcutTests {
-    @Test func defaultPTTMatchesOptCmdSpace() {
+    @Test func defaultPTTMatchesCtrlSpace() {
         let s = KeyboardShortcut.defaultPTT
         #expect(s.keyCode == KeyboardShortcut.kVK_Space)
-        #expect(s.modifiers.contains(.option))
-        #expect(s.modifiers.contains(.command))
+        #expect(s.modifiers.contains(.control))
+        #expect(!s.modifiers.contains(.option))
+        #expect(!s.modifiers.contains(.command))
     }
 
     @Test func roundTripCodable() throws {
@@ -21,8 +22,7 @@ struct KeyboardShortcutTests {
     @Test func displayString() {
         let s = KeyboardShortcut.defaultPTT
         let str = s.displayString
-        #expect(str.contains("⌥"))
-        #expect(str.contains("⌘"))
+        #expect(str.contains("⌃"))
         #expect(str.contains("Space"))
     }
 }

@@ -15,7 +15,7 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
 
     public static let defaultPTT = KeyboardShortcut(
         keyCode: kVK_Space,
-        modifiers: [.option, .command]
+        modifiers: [.control]
     )
 
     public var displayString: String {
