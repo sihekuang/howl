@@ -432,6 +432,9 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 	if empty.LLMProvider != "anthropic" {
 		t.Errorf("expected default LLMProvider=anthropic, got %q", empty.LLMProvider)
 	}
+	if empty.LLMModel != "claude-sonnet-4-6" {
+		t.Errorf("expected default LLMModel=claude-sonnet-4-6, got %q", empty.LLMModel)
+	}
 }
 ```
 
