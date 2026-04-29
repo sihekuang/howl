@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/gen2brain/malgo"
 )
 
 const malgoChannels = 1
+
+// stopTimeout bounds how long Stop will wait for the cleanup goroutine
+// to finish tearing down the malgo device and context.
+const stopTimeout = 2 * time.Second
 
 var _ Capture = (*MalgoCapture)(nil)
 
@@ -23,6 +28,7 @@ type MalgoCapture struct {
 	device   *malgo.Device
 	out      chan []float32
 	cancel   context.CancelFunc
+	done     chan struct{} // closed when the cleanup goroutine has fully run
 }
 
 func NewMalgoCapture() *MalgoCapture {
@@ -86,13 +92,16 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 		return nil, fmt.Errorf("malgo start: %w", err)
 	}
 
+	done := make(chan struct{})
 	m.ctxMalgo = mctx
 	m.device = device
 	m.out = out
 	m.cancel = cancel
+	m.done = done
 
-	// stop+cleanup goroutine
+	// stop+cleanup goroutine. Closes done last so Stop can wait on it.
 	go func() {
+		defer close(done)
 		<-subCtx.Done()
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -105,20 +114,37 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 			m.ctxMalgo.Free()
 			m.ctxMalgo = nil
 		}
-		close(m.out)
-		m.out = nil
+		if m.out != nil {
+			close(m.out)
+			m.out = nil
+		}
 		m.cancel = nil
+		m.done = nil
 	}()
 
 	return out, nil
 }
 
+// Stop signals the capture to shut down and blocks (up to stopTimeout)
+// until the cleanup goroutine has fully torn down the malgo device and
+// context. Synchronous semantics make it safe to call Start again
+// immediately after Stop returns without racing the previous Stop.
 func (m *MalgoCapture) Stop() error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.cancel != nil {
-		m.cancel()
+	cancel := m.cancel
+	done := m.done
+	if cancel != nil {
+		cancel()
 		m.cancel = nil
 	}
-	return nil
+	m.mu.Unlock()
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-time.After(stopTimeout):
+		return errors.New("malgo capture: stop timed out")
+	}
 }
