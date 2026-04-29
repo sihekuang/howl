@@ -1,0 +1,15 @@
+// Package transcribe provides ASR via whisper.cpp. The Transcriber
+// interface accepts 16kHz mono float32 PCM and returns a UTF-8 string.
+package transcribe
+
+import "context"
+
+type Transcriber interface {
+	// Transcribe accepts mono 16kHz float32 PCM and returns the
+	// recognized text. Empty audio (or audio detected as silence)
+	// yields ("", nil) — silence is not an error.
+	Transcribe(ctx context.Context, pcm16k []float32) (string, error)
+
+	// Close releases the underlying model. Safe to call multiple times.
+	Close() error
+}
