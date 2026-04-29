@@ -90,6 +90,16 @@ public final class EngineCoordinator {
     public func manualPress() async { await onPress() }
     public func manualRelease() async { await onRelease() }
 
+    /// Force-reset the UI state. Best-effort: also nudges the engine to
+    /// stop any in-flight capture. If the Go core already finished and
+    /// just dropped its result event, this lets the user keep going.
+    public func manualReset() async {
+        try? await composition.engine.stopCapture()
+        composition.appState.engineState = .idle
+        composition.overlay.hide()
+        composition.appState.transientWarning = nil
+    }
+
     private func onPress() async {
         composition.appState.engineState = .recording
         composition.overlay.show()

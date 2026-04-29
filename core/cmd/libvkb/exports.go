@@ -140,26 +140,18 @@ func vkb_start_capture() C.int {
 			e.mu.Unlock()
 		}()
 		res, err := pipe.Run(ctx, stopCh)
+		// Terminal events (error/warning/result) MUST NOT be dropped: if
+		// they are, Swift sits forever in `processing`. We accept blocking
+		// here — by the time we're stopping, level emission is over and
+		// the channel will drain quickly.
 		if err != nil {
-			select {
-			case e.events <- event{Kind: "error", Msg: err.Error()}:
-			default:
-			}
+			e.events <- event{Kind: "error", Msg: err.Error()}
 			return
 		}
-		// Surface graceful degradation: if the LLM cleanup failed, ship a
-		// "warning" event so Swift can notify the user, and still emit
-		// the "result" event with the dict-corrected fallback text.
 		if res.LLMError != nil {
-			select {
-			case e.events <- event{Kind: "warning", Msg: "llm: " + res.LLMError.Error()}:
-			default:
-			}
+			e.events <- event{Kind: "warning", Msg: "llm: " + res.LLMError.Error()}
 		}
-		select {
-		case e.events <- event{Kind: "result", Text: res.Cleaned}:
-		default:
-		}
+		e.events <- event{Kind: "result", Text: res.Cleaned}
 	}()
 	return 0
 }

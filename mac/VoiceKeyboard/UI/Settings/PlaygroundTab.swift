@@ -58,6 +58,11 @@ struct PlaygroundTab: View {
                 if appState.engineState == .recording {
                     rmsMeter
                 }
+                if appState.engineState != .idle {
+                    Button("Reset") {
+                        Task { @MainActor in await coordinator.manualReset() }
+                    }
+                }
                 Spacer()
                 Button("Clear") { scratch = "" }
                     .disabled(scratch.isEmpty)
