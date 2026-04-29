@@ -2,7 +2,7 @@ import SwiftUI
 import VoiceKeyboardCore
 
 struct DictionaryTab: View {
-    @State var settings: UserSettings
+    @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
     @State private var newTerm: String = ""
 

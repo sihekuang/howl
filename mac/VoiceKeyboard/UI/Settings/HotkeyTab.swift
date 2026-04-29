@@ -2,8 +2,7 @@ import SwiftUI
 import VoiceKeyboardCore
 
 struct HotkeyTab: View {
-    @State var settings: UserSettings
-    let onSave: (UserSettings) -> Void
+    @Binding var settings: UserSettings
 
     var body: some View {
         Form {

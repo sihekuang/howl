@@ -47,6 +47,28 @@ public final class EngineCoordinator {
         pollTask = nil
     }
 
+    /// Reapply the current settings to a running engine. Called from Settings
+    /// after the user changes any field. If the hotkey changed, restart the
+    /// hotkey monitor too.
+    public func reapplyConfig() async {
+        await applyConfig()
+        do {
+            let settings = try composition.settings.get()
+            composition.hotkey.stop()
+            try composition.hotkey.start(
+                settings.hotkey,
+                onPress: { [weak self] in
+                    Task { @MainActor in await self?.onPress() }
+                },
+                onRelease: { [weak self] in
+                    Task { @MainActor in await self?.onRelease() }
+                }
+            )
+        } catch {
+            composition.appState.transientWarning = "reapply: \(error)"
+        }
+    }
+
     private func onPress() async {
         composition.appState.engineState = .recording
         composition.overlay.show()

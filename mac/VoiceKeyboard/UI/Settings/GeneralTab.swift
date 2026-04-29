@@ -2,7 +2,7 @@ import SwiftUI
 import VoiceKeyboardCore
 
 struct GeneralTab: View {
-    @State var settings: UserSettings
+    @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
 
     private let modelSizes = ["tiny", "base", "small", "medium", "large"]

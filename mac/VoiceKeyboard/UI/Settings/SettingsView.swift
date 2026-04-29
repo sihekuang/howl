@@ -7,13 +7,13 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralTab(settings: settings, onSave: save)
+            GeneralTab(settings: $settings, onSave: save)
                 .tabItem { Label("General", systemImage: "gearshape") }
-            HotkeyTab(settings: settings, onSave: save)
+            HotkeyTab(settings: $settings)
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
             ProviderTab(secrets: composition.secrets)
                 .tabItem { Label("Provider", systemImage: "key") }
-            DictionaryTab(settings: settings, onSave: save)
+            DictionaryTab(settings: $settings, onSave: save)
                 .tabItem { Label("Dictionary", systemImage: "books.vertical") }
         }
         .frame(width: 540, height: 360)
@@ -24,5 +24,9 @@ struct SettingsView: View {
 
     private func save(_ s: UserSettings) {
         try? composition.settings.set(s)
+        // Fix I1: reapply config so settings changes take effect immediately.
+        Task { @MainActor in
+            await composition.coordinator.reapplyConfig()
+        }
     }
 }
