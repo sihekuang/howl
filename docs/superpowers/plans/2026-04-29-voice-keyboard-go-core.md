@@ -620,7 +620,7 @@ func TestLevenshtein(t *testing.T) {
 		{"abc", "abc", 0},
 		{"abc", "abd", 1},
 		{"abc", "acb", 2},
-		{"webrt", "WebRTC", 2}, // case-insensitive comparison handled by caller
+		{"webrt", "WebRTC", 4}, // 4 case-sensitive edits; the Match path lowers both sides before calling levenshtein
 		{"kitten", "sitting", 3},
 	}
 	for _, tc := range cases {
