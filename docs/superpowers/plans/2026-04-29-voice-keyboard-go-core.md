@@ -2615,7 +2615,7 @@ const inputSampleRate = 48000
 
 // Result of a single PTT cycle.
 type Result struct {
-	Raw      string // post-dictionary, pre-LLM
+	Raw      string // raw transcriber output, pre-dict, pre-LLM
 	Cleaned  string // final text to paste; equals dict-corrected raw if LLM failed
 	Terms    []string
 	LLMError error
@@ -2668,9 +2668,9 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 	cleaned, llmErr := p.cleaner.Clean(ctx, corrected, terms)
 	if llmErr != nil {
 		// graceful degradation: ship the dict-corrected text
-		return Result{Raw: corrected, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
+		return Result{Raw: raw, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
 	}
-	return Result{Raw: corrected, Cleaned: cleaned, Terms: terms}, nil
+	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
 // captureAndDenoise drains the capture channel, denoising in 480-sample
