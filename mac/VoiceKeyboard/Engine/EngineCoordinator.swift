@@ -5,9 +5,25 @@ import VoiceKeyboardCore
 public final class EngineCoordinator {
     let composition: CompositionRoot
     private var pollTask: Task<Void, Never>?
+    private var lastWarningTask: Task<Void, Never>?
 
     public init(composition: CompositionRoot) {
         self.composition = composition
+    }
+
+    /// Set a transient warning that auto-clears after 5 seconds, unless a
+    /// newer warning replaces it first.
+    private func setTransientWarning(_ msg: String) {
+        composition.appState.transientWarning = msg
+        lastWarningTask?.cancel()
+        let captured = msg
+        lastWarningTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            if self?.composition.appState.transientWarning == captured {
+                self?.composition.appState.transientWarning = nil
+            }
+        }
     }
 
     public func start() async {
@@ -26,7 +42,7 @@ public final class EngineCoordinator {
                 }
             )
         } catch {
-            composition.appState.transientWarning = "Hotkey: \(error)"
+            setTransientWarning("Hotkey: \(error)")
         }
         // Begin polling
         pollTask?.cancel()
@@ -65,7 +81,7 @@ public final class EngineCoordinator {
                 }
             )
         } catch {
-            composition.appState.transientWarning = "reapply: \(error)"
+            setTransientWarning("reapply: \(error)")
         }
     }
 
@@ -74,8 +90,10 @@ public final class EngineCoordinator {
         composition.overlay.show()
         do {
             try await composition.engine.startCapture()
+            // Successful capture supersedes any prior warning.
+            composition.appState.transientWarning = nil
         } catch {
-            composition.appState.transientWarning = "start: \(error)"
+            setTransientWarning("start: \(error)")
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
@@ -86,7 +104,9 @@ public final class EngineCoordinator {
         do {
             try await composition.engine.stopCapture()
         } catch {
-            composition.appState.transientWarning = "stop: \(error)"
+            setTransientWarning("stop: \(error)")
+            composition.appState.engineState = .idle
+            composition.overlay.hide()
         }
     }
 
@@ -100,16 +120,16 @@ public final class EngineCoordinator {
                     do {
                         try await composition.injector.inject(text)
                     } catch {
-                        composition.appState.transientWarning = "paste: \(error)"
+                        setTransientWarning("paste: \(error)")
                     }
                 }
                 composition.appState.engineState = .idle
                 composition.overlay.hide()
             }
         case .warning(let msg):
-            composition.appState.transientWarning = msg
+            setTransientWarning(msg)
         case .error(let msg):
-            composition.appState.transientWarning = msg
+            setTransientWarning(msg)
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
@@ -134,7 +154,7 @@ public final class EngineCoordinator {
         do {
             try await composition.engine.configure(cfg)
         } catch {
-            composition.appState.transientWarning = "configure: \(error)"
+            setTransientWarning("configure: \(error)")
         }
     }
 }
