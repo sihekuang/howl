@@ -10,6 +10,7 @@
 | Rust version | rustc 1.95.0 (59807616e 2026-04-14) |
 | Cargo package | deep_filter |
 | Cargo features | capi |
+| cbindgen version | 0.29.2 |
 | Build date | 2026-04-29T18:18:37Z |
 
 ## Build notes

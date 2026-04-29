@@ -52,7 +52,8 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 
    First-time builds take 5–15 minutes.
 
-6. Generate the C header with cbindgen:
+6. Generate the C header with cbindgen (run from inside the cloned
+   DeepFilterNet directory, where the upstream cbindgen.toml lives):
    ```bash
    cbindgen --config cbindgen.toml --crate deep_filter --output deep_filter.h
    ```
