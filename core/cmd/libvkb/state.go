@@ -75,7 +75,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	dy := dict.NewFuzzy(e.cfg.CustomDict, 1)
 
 	var d denoise.Denoiser
-	if e.cfg.NoiseSuppression {
+	if !e.cfg.DisableNoiseSuppression {
 		d = newDeepFilterOrPassthrough(e.cfg.DeepFilterModelPath)
 	} else {
 		d = denoise.NewPassthrough()

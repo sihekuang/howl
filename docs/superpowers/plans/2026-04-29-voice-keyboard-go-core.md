@@ -380,15 +380,15 @@ import (
 
 func TestConfig_RoundTrip(t *testing.T) {
 	original := Config{
-		WhisperModelPath:    "/tmp/ggml-small.bin",
-		WhisperModelSize:    "small",
-		Language:            "en",
-		NoiseSuppression:    true,
-		DeepFilterModelPath: "/tmp/DeepFilterNet3.tar.gz",
-		LLMProvider:         "anthropic",
-		LLMModel:            "claude-sonnet-4-6",
-		LLMAPIKey:           "sk-ant-test",
-		CustomDict:          []string{"MCP", "WebRTC"},
+		WhisperModelPath:        "/tmp/ggml-small.bin",
+		WhisperModelSize:        "small",
+		Language:                "en",
+		DisableNoiseSuppression: true,
+		DeepFilterModelPath:     "/tmp/DeepFilterNet3.tar.gz",
+		LLMProvider:             "anthropic",
+		LLMModel:                "claude-sonnet-4-6",
+		LLMAPIKey:               "sk-ant-test",
+		CustomDict:              []string{"MCP", "WebRTC"},
 	}
 
 	data, err := json.Marshal(original)
@@ -413,8 +413,8 @@ func TestConfig_RoundTrip(t *testing.T) {
 	if roundtripped.DeepFilterModelPath != original.DeepFilterModelPath {
 		t.Errorf("DeepFilterModelPath mismatch: got %q want %q", roundtripped.DeepFilterModelPath, original.DeepFilterModelPath)
 	}
-	if roundtripped.NoiseSuppression != original.NoiseSuppression {
-		t.Errorf("NoiseSuppression mismatch")
+	if roundtripped.DisableNoiseSuppression != original.DisableNoiseSuppression {
+		t.Errorf("DisableNoiseSuppression mismatch")
 	}
 	if len(roundtripped.CustomDict) != 2 || roundtripped.CustomDict[0] != "MCP" {
 		t.Errorf("CustomDict mismatch: %+v", roundtripped.CustomDict)
@@ -438,9 +438,6 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 	}
 	if empty.Language != "auto" {
 		t.Errorf("expected default Language=auto, got %q", empty.Language)
-	}
-	if !empty.NoiseSuppression {
-		t.Errorf("expected default NoiseSuppression=true")
 	}
 	if empty.LLMProvider != "anthropic" {
 		t.Errorf("expected default LLMProvider=anthropic, got %q", empty.LLMProvider)
@@ -466,15 +463,15 @@ Write `core/internal/config/config.go`:
 package config
 
 type Config struct {
-	WhisperModelPath    string   `json:"whisper_model_path"`
-	WhisperModelSize    string   `json:"whisper_model_size"`
-	Language            string   `json:"language"`
-	NoiseSuppression    bool     `json:"noise_suppression"`
-	DeepFilterModelPath string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
-	LLMProvider         string   `json:"llm_provider"`
-	LLMModel            string   `json:"llm_model"`
-	LLMAPIKey           string   `json:"llm_api_key"`
-	CustomDict          []string `json:"custom_dict"`
+	WhisperModelPath        string   `json:"whisper_model_path"`
+	WhisperModelSize        string   `json:"whisper_model_size"`
+	Language                string   `json:"language"`
+	DisableNoiseSuppression bool     `json:"disable_noise_suppression"`
+	DeepFilterModelPath     string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
+	LLMProvider             string   `json:"llm_provider"`
+	LLMModel                string   `json:"llm_model"`
+	LLMAPIKey               string   `json:"llm_api_key"`
+	CustomDict              []string `json:"custom_dict"`
 }
 
 func WithDefaults(c *Config) {
@@ -483,9 +480,6 @@ func WithDefaults(c *Config) {
 	}
 	if c.Language == "" {
 		c.Language = "auto"
-	}
-	if !c.NoiseSuppression {
-		c.NoiseSuppression = true
 	}
 	if c.LLMProvider == "" {
 		c.LLMProvider = "anthropic"
@@ -496,7 +490,7 @@ func WithDefaults(c *Config) {
 }
 ```
 
-Note: `WithDefaults` only sets fields that are at their zero value. The `NoiseSuppression` default of `true` cannot be distinguished from `false` in Go's type system without a pointer; this is acceptable for v1 because Swift always sends the explicit current setting. The `if !c.NoiseSuppression` line is intentional — it makes the default `true` when the field is unset (zero-value `false`).
+Note: `WithDefaults` only sets string fields that are at their zero value. For booleans, Go's type system cannot distinguish "user said false" from "field not set" without a pointer. We invert the semantics: the field is named `DisableNoiseSuppression` so the JSON's missing-field zero (`false`) means denoise is enabled (the default), and an explicit `true` means the user disabled it.
 
 - [ ] **Step 4: Run the test**
 
@@ -3443,7 +3437,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	dy := dict.NewFuzzy(e.cfg.CustomDict, 1)
 
 	var d denoise.Denoiser
-	if e.cfg.NoiseSuppression {
+	if !e.cfg.DisableNoiseSuppression {
 		d = newDeepFilterOrPassthrough(e.cfg.DeepFilterModelPath)
 	} else {
 		d = denoise.NewPassthrough()
@@ -3766,7 +3760,7 @@ int main(int argc, char** argv) {
         "\"whisper_model_path\":\"/tmp/nonexistent.bin\","
         "\"whisper_model_size\":\"tiny\","
         "\"language\":\"en\","
-        "\"noise_suppression\":false,"
+        "\"disable_noise_suppression\":true,"
         "\"llm_provider\":\"anthropic\","
         "\"llm_model\":\"claude-sonnet-4-6\","
         "\"llm_api_key\":\"sk-ant-test\","

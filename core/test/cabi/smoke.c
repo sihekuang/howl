@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
         "\"whisper_model_path\":\"/tmp/nonexistent.bin\","
         "\"whisper_model_size\":\"tiny\","
         "\"language\":\"en\","
-        "\"noise_suppression\":false,"
+        "\"disable_noise_suppression\":true,"
         "\"llm_provider\":\"anthropic\","
         "\"llm_model\":\"claude-sonnet-4-6\","
         "\"llm_api_key\":\"sk-ant-test\","

@@ -7,15 +7,15 @@ import (
 
 func TestConfig_RoundTrip(t *testing.T) {
 	original := Config{
-		WhisperModelPath:    "/tmp/ggml-small.bin",
-		WhisperModelSize:    "small",
-		Language:            "en",
-		NoiseSuppression:    true,
-		DeepFilterModelPath: "/tmp/DeepFilterNet3.tar.gz",
-		LLMProvider:         "anthropic",
-		LLMModel:            "claude-sonnet-4-6",
-		LLMAPIKey:           "sk-ant-test",
-		CustomDict:          []string{"MCP", "WebRTC"},
+		WhisperModelPath:        "/tmp/ggml-small.bin",
+		WhisperModelSize:        "small",
+		Language:                "en",
+		DisableNoiseSuppression: true,
+		DeepFilterModelPath:     "/tmp/DeepFilterNet3.tar.gz",
+		LLMProvider:             "anthropic",
+		LLMModel:                "claude-sonnet-4-6",
+		LLMAPIKey:               "sk-ant-test",
+		CustomDict:              []string{"MCP", "WebRTC"},
 	}
 
 	data, err := json.Marshal(original)
@@ -40,8 +40,8 @@ func TestConfig_RoundTrip(t *testing.T) {
 	if roundtripped.DeepFilterModelPath != original.DeepFilterModelPath {
 		t.Errorf("DeepFilterModelPath mismatch: got %q want %q", roundtripped.DeepFilterModelPath, original.DeepFilterModelPath)
 	}
-	if roundtripped.NoiseSuppression != original.NoiseSuppression {
-		t.Errorf("NoiseSuppression mismatch")
+	if roundtripped.DisableNoiseSuppression != original.DisableNoiseSuppression {
+		t.Errorf("DisableNoiseSuppression mismatch")
 	}
 	if len(roundtripped.CustomDict) != 2 || roundtripped.CustomDict[0] != "MCP" {
 		t.Errorf("CustomDict mismatch: %+v", roundtripped.CustomDict)
@@ -65,9 +65,6 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 	}
 	if empty.Language != "auto" {
 		t.Errorf("expected default Language=auto, got %q", empty.Language)
-	}
-	if !empty.NoiseSuppression {
-		t.Errorf("expected default NoiseSuppression=true")
 	}
 	if empty.LLMProvider != "anthropic" {
 		t.Errorf("expected default LLMProvider=anthropic, got %q", empty.LLMProvider)

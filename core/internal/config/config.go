@@ -3,15 +3,15 @@
 package config
 
 type Config struct {
-	WhisperModelPath    string   `json:"whisper_model_path"`
-	WhisperModelSize    string   `json:"whisper_model_size"`
-	Language            string   `json:"language"`
-	NoiseSuppression    bool     `json:"noise_suppression"`
-	DeepFilterModelPath string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
-	LLMProvider         string   `json:"llm_provider"`
-	LLMModel            string   `json:"llm_model"`
-	LLMAPIKey           string   `json:"llm_api_key"`
-	CustomDict          []string `json:"custom_dict"`
+	WhisperModelPath        string   `json:"whisper_model_path"`
+	WhisperModelSize        string   `json:"whisper_model_size"`
+	Language                string   `json:"language"`
+	DisableNoiseSuppression bool     `json:"disable_noise_suppression"`
+	DeepFilterModelPath     string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
+	LLMProvider             string   `json:"llm_provider"`
+	LLMModel                string   `json:"llm_model"`
+	LLMAPIKey               string   `json:"llm_api_key"`
+	CustomDict              []string `json:"custom_dict"`
 }
 
 func WithDefaults(c *Config) {
@@ -20,9 +20,6 @@ func WithDefaults(c *Config) {
 	}
 	if c.Language == "" {
 		c.Language = "auto"
-	}
-	if !c.NoiseSuppression {
-		c.NoiseSuppression = true
 	}
 	if c.LLMProvider == "" {
 		c.LLMProvider = "anthropic"
