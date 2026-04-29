@@ -4,7 +4,7 @@ package denoise
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../third_party/deepfilter/include
-#cgo LDFLAGS: -L${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64 -ldf
+#cgo LDFLAGS: -L${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64 -ldf -Wl,-rpath,${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64
 #include <stdlib.h>
 #include "deep_filter.h"
 */

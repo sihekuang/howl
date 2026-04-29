@@ -4,10 +4,8 @@ GO := go
 WHISPER_PREFIX := /opt/homebrew/opt/whisper-cpp
 DEEPFILTER_DIR := third_party/deepfilter
 
-# Used by CGo to find headers and libraries
-export CGO_CFLAGS  := -I$(WHISPER_PREFIX)/include -I$(CURDIR)/$(DEEPFILTER_DIR)/include
-export CGO_LDFLAGS := -L$(WHISPER_PREFIX)/lib -lwhisper -L$(CURDIR)/$(DEEPFILTER_DIR)/lib/macos-arm64 -ldf
-export DYLD_LIBRARY_PATH := $(WHISPER_PREFIX)/lib:$(CURDIR)/$(DEEPFILTER_DIR)/lib/macos-arm64:$(DYLD_LIBRARY_PATH)
+# Per-package #cgo directives in whisper_cpp.go and deepfilter_cgo.go
+# carry their own CFLAGS/LDFLAGS. Nothing needs to be set globally here.
 
 .PHONY: bootstrap build build-cli build-dylib test test-unit test-integration clean rebuild-denoise
 
