@@ -26,7 +26,6 @@ type AnthropicOptions struct {
 type Anthropic struct {
 	client *anthropic.Client
 	model  string
-	apiKey string
 }
 
 // NewAnthropic constructs an Anthropic Cleaner. The returned value is safe
@@ -46,7 +45,7 @@ func NewAnthropic(opts AnthropicOptions) *Anthropic {
 		clientOpts = append(clientOpts, option.WithBaseURL(opts.BaseURL))
 	}
 	c := anthropic.NewClient(clientOpts...)
-	return &Anthropic{client: &c, model: opts.Model, apiKey: opts.APIKey}
+	return &Anthropic{client: &c, model: opts.Model}
 }
 
 // Clean sends the raw transcription to Anthropic and returns the cleaned text.
@@ -55,9 +54,6 @@ func NewAnthropic(opts AnthropicOptions) *Anthropic {
 func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []string) (string, error) {
 	if a == nil || a.client == nil {
 		return "", errors.New("anthropic: not initialized")
-	}
-	if a.apiKey == "" {
-		return "", errors.New("anthropic: missing API key")
 	}
 	prompt := renderPrompt(raw, preserveTerms)
 
@@ -82,5 +78,9 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 			b.WriteString(block.Text)
 		}
 	}
-	return strings.TrimSpace(b.String()), nil
+	result := strings.TrimSpace(b.String())
+	if result == "" {
+		return "", errors.New("anthropic: no text content in response")
+	}
+	return result, nil
 }

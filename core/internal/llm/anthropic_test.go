@@ -91,3 +91,34 @@ func TestAnthropicClean_MissingAPIKey(t *testing.T) {
 		t.Fatalf("expected error for missing API key, got nil")
 	}
 }
+
+func TestAnthropicClean_EmptyTextContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Response has content but only a tool_use block; no text.
+		resp := map[string]any{
+			"id":   "msg_test",
+			"type": "message",
+			"role": "assistant",
+			"content": []map[string]any{
+				{"type": "tool_use", "id": "tu_1", "name": "no_op", "input": map[string]any{}},
+			},
+			"model":       "claude-sonnet-4-6",
+			"stop_reason": "tool_use",
+			"usage":       map[string]any{"input_tokens": 1, "output_tokens": 1},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	cleaner := NewAnthropic(AnthropicOptions{
+		APIKey:  "sk-ant-test",
+		Model:   "claude-sonnet-4-6",
+		BaseURL: srv.URL,
+		Timeout: 5 * time.Second,
+	})
+	_, err := cleaner.Clean(context.Background(), "hi", nil)
+	if err == nil {
+		t.Fatalf("expected error for response with no text blocks, got nil")
+	}
+}
