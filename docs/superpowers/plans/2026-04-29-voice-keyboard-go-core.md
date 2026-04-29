@@ -17,7 +17,7 @@ All paths relative to `/Users/daniel/Documents/Projects/voice-keyboard/core/`.
 | File | Responsibility |
 |---|---|
 | `go.mod` | Module declaration, dependency versions |
-| `Makefile` | `bootstrap`, `build`, `build-go`, `build-cli`, `build-dylib`, `test`, `clean` |
+| `Makefile` | `bootstrap`, `build`, `build-cli`, `build-dylib`, `test`, `test-unit`, `test-integration`, `clean`, `rebuild-denoise` |
 | `BUILDING_DENOISE.md` | Maintainer doc: how to rebuild `libdf.dylib` from source |
 | `cmd/vkb-cli/main.go` | CLI test harness, composition root #1 |
 | `cmd/libvkb/main.go` | C ABI surface, composition root #2, c-shared build |
@@ -48,9 +48,9 @@ All paths relative to `/Users/daniel/Documents/Projects/voice-keyboard/core/`.
 | `internal/cabi/exports.go` | `//export` C ABI functions, lives inside `cmd/libvkb` package |
 | `test/integration/full_pipeline_test.go` | Real impls + fake capture from a WAV fixture |
 | `test/integration/testdata/hello-world.wav` | 16kHz mono WAV fixture, ~2 seconds |
-| `vendor/deepfilter/lib/macos-arm64/libdf.dylib` | Prebuilt DeepFilterNet C library |
-| `vendor/deepfilter/include/deep_filter.h` | C header for CGo binding |
-| `vendor/deepfilter/VERSION.md` | Pin info: upstream tag, commit, build date |
+| `third_party/deepfilter/lib/macos-arm64/libdf.dylib` | Prebuilt DeepFilterNet C library |
+| `third_party/deepfilter/include/deep_filter.h` | C header for CGo binding |
+| `third_party/deepfilter/VERSION.md` | Pin info: upstream tag, commit, build date |
 
 The `internal/` boundary enforces hex/ports: only `cmd/` packages may construct concrete impls. Inter-package deps inside `internal/` are interface-only.
 
@@ -103,13 +103,14 @@ build/
 *.so
 *.dll
 *.h
-!vendor/**/*.h
+!third_party/**/*.dylib
+!third_party/**/*.so
+!third_party/**/*.h
 
 # Go
 *.test
 *.out
 coverage.out
-vendor-go/
 
 # IDE
 .vscode/
@@ -118,6 +119,8 @@ vendor-go/
 # OS
 .DS_Store
 ```
+
+The `!third_party/**/*.dylib` and `!third_party/**/*.so` negations are critical: without them the `*.dylib` rule would silently prevent committing `third_party/deepfilter/lib/macos-arm64/libdf.dylib` in Task 3.
 
 - [ ] **Step 5: Verify it compiles**
 
@@ -144,12 +147,10 @@ SHELL := /bin/bash
 BUILD_DIR := build
 GO := go
 WHISPER_PREFIX := /opt/homebrew/opt/whisper-cpp
-DEEPFILTER_DIR := vendor/deepfilter
+DEEPFILTER_DIR := third_party/deepfilter
 
-# Used by CGo to find headers and libraries
-export CGO_CFLAGS  := -I$(WHISPER_PREFIX)/include -I$(CURDIR)/$(DEEPFILTER_DIR)/include
-export CGO_LDFLAGS := -L$(WHISPER_PREFIX)/lib -lwhisper -L$(CURDIR)/$(DEEPFILTER_DIR)/lib/macos-arm64 -ldf
-export DYLD_LIBRARY_PATH := $(WHISPER_PREFIX)/lib:$(CURDIR)/$(DEEPFILTER_DIR)/lib/macos-arm64:$(DYLD_LIBRARY_PATH)
+# Per-package #cgo directives in whisper_cpp.go and deepfilter_cgo.go
+# carry their own CFLAGS/LDFLAGS. Nothing needs to be set globally here.
 
 .PHONY: bootstrap build build-cli build-dylib test test-unit test-integration clean rebuild-denoise
 
@@ -170,6 +171,7 @@ build-cli:
 build-dylib:
 	mkdir -p $(BUILD_DIR)
 	$(GO) build -buildmode=c-shared -o $(BUILD_DIR)/libvkb.dylib ./cmd/libvkb
+	install_name_tool -id "@rpath/libvkb.dylib" $(BUILD_DIR)/libvkb.dylib
 
 test: test-unit
 
@@ -199,9 +201,9 @@ Expected: dry-run prints commands without executing; no syntax error.
 This is the one-time setup that requires Rust. Once done, the binary is committed and Rust is no longer required.
 
 **Files:**
-- Create: `core/vendor/deepfilter/lib/macos-arm64/libdf.dylib`
-- Create: `core/vendor/deepfilter/include/deep_filter.h`
-- Create: `core/vendor/deepfilter/VERSION.md`
+- Create: `core/third_party/deepfilter/lib/macos-arm64/libdf.dylib`
+- Create: `core/third_party/deepfilter/include/deep_filter.h`
+- Create: `core/third_party/deepfilter/VERSION.md`
 - Create: `core/BUILDING_DENOISE.md`
 
 - [ ] **Step 1: Install Rust temporarily**
@@ -227,25 +229,29 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 cargo build --release -p deep_filter --features capi --target aarch64-apple-darwin
 ```
 
-Expected: produces `target/aarch64-apple-darwin/release/libdf.dylib` (~5–10MB). The `--features capi` flag enables the C ABI.
+Expected: produces `target/aarch64-apple-darwin/release/libdf.dylib` (~16MB on rustc 1.95). The `--features capi` flag enables the C ABI.
+
+**Two upstream gotchas verified during the original v0.5.6 build (April 2026):**
+1. The `time` crate v0.3.28 pinned in upstream's `Cargo.lock` doesn't compile on rustc 1.95+. Run `cargo update -p time` before `cargo build`.
+2. `libDF/Cargo.toml`'s `[lib]` section does NOT declare `crate-type`, so default cargo builds emit only an `rlib`. Either use `cargo cinstall` (requires `cargo install cargo-c`), or simpler: edit `libDF/Cargo.toml` to add `crate-type = ["cdylib", "rlib"]` to the `[lib]` section before building.
 
 If the upstream feature flag has changed, check `libDF/Cargo.toml` for the feature that builds the C library.
 
 - [ ] **Step 4: Copy artifacts into the vendor directory**
 
 ```bash
-mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64
-mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include
 cp target/aarch64-apple-darwin/release/libdf.dylib \
-   /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64/
+   /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64/
 cp libDF/include/deep_filter.h \
-   /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/
+   /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/
 ```
 
 - [ ] **Step 5: Set the install name on the dylib**
 
 ```bash
-cd /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/lib/macos-arm64
+cd /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/lib/macos-arm64
 install_name_tool -id "@rpath/libdf.dylib" libdf.dylib
 otool -D libdf.dylib
 ```
@@ -254,7 +260,7 @@ Expected: `otool -D` prints `@rpath/libdf.dylib`. This makes the dylib relocatab
 
 - [ ] **Step 6: Write VERSION.md**
 
-Write `core/vendor/deepfilter/VERSION.md`:
+Write `core/third_party/deepfilter/VERSION.md`:
 
 ```markdown
 # DeepFilterNet vendored binary
@@ -284,7 +290,7 @@ Write `core/BUILDING_DENOISE.md`:
 ```markdown
 # Rebuilding libdf.dylib
 
-The `libdf.dylib` shipped under `vendor/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
+The `libdf.dylib` shipped under `third_party/deepfilter/lib/macos-arm64/` is built once by a maintainer and committed to the repo. Day-to-day contributors do not need Rust — they just consume the prebuilt binary.
 
 This document describes how to regenerate the binary when bumping DeepFilterNet versions.
 
@@ -314,18 +320,18 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 4. Copy the artifacts into the vendor directory:
    ```bash
    cp target/aarch64-apple-darwin/release/libdf.dylib \
-      <REPO>/core/vendor/deepfilter/lib/macos-arm64/
+      <REPO>/core/third_party/deepfilter/lib/macos-arm64/
    cp libDF/include/deep_filter.h \
-      <REPO>/core/vendor/deepfilter/include/
+      <REPO>/core/third_party/deepfilter/include/
    ```
 
 5. Rewrite the install name:
    ```bash
-   cd <REPO>/core/vendor/deepfilter/lib/macos-arm64
+   cd <REPO>/core/third_party/deepfilter/lib/macos-arm64
    install_name_tool -id "@rpath/libdf.dylib" libdf.dylib
    ```
 
-6. Update `vendor/deepfilter/VERSION.md` with the new tag, commit hash, build date, and Rust version.
+6. Update `third_party/deepfilter/VERSION.md` with the new tag, commit hash, build date, and Rust version.
 
 7. Run the denoise tests:
    ```bash
@@ -339,13 +345,13 @@ This document describes how to regenerate the binary when bumping DeepFilterNet 
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-otool -L vendor/deepfilter/lib/macos-arm64/libdf.dylib | head -5
+otool -L third_party/deepfilter/lib/macos-arm64/libdf.dylib | head -5
 ```
-Expected: lists `libSystem`, `libc++`, etc. — confirms the binary is well-formed.
+Expected: lists `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib`. No `libc++` dependency is expected — Rust statically links its own standard library. Confirms the binary is well-formed.
 
 - [ ] **Step 9: Verify the header is non-empty and exposes the C ABI**
 
-Run: `head -50 /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/deep_filter.h`
+Run: `head -50 /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/deep_filter.h`
 Expected: contains declarations like `DFState* df_create(...)`, `df_process_frame(...)`, `df_free(...)`. Note the exact function names and signatures — they are needed in Task 11.
 
 - [ ] **Step 10: Commit**
@@ -374,14 +380,15 @@ import (
 
 func TestConfig_RoundTrip(t *testing.T) {
 	original := Config{
-		WhisperModelPath: "/tmp/ggml-small.bin",
-		WhisperModelSize: "small",
-		Language:         "en",
-		NoiseSuppression: true,
-		LLMProvider:      "anthropic",
-		LLMModel:         "claude-sonnet-4-6",
-		LLMAPIKey:        "sk-ant-test",
-		CustomDict:       []string{"MCP", "WebRTC"},
+		WhisperModelPath:        "/tmp/ggml-small.bin",
+		WhisperModelSize:        "small",
+		Language:                "en",
+		DisableNoiseSuppression: true,
+		DeepFilterModelPath:     "/tmp/DeepFilterNet3.tar.gz",
+		LLMProvider:             "anthropic",
+		LLMModel:                "claude-sonnet-4-6",
+		LLMAPIKey:               "sk-ant-test",
+		CustomDict:              []string{"MCP", "WebRTC"},
 	}
 
 	data, err := json.Marshal(original)
@@ -397,11 +404,29 @@ func TestConfig_RoundTrip(t *testing.T) {
 	if roundtripped.WhisperModelPath != original.WhisperModelPath {
 		t.Errorf("WhisperModelPath mismatch: got %q want %q", roundtripped.WhisperModelPath, original.WhisperModelPath)
 	}
-	if roundtripped.NoiseSuppression != original.NoiseSuppression {
-		t.Errorf("NoiseSuppression mismatch")
+	if roundtripped.WhisperModelSize != original.WhisperModelSize {
+		t.Errorf("WhisperModelSize mismatch: got %q want %q", roundtripped.WhisperModelSize, original.WhisperModelSize)
+	}
+	if roundtripped.Language != original.Language {
+		t.Errorf("Language mismatch: got %q want %q", roundtripped.Language, original.Language)
+	}
+	if roundtripped.DeepFilterModelPath != original.DeepFilterModelPath {
+		t.Errorf("DeepFilterModelPath mismatch: got %q want %q", roundtripped.DeepFilterModelPath, original.DeepFilterModelPath)
+	}
+	if roundtripped.DisableNoiseSuppression != original.DisableNoiseSuppression {
+		t.Errorf("DisableNoiseSuppression mismatch")
 	}
 	if len(roundtripped.CustomDict) != 2 || roundtripped.CustomDict[0] != "MCP" {
 		t.Errorf("CustomDict mismatch: %+v", roundtripped.CustomDict)
+	}
+	if roundtripped.LLMProvider != original.LLMProvider {
+		t.Errorf("LLMProvider mismatch: got %q want %q", roundtripped.LLMProvider, original.LLMProvider)
+	}
+	if roundtripped.LLMModel != original.LLMModel {
+		t.Errorf("LLMModel mismatch: got %q want %q", roundtripped.LLMModel, original.LLMModel)
+	}
+	if roundtripped.LLMAPIKey != original.LLMAPIKey {
+		t.Errorf("LLMAPIKey mismatch: got %q want %q", roundtripped.LLMAPIKey, original.LLMAPIKey)
 	}
 }
 
@@ -414,11 +439,11 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 	if empty.Language != "auto" {
 		t.Errorf("expected default Language=auto, got %q", empty.Language)
 	}
-	if !empty.NoiseSuppression {
-		t.Errorf("expected default NoiseSuppression=true")
-	}
 	if empty.LLMProvider != "anthropic" {
 		t.Errorf("expected default LLMProvider=anthropic, got %q", empty.LLMProvider)
+	}
+	if empty.LLMModel != "claude-sonnet-4-6" {
+		t.Errorf("expected default LLMModel=claude-sonnet-4-6, got %q", empty.LLMModel)
 	}
 }
 ```
@@ -438,14 +463,15 @@ Write `core/internal/config/config.go`:
 package config
 
 type Config struct {
-	WhisperModelPath string   `json:"whisper_model_path"`
-	WhisperModelSize string   `json:"whisper_model_size"`
-	Language         string   `json:"language"`
-	NoiseSuppression bool     `json:"noise_suppression"`
-	LLMProvider      string   `json:"llm_provider"`
-	LLMModel         string   `json:"llm_model"`
-	LLMAPIKey        string   `json:"llm_api_key"`
-	CustomDict       []string `json:"custom_dict"`
+	WhisperModelPath        string   `json:"whisper_model_path"`
+	WhisperModelSize        string   `json:"whisper_model_size"`
+	Language                string   `json:"language"`
+	DisableNoiseSuppression bool     `json:"disable_noise_suppression"`
+	DeepFilterModelPath     string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
+	LLMProvider             string   `json:"llm_provider"`
+	LLMModel                string   `json:"llm_model"`
+	LLMAPIKey               string   `json:"llm_api_key"`
+	CustomDict              []string `json:"custom_dict"`
 }
 
 func WithDefaults(c *Config) {
@@ -454,9 +480,6 @@ func WithDefaults(c *Config) {
 	}
 	if c.Language == "" {
 		c.Language = "auto"
-	}
-	if !c.NoiseSuppression {
-		c.NoiseSuppression = true
 	}
 	if c.LLMProvider == "" {
 		c.LLMProvider = "anthropic"
@@ -467,7 +490,7 @@ func WithDefaults(c *Config) {
 }
 ```
 
-Note: `WithDefaults` only sets fields that are at their zero value. The `NoiseSuppression` default of `true` cannot be distinguished from `false` in Go's type system without a pointer; this is acceptable for v1 because Swift always sends the explicit current setting. The `if !c.NoiseSuppression` line is intentional — it makes the default `true` when the field is unset (zero-value `false`).
+Note: `WithDefaults` only sets string fields that are at their zero value. For booleans, Go's type system cannot distinguish "user said false" from "field not set" without a pointer. We invert the semantics: the field is named `DisableNoiseSuppression` so the JSON's missing-field zero (`false`) means denoise is enabled (the default), and an explicit `true` means the user disabled it.
 
 - [ ] **Step 4: Run the test**
 
@@ -589,7 +612,7 @@ func TestLevenshtein(t *testing.T) {
 		{"abc", "abc", 0},
 		{"abc", "abd", 1},
 		{"abc", "acb", 2},
-		{"webrt", "WebRTC", 2}, // case-insensitive comparison handled by caller
+		{"webrt", "WebRTC", 4}, // 4 case-sensitive edits; the Match path lowers both sides before calling levenshtein
 		{"kitten", "sitting", 3},
 	}
 	for _, tc := range cases {
@@ -994,6 +1017,37 @@ func TestAnthropicClean_MissingAPIKey(t *testing.T) {
 		t.Fatalf("expected error for missing API key, got nil")
 	}
 }
+
+func TestAnthropicClean_EmptyTextContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Response has content but only a tool_use block; no text.
+		resp := map[string]any{
+			"id":   "msg_test",
+			"type": "message",
+			"role": "assistant",
+			"content": []map[string]any{
+				{"type": "tool_use", "id": "tu_1", "name": "no_op", "input": map[string]any{}},
+			},
+			"model":       "claude-sonnet-4-6",
+			"stop_reason": "tool_use",
+			"usage":       map[string]any{"input_tokens": 1, "output_tokens": 1},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	cleaner := NewAnthropic(AnthropicOptions{
+		APIKey:  "sk-ant-test",
+		Model:   "claude-sonnet-4-6",
+		BaseURL: srv.URL,
+		Timeout: 5 * time.Second,
+	})
+	_, err := cleaner.Clean(context.Background(), "hi", nil)
+	if err == nil {
+		t.Fatalf("expected error for response with no text blocks, got nil")
+	}
+}
 ```
 
 - [ ] **Step 3: Run the test to confirm it fails**
@@ -1079,7 +1133,11 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 			b.WriteString(block.Text)
 		}
 	}
-	return strings.TrimSpace(b.String()), nil
+	result := strings.TrimSpace(b.String())
+	if result == "" {
+		return "", errors.New("anthropic: no text content in response")
+	}
+	return result, nil
 }
 ```
 
@@ -1135,8 +1193,9 @@ func TestDecimate3_DCSignalPreserved(t *testing.T) {
 	d := NewDecimate3()
 	out := d.Process(in)
 
-	// Check the steady-state samples (skip initial filter delay).
-	const skip = 200
+	// Check the steady-state samples (skip initial filter delay; group delay is
+	// ~5 output samples for a 33-tap FIR, 20 leaves comfortable headroom).
+	const skip = 20
 	if len(out) <= skip+10 {
 		t.Fatalf("output too short for steady-state check: %d", len(out))
 	}
@@ -1193,6 +1252,33 @@ func TestDecimate3_HighFrequencyAttenuated(t *testing.T) {
 		t.Errorf("12kHz peak amplitude %f, expected < 0.2", peak)
 	}
 }
+
+func TestDecimate3_ResetEqualsFreshConstruction(t *testing.T) {
+	// Same input fed through a fresh decimator and a Reset-ed decimator
+	// must produce identical output, byte-for-byte.
+	in := make([]float32, 4800)
+	for i := range in {
+		in[i] = float32(math.Sin(2 * math.Pi * 1000 * float64(i) / 48000.0))
+	}
+
+	fresh := NewDecimate3()
+	freshOut := fresh.Process(in)
+
+	reused := NewDecimate3()
+	reused.Process(in)  // dirty its state
+	reused.Reset()
+	resetOut := reused.Process(in)
+
+	if len(freshOut) != len(resetOut) {
+		t.Fatalf("output lengths differ: fresh=%d reset=%d", len(freshOut), len(resetOut))
+	}
+	for i := range freshOut {
+		if freshOut[i] != resetOut[i] {
+			t.Errorf("sample %d: fresh=%f reset=%f", i, freshOut[i], resetOut[i])
+			break
+		}
+	}
+}
 ```
 
 - [ ] **Step 2: Run the tests to confirm they fail**
@@ -1205,19 +1291,23 @@ Expected: FAIL — `NewDecimate3`, `Process` undefined.
 Write `core/internal/resample/decimate3.go`:
 
 ```go
-// Package resample provides sample-rate conversion. decimate3 implements
-// a 3:1 polyphase FIR low-pass + decimator suitable for 48kHz → 16kHz.
+// Package resample provides sample-rate conversion. Decimate3 implements
+// a 3:1 FIR low-pass + decimator suitable for 48kHz → 16kHz.
 //
 // The filter is a 33-tap Hamming-windowed sinc with cutoff at 7.5kHz
 // (slightly below the 8kHz post-decimation Nyquist to leave headroom).
-// Polyphase commutator splits the FIR across three sub-filters so we
-// only compute one out of every three output samples.
+// On each output sample (every 3rd input), the full 33-tap FIR is
+// computed against the rolling delay line. A true polyphase decomposition
+// would split the FIR into 3 sub-filters of 11 taps each and select one
+// per output; the output is mathematically identical, the chosen
+// direct-form is simpler. The 33-tap length keeps polyphase as a
+// drop-in optimization later if needed.
 package resample
 
 import "math"
 
 const (
-	taps   = 33      // FIR length, must be a multiple of decimation factor for clean polyphase
+	taps   = 33      // FIR length; 33 = 3×11 keeps a polyphase split as a future drop-in option
 	decim  = 3       // 48000 / 16000
 	cutoff = 7500.0  // Hz, slightly below 8kHz post-decim Nyquist
 	srIn   = 48000.0 // input sample rate
@@ -1440,6 +1530,47 @@ func TestFakeCapture_ContextCancelHaltsEarly(t *testing.T) {
 		}
 	}
 }
+
+func TestFakeCapture_StartCancelsPrior(t *testing.T) {
+	src := make([]float32, 10000)
+	fake := NewFakeCapture(src, 1000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	first, err := fake.Start(ctx, 48000)
+	if err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	<-first // consume one frame
+
+	// Re-Start without Stopping; the first goroutine must be cancelled
+	// so its channel closes promptly rather than leaking.
+	second, err := fake.Start(ctx, 48000)
+	if err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+drain:
+	for {
+		select {
+		case _, ok := <-first:
+			if !ok {
+				break drain
+			}
+		case <-deadline:
+			t.Fatal("first frames channel did not close after re-Start within 500ms")
+		}
+	}
+
+	// Cleanup the second goroutine so the test exits promptly.
+	if err := fake.Stop(); err != nil {
+		t.Errorf("Stop: %v", err)
+	}
+	for range second {
+	}
+}
 ```
 
 - [ ] **Step 3: Run the test to confirm it fails**
@@ -1480,6 +1611,9 @@ func (f *FakeCapture) Start(ctx context.Context, sampleRate int) (<-chan []float
 	}
 	subCtx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
+	if f.cancel != nil {
+		f.cancel() // cancel any prior goroutine to avoid leak on re-entry
+	}
 	f.cancel = cancel
 	f.mu.Unlock()
 
@@ -1555,6 +1689,8 @@ import (
 
 const malgoChannels = 1
 
+var _ Capture = (*MalgoCapture)(nil)
+
 // MalgoCapture captures PCM from the default system microphone using
 // miniaudio (via the malgo Go bindings). It produces float32 mono frames
 // at the requested sample rate.
@@ -1596,7 +1732,7 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 		// `in` is interleaved float32 mono. We reinterpret bytes as
 		// float32 via unsafe.Slice (Go 1.17+), then copy out so the
 		// caller owns the buffer.
-		if frameCount == 0 || len(in) == 0 {
+		if frameCount == 0 || len(in) < int(frameCount)*4 {
 			return
 		}
 		header := (*float32)(unsafe.Pointer(&in[0]))
@@ -1648,6 +1784,7 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 		}
 		close(m.out)
 		m.out = nil
+		m.cancel = nil
 	}()
 
 	return out, nil
@@ -1737,7 +1874,12 @@ func (p *Passthrough) Close() error { return nil }
 
 - [ ] **Step 3: Write the failing tests**
 
-Write `core/internal/denoise/denoise_test.go`:
+Write **two** test files (Go build tags must be at the top of a file, so the DeepFilter test cannot live in the same file as the always-on Passthrough test):
+
+1. `core/internal/denoise/denoise_test.go` — Passthrough only, no build tag
+2. `core/internal/denoise/denoise_deepfilter_test.go` — `//go:build deepfilter` at the top, contains the DeepFilter test
+
+The combined source is shown below; split it into the two files at the marked boundary.
 
 ```go
 package denoise
@@ -1769,19 +1911,39 @@ func TestPassthrough_ReturnsCopyUnchanged(t *testing.T) {
 	}
 }
 
-// TestDeepFilter_AttenuatesNoise is a build-tagged integration test that
-// requires libdf.dylib on the link path. Run with:
+// TestDeepFilter_AttenuatesNoise lives in a separate file with its own
+// build tag, so the unit suite stays CGo-free for fast iteration. The
+// build-tagged test requires libdf.dylib AND the vendored model file at
+// third_party/deepfilter/models/DeepFilterNet3.tar.gz. Run with:
 //   go test -tags=deepfilter ./internal/denoise/...
 //
 // It generates a noisy sine wave, runs DeepFilterNet over it, and checks
 // the denoised RMS is lower than the input RMS.
-//
-// Without the build tag, this test is skipped so the unit suite stays
-// CGo-free for fast iteration.
+
+// Note: write this in a separate file `denoise_deepfilter_test.go` (NOT
+// in `denoise_test.go`) so the `//go:build deepfilter` directive at the
+// top of the file is the first non-blank line, which is how Go build
+// tags must be placed.
+
+// File: core/internal/denoise/denoise_deepfilter_test.go
 //go:build deepfilter
 
+package denoise
+
+import (
+	"math"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
 func TestDeepFilter_AttenuatesNoise(t *testing.T) {
-	d, err := NewDeepFilter()
+	// Resolve the vendored model path relative to the package dir.
+	modelPath := filepath.Join("..", "..", "third_party", "deepfilter", "models", "DeepFilterNet3.tar.gz")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not vendored at %s; see Task 11 Step 5b", modelPath)
+	}
+	d, err := NewDeepFilter(modelPath, 100)
 	if err != nil {
 		t.Fatalf("NewDeepFilter: %v", err)
 	}
@@ -1795,8 +1957,8 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 	for f := 0; f < frames; f++ {
 		frame := make([]float32, FrameSize)
 		for i := 0; i < FrameSize; i++ {
-			t := float64(f*FrameSize+i) / float64(sr)
-			tone := 0.3 * math.Sin(2*math.Pi*1000*t)
+			ts := float64(f*FrameSize+i) / float64(sr)
+			tone := 0.3 * math.Sin(2*math.Pi*1000*ts)
 			noise := 0.3 * (math.Mod(float64(i*9301+49297), 233280)/233280 - 0.5) * 2
 			frame[i] = float32(tone + noise)
 			noisyRMS += float64(frame[i] * frame[i])
@@ -1818,6 +1980,13 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 		t.Errorf("denoised RMS (%f) should be lower than noisy RMS (%f)", cleanRMS, noisyRMS)
 	}
 }
+
+func TestNewDeepFilter_EmptyModelPathErrors(t *testing.T) {
+	_, err := NewDeepFilter("", 100)
+	if err == nil {
+		t.Fatalf("expected error for empty modelPath, got nil")
+	}
+}
 ```
 
 - [ ] **Step 4: Run unit tests (passthrough only)**
@@ -1825,21 +1994,55 @@ func TestDeepFilter_AttenuatesNoise(t *testing.T) {
 Run: `cd /Users/daniel/Documents/Projects/voice-keyboard/core && go test ./internal/denoise/...`
 Expected: PASS — only `TestPassthrough_ReturnsCopyUnchanged` runs.
 
-- [ ] **Step 5: Read the deep_filter.h header to learn the actual API**
+- [ ] **Step 5: Confirm the deep_filter.h API**
 
-Run: `cat /Users/daniel/Documents/Projects/voice-keyboard/core/vendor/deepfilter/include/deep_filter.h`
+Run: `cat /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/include/deep_filter.h`
 
-Read the header carefully to identify:
-- The opaque state type (likely `DFState` or similar)
-- The constructor (likely `df_create_*` taking model bytes or a model path)
-- The frame-process function (likely `df_process_frame` returning attenuation in dB or a void return)
-- The destructor (likely `df_free` or `df_destroy`)
+Verified API (from the v0.5.6 cbindgen-generated header committed in Task 3):
 
-Record the exact signatures. The DeepFilterNet C ABI has changed across versions — Step 6 must reflect what the actual header says.
+```c
+typedef struct DFState DFState;
+
+DFState *df_create(const char *path, float atten_lim);
+uintptr_t df_get_frame_length(DFState *st);
+void df_set_atten_lim(DFState *st, float lim_db);
+void df_set_post_filter_beta(DFState *st, float beta);
+float df_process_frame(DFState *st, float *input, float *output);
+float df_process_frame_raw(DFState *st, float *input, float **out_gains_p, float **out_coefs_p);
+void df_free(DFState *model);
+```
+
+Notable points:
+- `df_create` requires a path to an unpacked model directory (or a `.tar.gz`) — there is no zero-arg constructor with a built-in model. Pass `atten_lim` in dB (use 100.0 for "no attenuation cap" / let the network decide).
+- `df_process_frame` returns the local SNR as a float — useful for diagnostics, can be ignored.
+- The destructor is `df_free` (not `df_destroy`).
+
+- [ ] **Step 5b: Acquire a DeepFilterNet model file**
+
+The dylib does NOT embed weights — `df_create` needs an actual model path. Two options:
+
+**Option A (preferred for v1):** Vendor the official DeepFilterNet3 model into the repo so the build is self-contained.
+
+```bash
+mkdir -p /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
+cd /Users/daniel/Documents/Projects/voice-keyboard/core/third_party/deepfilter/models
+# DeepFilterNet3 model — small enough to commit (~5MB).
+curl -L https://raw.githubusercontent.com/Rikorose/DeepFilterNet/main/models/DeepFilterNet3_onnx.tar.gz \
+  -o DeepFilterNet3.tar.gz
+ls -lh DeepFilterNet3.tar.gz
+```
+
+**Note:** the DeepFilterNet v0.5.6 release page does NOT host the ONNX model archive — releases only contain the `deep-filter` CLI binaries and LADSPA plugins. The actual model archives live in the upstream repo's `models/` directory on the `main` branch (raw URL above). If the path changes, browse https://github.com/Rikorose/DeepFilterNet/tree/main/models for `DeepFilterNet3_onnx.tar.gz`.
+
+After downloading, run `git check-ignore third_party/deepfilter/models/DeepFilterNet3.tar.gz` — should exit non-zero (file is tracked). The `.gitignore` rules already permit `third_party/**/*.dylib` and `*.h` and don't restrict `*.tar.gz`.
+
+**Option B (deferred):** Have the Mac app download the model on first run alongside the Whisper model. Would require changes to the engine state and a "model not loaded" error path. Not v1 scope.
+
+This task uses Option A.
 
 - [ ] **Step 6: Implement the CGo binding**
 
-Write `core/internal/denoise/deepfilter_cgo.go`. The skeleton below assumes a typical DFN C ABI; **adjust function names and signatures to match the header read in Step 5**:
+Write `core/internal/denoise/deepfilter_cgo.go`:
 
 ```go
 //go:build deepfilter
@@ -1847,8 +2050,8 @@ Write `core/internal/denoise/deepfilter_cgo.go`. The skeleton below assumes a ty
 package denoise
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../vendor/deepfilter/include
-#cgo LDFLAGS: -L${SRCDIR}/../../vendor/deepfilter/lib/macos-arm64 -ldf
+#cgo CFLAGS: -I${SRCDIR}/../../third_party/deepfilter/include
+#cgo LDFLAGS: -L${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64 -ldf -Wl,-rpath,${SRCDIR}/../../third_party/deepfilter/lib/macos-arm64
 #include <stdlib.h>
 #include "deep_filter.h"
 */
@@ -1860,6 +2063,8 @@ import (
 	"unsafe"
 )
 
+const defaultAttenLimDB = 100.0 // no attenuation cap; let the network decide
+
 // DeepFilter wraps a libdf state. Each instance is single-threaded;
 // concurrent callers must serialize externally or construct one per
 // goroutine.
@@ -1867,31 +2072,44 @@ type DeepFilter struct {
 	state *C.DFState
 }
 
-// NewDeepFilter constructs a denoiser using the model embedded in libdf.
-// If the upstream API requires a model path, expose it as an option here.
-func NewDeepFilter() (*DeepFilter, error) {
-	// ADJUST: the actual constructor signature depends on the libdf version.
-	// Common forms:
-	//   df_create_default()             -> *DFState
-	//   df_create(model_path: *c_char)  -> *DFState
-	st := C.df_create_default()
-	if st == nil {
-		return nil, errors.New("deep filter: df_create_default returned NULL")
+// NewDeepFilter constructs a denoiser from a DeepFilterNet model archive
+// (.tar.gz file or unpacked directory). Use `attenLimDB` to cap how much
+// gain reduction the network applies; pass defaultAttenLimDB (100) for no cap.
+func NewDeepFilter(modelPath string, attenLimDB float32) (*DeepFilter, error) {
+	if modelPath == "" {
+		return nil, errors.New("deep filter: modelPath is required")
 	}
+	cPath := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	st := C.df_create(cPath, C.float(attenLimDB))
+	if st == nil {
+		return nil, errors.New("deep filter: df_create returned NULL (bad model path?)")
+	}
+
+	// libdf's frame length is fixed at 480 samples for 48kHz mono. Verify
+	// at runtime so we fail loudly if a future libdf version changes that.
+	if got := C.df_get_frame_length(st); int(got) != FrameSize {
+		C.df_free(st)
+		return nil, errors.New("deep filter: unexpected frame length from libdf")
+	}
+
 	d := &DeepFilter{state: st}
 	runtime.SetFinalizer(d, func(d *DeepFilter) { _ = d.Close() })
 	return d, nil
 }
 
 // Process runs one 480-sample frame through DeepFilterNet. Returns a
-// fresh slice; caller may mutate the returned buffer.
+// fresh slice; the caller owns it.
 func (d *DeepFilter) Process(frame []float32) []float32 {
 	if d.state == nil || len(frame) != FrameSize {
-		return frame
+		// degrade to passthrough on any precondition failure
+		out := make([]float32, len(frame))
+		copy(out, frame)
+		return out
 	}
 	out := make([]float32, FrameSize)
-	// ADJUST: the actual signature is typically:
-	//   df_process_frame(state, in_ptr, out_ptr) -> SNR estimate or void
+	// df_process_frame returns the local SNR as a float; we ignore it.
 	C.df_process_frame(
 		d.state,
 		(*C.float)(unsafe.Pointer(&frame[0])),
@@ -1902,7 +2120,6 @@ func (d *DeepFilter) Process(frame []float32) []float32 {
 
 func (d *DeepFilter) Close() error {
 	if d.state != nil {
-		// ADJUST: actual destructor name (df_free / df_destroy)
 		C.df_free(d.state)
 		d.state = nil
 	}
@@ -1910,14 +2127,14 @@ func (d *DeepFilter) Close() error {
 }
 ```
 
-After writing, **edit the function names (`df_create_default`, `df_process_frame`, `df_free`) to match the real ABI from the header**. If the header exposes a different constructor flow (for example, requiring a model path string), pass it through `NewDeepFilter`'s options and convert with `C.CString` / `C.free`.
+Then update the test from Step 3 — change `NewDeepFilter()` (zero-arg) to `NewDeepFilter("third_party/deepfilter/models/DeepFilterNet3.tar.gz", 100)`. The relative path works because `go test` runs in the package directory; the `${SRCDIR}/../../third_party/...` C path is wired through `#cgo CFLAGS`/`LDFLAGS`.
 
 - [ ] **Step 7: Build the CGo binding**
 
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-DYLD_LIBRARY_PATH=$PWD/vendor/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
+DYLD_LIBRARY_PATH=$PWD/third_party/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
   go build -tags=deepfilter ./internal/denoise/...
 ```
 Expected: success. If the linker complains about missing symbols, the function names in the binding don't match the real ABI from the header — fix and re-run.
@@ -1927,10 +2144,10 @@ Expected: success. If the linker complains about missing symbols, the function n
 Run:
 ```bash
 cd /Users/daniel/Documents/Projects/voice-keyboard/core
-DYLD_LIBRARY_PATH=$PWD/vendor/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
+DYLD_LIBRARY_PATH=$PWD/third_party/deepfilter/lib/macos-arm64:$DYLD_LIBRARY_PATH \
   go test -tags=deepfilter ./internal/denoise/... -v
 ```
-Expected: `TestPassthrough_ReturnsCopyUnchanged` PASS, `TestDeepFilter_AttenuatesNoise` PASS.
+Expected: `TestPassthrough_ReturnsCopyUnchanged` PASS, `TestDeepFilter_AttenuatesNoise` PASS, `TestNewDeepFilter_EmptyModelPathErrors` PASS.
 
 - [ ] **Step 9: Commit**
 
@@ -1961,6 +2178,11 @@ type Transcriber interface {
 	// Transcribe accepts mono 16kHz float32 PCM and returns the
 	// recognized text. Empty audio (or audio detected as silence)
 	// yields ("", nil) — silence is not an error.
+	//
+	// Implementations may or may not honor ctx cancellation; the v1
+	// WhisperCpp impl does not (whisper_full is a blocking C call).
+	// Callers should size audio buffers to bounded utterances rather
+	// than rely on context-driven timeouts.
 	Transcribe(ctx context.Context, pcm16k []float32) (string, error)
 
 	// Close releases the underlying model. Safe to call multiple times.
@@ -1997,17 +2219,20 @@ Expected: `RIFF (little-endian) data, WAVE audio, ... 16000 Hz` reported by `fil
 
 - [ ] **Step 4: Implement the CGo binding**
 
-Write `core/internal/transcribe/whisper_cpp.go`:
+Write `core/internal/transcribe/whisper_cpp.go`. The build tag is required so untagged builds don't try to link libwhisper:
 
 ```go
+//go:build whispercpp
+
 package transcribe
 
 /*
-#cgo CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include
-#cgo LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -lwhisper
+#cgo CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include -I/opt/homebrew/include
+#cgo LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -lwhisper -L/opt/homebrew/lib -lggml -lggml-base
 
 #include <stdlib.h>
 #include "whisper.h"
+#include "ggml-backend.h"
 
 // Helper that calls whisper_full and returns the segment count.
 // Lives here so we can pass Go-allocated float buffers cleanly.
@@ -2026,6 +2251,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -2043,10 +2269,24 @@ type WhisperOptions struct {
 	Threads   int    // 0 = let runtime decide (1)
 }
 
+// whisper-cpp v1.8.4 splits its compute backends (Metal, BLAS, CPU
+// micro-arch) into dynamically-loaded .so files in
+// /opt/homebrew/Cellar/ggml/0.10.0/libexec/. Without calling
+// ggml_backend_load_all() once per process, whisper_init_from_file_*
+// aborts with GGML_ASSERT(device) failed because make_buft_list finds
+// no registered devices. sync.Once ensures we load exactly once.
+var ggmlBackendsOnce sync.Once
+
+func ensureGGMLBackends() {
+	ggmlBackendsOnce.Do(func() { C.ggml_backend_load_all() })
+}
+
 func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	if opts.ModelPath == "" {
 		return nil, errors.New("whisper: ModelPath is required")
 	}
+	ensureGGMLBackends()
+
 	cPath := C.CString(opts.ModelPath)
 	defer C.free(unsafe.Pointer(cPath))
 
@@ -2066,6 +2306,11 @@ func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	return &WhisperCpp{ctx: ctx, lang: lang, threads: threads}, nil
 }
 
+// Transcribe runs whisper.cpp inference synchronously. NOTE: ctx is
+// accepted to satisfy the Transcriber interface, but whisper_full is
+// a blocking C call that does not honor cancellation. Cancellation
+// support would require wiring whisper_full_params.abort_callback to
+// poll ctx.Done() — out of scope for v1.
 func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, error) {
 	if w.ctx == nil {
 		return "", errors.New("whisper: closed")
@@ -2363,7 +2608,7 @@ const inputSampleRate = 48000
 
 // Result of a single PTT cycle.
 type Result struct {
-	Raw      string // post-dictionary, pre-LLM
+	Raw      string // raw transcriber output, pre-dict, pre-LLM
 	Cleaned  string // final text to paste; equals dict-corrected raw if LLM failed
 	Terms    []string
 	LLMError error
@@ -2416,9 +2661,9 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 	cleaned, llmErr := p.cleaner.Clean(ctx, corrected, terms)
 	if llmErr != nil {
 		// graceful degradation: ship the dict-corrected text
-		return Result{Raw: corrected, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
+		return Result{Raw: raw, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
 	}
-	return Result{Raw: corrected, Cleaned: cleaned, Terms: terms}, nil
+	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
 // captureAndDenoise drains the capture channel, denoising in 480-sample
@@ -2477,6 +2722,62 @@ Expected: all three tests PASS.
 **Files:**
 - Modify: `core/cmd/vkb-cli/main.go`
 - Create: `core/cmd/vkb-cli/check.go`
+- Delete: `core/cmd/vkb-cli/stubs.go`
+- Create: `core/cmd/vkb-cli/capture.go` (stub; replaced by Task 15)
+- Create: `core/cmd/vkb-cli/transcribe.go` (stub; replaced by Task 16)
+- Create: `core/cmd/vkb-cli/pipe.go` (stub; replaced by Task 17)
+
+- [ ] **Step 0: Split stubs.go into per-task files**
+
+Delete `core/cmd/vkb-cli/stubs.go` and create three separate files so Tasks 15/16/17 can each replace their file in place without a duplicate-function build error.
+
+Write `core/cmd/vkb-cli/capture.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runCapture(args []string) int {
+	fmt.Fprintln(os.Stderr, "capture: not yet implemented (Task 15)")
+	return 1
+}
+```
+
+Write `core/cmd/vkb-cli/transcribe.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runTranscribe(args []string) int {
+	fmt.Fprintln(os.Stderr, "transcribe: not yet implemented (Task 16)")
+	return 1
+}
+```
+
+Write `core/cmd/vkb-cli/pipe.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runPipe(args []string) int {
+	fmt.Fprintln(os.Stderr, "pipe: not yet implemented (Task 17)")
+	return 1
+}
+```
 
 - [ ] **Step 1: Replace the stub with a subcommand dispatcher**
 
@@ -2573,10 +2874,10 @@ func runCheck(args []string) int {
 		fmt.Printf("[ OK ] Whisper model present: %s\n", modelPath)
 	}
 
-	// 3. libwhisper available — if we got here and built, it is. Just
-	//    note its location for the operator.
-	fmt.Printf("[ OK ] linked against libwhisper.dylib (Homebrew)\n")
-	fmt.Printf("[ OK ] linked against libdf.dylib (vendored)\n")
+	// 3. libwhisper / libdf — actual linkage is verified at runtime by the
+	//    transcribe and pipe subcommands once they are wired in (Tasks 16/17).
+	fmt.Printf("[INFO] libwhisper.dylib linkage verified at runtime by the transcribe subcommand\n")
+	fmt.Printf("[INFO] libdf.dylib linkage verified at runtime by the pipe subcommand (with build-tagged binary)\n")
 
 	if ok {
 		fmt.Println("\nAll checks passed.")
@@ -2908,6 +3209,10 @@ func runPipe(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *live && len(fs.Args()) > 0 {
+		fmt.Fprintln(os.Stderr, "usage: --live and FILE.wav are mutually exclusive")
+		return 2
+	}
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
@@ -3113,13 +3418,17 @@ func (e *engine) setLastError(msg string) {
 	e.mu.Unlock()
 }
 
-func (e *engine) buildPipeline() error {
+// buildPipeline assembles a fresh *pipeline.Pipeline from e.cfg without
+// mutating engine state. The caller is responsible for assigning the
+// returned pipeline to e.pipeline under e.mu. This avoids a TSAN-visible
+// race between vkb_configure (writer) and vkb_start_capture (reader).
+func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	tr, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 		ModelPath: e.cfg.WhisperModelPath,
 		Language:  e.cfg.Language,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cleaner := llm.NewAnthropic(llm.AnthropicOptions{
 		APIKey: e.cfg.LLMAPIKey,
@@ -3128,15 +3437,14 @@ func (e *engine) buildPipeline() error {
 	dy := dict.NewFuzzy(e.cfg.CustomDict, 1)
 
 	var d denoise.Denoiser
-	if e.cfg.NoiseSuppression {
-		d = newDeepFilterOrPassthrough()
+	if !e.cfg.DisableNoiseSuppression {
+		d = newDeepFilterOrPassthrough(e.cfg.DeepFilterModelPath)
 	} else {
 		d = denoise.NewPassthrough()
 	}
 
 	cap := audio.NewMalgoCapture()
-	e.pipeline = pipeline.New(cap, d, tr, dy, cleaner)
-	return nil
+	return pipeline.New(cap, d, tr, dy, cleaner), nil
 }
 ```
 
@@ -3151,7 +3459,8 @@ package main
 
 import "github.com/voice-keyboard/core/internal/denoise"
 
-func newDeepFilterOrPassthrough() denoise.Denoiser {
+// modelPath ignored in the CGo-free build.
+func newDeepFilterOrPassthrough(modelPath string) denoise.Denoiser {
 	// CGo-free build (development). Use passthrough.
 	return denoise.NewPassthrough()
 }
@@ -3166,8 +3475,14 @@ package main
 
 import "github.com/voice-keyboard/core/internal/denoise"
 
-func newDeepFilterOrPassthrough() denoise.Denoiser {
-	d, err := denoise.NewDeepFilter()
+const dfDefaultAttenLimDB = 100.0
+
+func newDeepFilterOrPassthrough(modelPath string) denoise.Denoiser {
+	if modelPath == "" {
+		// no model path configured — degrade to passthrough silently
+		return denoise.NewPassthrough()
+	}
+	d, err := denoise.NewDeepFilter(modelPath, dfDefaultAttenLimDB)
 	if err != nil {
 		// fall back if the libdf init fails at runtime
 		return denoise.NewPassthrough()
@@ -3196,15 +3511,29 @@ import (
 	"github.com/voice-keyboard/core/internal/config"
 )
 
+// vkb_init initializes the engine. Idempotent: calling it again on an
+// already-initialized engine is a no-op and returns 0.
+//
 //export vkb_init
 func vkb_init() C.int {
 	if getEngine() != nil {
-		return 0 // already initialized
+		return 0
 	}
 	setEngine(&engine{events: make(chan event, 32)})
 	return 0
 }
 
+// vkb_configure parses a JSON-encoded Config and rebuilds the pipeline.
+// Returns 0 on success. Non-zero error codes:
+//
+//	1 = engine not initialized
+//	2 = JSON parse error
+//	3 = pipeline build error
+//	4 = busy: a capture is currently in flight
+//
+// On any non-zero return, vkb_last_error provides a human-readable
+// message (which the caller must free via vkb_free_string).
+//
 //export vkb_configure
 func vkb_configure(jsonC *C.char) C.int {
 	e := getEngine()
@@ -3218,35 +3547,62 @@ func vkb_configure(jsonC *C.char) C.int {
 		return 2
 	}
 	config.WithDefaults(&cfg)
-	e.mu.Lock()
-	e.cfg = cfg
-	e.mu.Unlock()
-	if err := e.buildPipeline(); err != nil {
-		e.setLastError("vkb_configure: " + err.Error())
-		return 3
-	}
-	return 0
-}
 
-//export vkb_start_capture
-func vkb_start_capture() C.int {
-	e := getEngine()
-	if e == nil || e.pipeline == nil {
-		return 1
-	}
 	e.mu.Lock()
 	if e.stopCh != nil {
 		e.mu.Unlock()
-		return 2 // already running
+		e.setLastError("vkb_configure: cannot reconfigure while a capture is in flight")
+		return 4
+	}
+	e.cfg = cfg
+	e.mu.Unlock()
+
+	p, err := e.buildPipeline()
+	if err != nil {
+		e.setLastError("vkb_configure: " + err.Error())
+		return 3
+	}
+	e.mu.Lock()
+	e.pipeline = p
+	e.mu.Unlock()
+	return 0
+}
+
+// vkb_start_capture begins a single-utterance capture cycle. Returns 0
+// on successful start, 1 if the engine is not initialized or has no
+// pipeline configured, and 2 if a capture is already in flight. Result
+// or error events are delivered asynchronously via vkb_poll_event.
+//
+//export vkb_start_capture
+func vkb_start_capture() C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	e.mu.Lock()
+	if e.pipeline == nil {
+		e.mu.Unlock()
+		return 1
+	}
+	if e.stopCh != nil {
+		e.mu.Unlock()
+		return 2
 	}
 	stopCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	e.stopCh = stopCh
 	e.cancel = cancel
+	pipe := e.pipeline
 	e.mu.Unlock()
 
 	go func() {
-		res, err := e.pipeline.Run(ctx, stopCh)
+		defer func() {
+			e.mu.Lock()
+			e.stopCh = nil
+			e.cancel = nil
+			e.mu.Unlock()
+		}()
+		res, err := pipe.Run(ctx, stopCh)
 		if err != nil {
 			select {
 			case e.events <- event{Kind: "error", Msg: err.Error()}:
@@ -3263,6 +3619,10 @@ func vkb_start_capture() C.int {
 	return 0
 }
 
+// vkb_stop_capture ends an in-flight capture. Idempotent: safe to call
+// when no capture is active. Always returns 0 unless the engine is not
+// initialized (in which case it returns 1).
+//
 //export vkb_stop_capture
 func vkb_stop_capture() C.int {
 	e := getEngine()
@@ -3276,11 +3636,16 @@ func vkb_stop_capture() C.int {
 		e.stopCh = nil
 	}
 	if e.cancel != nil {
-		e.cancel = nil // ctx will be cancelled when pipeline.Run returns
+		e.cancel()
+		e.cancel = nil
 	}
 	return 0
 }
 
+// vkb_poll_event returns a JSON-encoded event string, or NULL if no
+// event is queued. The returned string is heap-allocated; the caller
+// must free it via vkb_free_string.
+//
 //export vkb_poll_event
 func vkb_poll_event() *C.char {
 	e := getEngine()
@@ -3299,6 +3664,9 @@ func vkb_poll_event() *C.char {
 	}
 }
 
+// vkb_destroy tears down the engine. Idempotent: calling on an
+// already-destroyed engine is a no-op.
+//
 //export vkb_destroy
 func vkb_destroy() {
 	e := getEngine()
@@ -3309,6 +3677,10 @@ func vkb_destroy() {
 	setEngine(nil)
 }
 
+// vkb_last_error returns the last error message as a C string, or NULL
+// if no error is set. The returned string is heap-allocated; the caller
+// must free it via vkb_free_string.
+//
 //export vkb_last_error
 func vkb_last_error() *C.char {
 	e := getEngine()
@@ -3323,6 +3695,9 @@ func vkb_last_error() *C.char {
 	return C.CString(e.lastErr)
 }
 
+// vkb_free_string frees a C string previously returned by
+// vkb_poll_event or vkb_last_error. Passing NULL is a no-op.
+//
 //export vkb_free_string
 func vkb_free_string(s *C.char) {
 	if s != nil {
@@ -3352,16 +3727,7 @@ ls -lh build/libvkb.dylib build/libvkb.h
 ```
 Expected: produces `build/libvkb.dylib` and `build/libvkb.h`. The header declares `vkb_init`, `vkb_configure`, etc.
 
-- [ ] **Step 6: Set the dylib install name**
-
-```bash
-cd /Users/daniel/Documents/Projects/voice-keyboard/core
-install_name_tool -id "@rpath/libvkb.dylib" build/libvkb.dylib
-otool -D build/libvkb.dylib
-```
-Expected: `otool -D` prints `@rpath/libvkb.dylib`.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 `git add cmd/libvkb Makefile && git commit -m "feat(cabi): add libvkb.dylib C ABI exports"`
 
@@ -3394,7 +3760,7 @@ int main(int argc, char** argv) {
         "\"whisper_model_path\":\"/tmp/nonexistent.bin\","
         "\"whisper_model_size\":\"tiny\","
         "\"language\":\"en\","
-        "\"noise_suppression\":false,"
+        "\"disable_noise_suppression\":true,"
         "\"llm_provider\":\"anthropic\","
         "\"llm_model\":\"claude-sonnet-4-6\","
         "\"llm_api_key\":\"sk-ant-test\","
@@ -3528,8 +3894,12 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 	p := pipeline.New(cap, d, tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	// Don't pre-close stop: with the real Whisper transcriber, an
+	// already-closed stopCh causes captureAndDenoise to exit before
+	// any audio is consumed (empty PCM → empty transcription). Let
+	// FakeCapture drain its buffer naturally; the channel close from
+	// FakeCapture's goroutine ends the drain loop.
 	stop := make(chan struct{})
-	close(stop)
 
 	res, err := p.Run(ctx, stop)
 	if err != nil {

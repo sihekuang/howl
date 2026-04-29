@@ -400,7 +400,7 @@ Paste injection during a held hotkey is broken: synthesizing ⌘V while the user
 ### Vendored dependencies
 
 ```
-vendor/deepfilter/
+third_party/deepfilter/
 ├── lib/macos-arm64/libdf.dylib    # ~5–10MB, prebuilt by maintainer once
 ├── include/deep_filter.h          # C header for CGo
 └── VERSION.md                     # upstream tag, commit, build date, deployment target
@@ -517,14 +517,15 @@ The Config struct travels across the C ABI as JSON. Stored on disk in `~/Library
 
 ```go
 type Config struct {
-    WhisperModelPath  string   // absolute path to Whisper model file
-    WhisperModelSize  string   // "tiny" | "base" | "small" | "medium" | "large"
-    Language          string   // "en", "es", etc. ("auto" = let Whisper detect)
-    NoiseSuppression  bool     // default true
-    LLMProvider       string   // "anthropic" (v1)
-    LLMModel          string   // e.g. "claude-sonnet-4-6"
-    LLMAPIKey         string   // injected by Swift from Keychain at configure time
-    CustomDict        []string // user vocabulary
+    WhisperModelPath        string   // absolute path to Whisper model file
+    WhisperModelSize        string   // "tiny" | "base" | "small" | "medium" | "large"
+    Language                string   // "en", "es", etc. ("auto" = let Whisper detect)
+    DisableNoiseSuppression bool     // false (default) = denoise enabled; true = user disabled
+    DeepFilterModelPath     string   // absolute path to DeepFilterNet model archive (.tar.gz)
+    LLMProvider             string   // "anthropic" (v1)
+    LLMModel                string   // e.g. "claude-sonnet-4-6"
+    LLMAPIKey               string   // injected by Swift from Keychain at configure time
+    CustomDict              []string // user vocabulary
 }
 ```
 
