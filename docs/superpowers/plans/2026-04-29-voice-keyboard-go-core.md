@@ -103,6 +103,8 @@ build/
 *.so
 *.dll
 *.h
+!vendor/**/*.dylib
+!vendor/**/*.so
 !vendor/**/*.h
 
 # Go
@@ -118,6 +120,8 @@ vendor-go/
 # OS
 .DS_Store
 ```
+
+The `!vendor/**/*.dylib` and `!vendor/**/*.so` negations are critical: without them the `*.dylib` rule would silently prevent committing `vendor/deepfilter/lib/macos-arm64/libdf.dylib` in Task 3.
 
 - [ ] **Step 5: Verify it compiles**
 
