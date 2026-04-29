@@ -1,5 +1,8 @@
 import Foundation
+import os
 import VoiceKeyboardCore
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Engine")
 
 @MainActor
 public final class EngineCoordinator {
@@ -27,6 +30,7 @@ public final class EngineCoordinator {
     }
 
     public func start() async {
+        log.info("coordinator.start: applying config and binding hotkey")
         // Apply current settings to the engine
         await applyConfig()
         // Hook hotkey
@@ -87,8 +91,14 @@ public final class EngineCoordinator {
 
     /// Manual entry points for UI surfaces (e.g. Playground tab) that want
     /// to drive recording without going through the global hotkey.
-    public func manualPress() async { await onPress() }
-    public func manualRelease() async { await onRelease() }
+    public func manualPress() async {
+        log.info("manualPress invoked")
+        await onPress()
+    }
+    public func manualRelease() async {
+        log.info("manualRelease invoked")
+        await onRelease()
+    }
 
     /// Force-reset the UI state. Best-effort: also nudges the engine to
     /// stop any in-flight capture. If the Go core already finished and
@@ -101,13 +111,15 @@ public final class EngineCoordinator {
     }
 
     private func onPress() async {
+        log.info("onPress: setting state=recording, calling engine.startCapture()")
         composition.appState.engineState = .recording
         composition.overlay.show()
         do {
             try await composition.engine.startCapture()
-            // Successful capture supersedes any prior warning.
+            log.info("onPress: engine.startCapture() returned cleanly")
             composition.appState.transientWarning = nil
         } catch {
+            log.error("onPress: engine.startCapture() FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("start: \(error)")
             composition.appState.engineState = .idle
             composition.overlay.hide()
@@ -115,10 +127,13 @@ public final class EngineCoordinator {
     }
 
     private func onRelease() async {
+        log.info("onRelease: setting state=processing, calling engine.stopCapture()")
         composition.appState.engineState = .processing
         do {
             try await composition.engine.stopCapture()
+            log.info("onRelease: engine.stopCapture() returned cleanly; awaiting result event")
         } catch {
+            log.error("onRelease: engine.stopCapture() FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("stop: \(error)")
             composition.appState.engineState = .idle
             composition.overlay.hide()
