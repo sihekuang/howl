@@ -23,13 +23,26 @@ struct HotkeyTab: View {
                 HStack(spacing: 8) {
                     Image(systemName: isTrusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .foregroundStyle(isTrusted ? .green : .orange)
-                    Text(isTrusted ? "Granted" : "Required for global hotkey")
+                    Text(isTrusted ? "Granted" : "Required for paste injection")
                         .font(.caption)
                     Spacer()
-                    Button("Open System Settings…") {
-                        permissions.openSystemSettings()
-                    }
+                    Button("Open…") { permissions.openSystemSettings() }
                 }
+            }
+            LabeledContent("Input Monitoring") {
+                HStack(spacing: 8) {
+                    Image(systemName: "questionmark.circle")
+                        .foregroundStyle(.secondary)
+                    Text("Required for global hotkey listening")
+                        .font(.caption)
+                    Spacer()
+                    Button("Open…") { permissions.openInputMonitoringSettings() }
+                }
+            }
+            Section {
+                Text("After granting either permission — or after rebuilding the app — toggle the switch **off then on** so macOS picks up the new binary. The PTT hotkey still won't fire until both panes have VoiceKeyboard enabled.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             LabeledContent("Push-to-talk") {
