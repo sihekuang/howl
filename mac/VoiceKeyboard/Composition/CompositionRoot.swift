@@ -23,4 +23,6 @@ public final class CompositionRoot {
         self.secrets = KeychainSecretStore()
         self.permissions = DefaultAccessibilityPermissions()
     }
+
+    public lazy var overlay = RecordingOverlayController(appState: appState)
 }
