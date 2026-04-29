@@ -2221,17 +2221,20 @@ Expected: `RIFF (little-endian) data, WAVE audio, ... 16000 Hz` reported by `fil
 
 - [ ] **Step 4: Implement the CGo binding**
 
-Write `core/internal/transcribe/whisper_cpp.go`:
+Write `core/internal/transcribe/whisper_cpp.go`. The build tag is required so untagged builds don't try to link libwhisper:
 
 ```go
+//go:build whispercpp
+
 package transcribe
 
 /*
-#cgo CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include
-#cgo LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -lwhisper
+#cgo CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include -I/opt/homebrew/include
+#cgo LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -lwhisper -L/opt/homebrew/lib -lggml -lggml-base
 
 #include <stdlib.h>
 #include "whisper.h"
+#include "ggml-backend.h"
 
 // Helper that calls whisper_full and returns the segment count.
 // Lives here so we can pass Go-allocated float buffers cleanly.
@@ -2250,6 +2253,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -2267,10 +2271,24 @@ type WhisperOptions struct {
 	Threads   int    // 0 = let runtime decide (1)
 }
 
+// whisper-cpp v1.8.4 splits its compute backends (Metal, BLAS, CPU
+// micro-arch) into dynamically-loaded .so files in
+// /opt/homebrew/Cellar/ggml/0.10.0/libexec/. Without calling
+// ggml_backend_load_all() once per process, whisper_init_from_file_*
+// aborts with GGML_ASSERT(device) failed because make_buft_list finds
+// no registered devices. sync.Once ensures we load exactly once.
+var ggmlBackendsOnce sync.Once
+
+func ensureGGMLBackends() {
+	ggmlBackendsOnce.Do(func() { C.ggml_backend_load_all() })
+}
+
 func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	if opts.ModelPath == "" {
 		return nil, errors.New("whisper: ModelPath is required")
 	}
+	ensureGGMLBackends()
+
 	cPath := C.CString(opts.ModelPath)
 	defer C.free(unsafe.Pointer(cPath))
 
