@@ -2,7 +2,7 @@ name: VoiceKeyboard
 options:
   bundleIdPrefix: com.voicekeyboard
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
   createIntermediateGroups: true
 settings:
   base:

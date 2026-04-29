@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "VoiceKeyboardCore",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         .library(name: "VoiceKeyboardCore", targets: ["VoiceKeyboardCore"]),
     ],
