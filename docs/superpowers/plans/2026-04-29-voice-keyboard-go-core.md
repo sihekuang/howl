@@ -2729,6 +2729,62 @@ Expected: all three tests PASS.
 **Files:**
 - Modify: `core/cmd/vkb-cli/main.go`
 - Create: `core/cmd/vkb-cli/check.go`
+- Delete: `core/cmd/vkb-cli/stubs.go`
+- Create: `core/cmd/vkb-cli/capture.go` (stub; replaced by Task 15)
+- Create: `core/cmd/vkb-cli/transcribe.go` (stub; replaced by Task 16)
+- Create: `core/cmd/vkb-cli/pipe.go` (stub; replaced by Task 17)
+
+- [ ] **Step 0: Split stubs.go into per-task files**
+
+Delete `core/cmd/vkb-cli/stubs.go` and create three separate files so Tasks 15/16/17 can each replace their file in place without a duplicate-function build error.
+
+Write `core/cmd/vkb-cli/capture.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runCapture(args []string) int {
+	fmt.Fprintln(os.Stderr, "capture: not yet implemented (Task 15)")
+	return 1
+}
+```
+
+Write `core/cmd/vkb-cli/transcribe.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runTranscribe(args []string) int {
+	fmt.Fprintln(os.Stderr, "transcribe: not yet implemented (Task 16)")
+	return 1
+}
+```
+
+Write `core/cmd/vkb-cli/pipe.go`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func runPipe(args []string) int {
+	fmt.Fprintln(os.Stderr, "pipe: not yet implemented (Task 17)")
+	return 1
+}
+```
 
 - [ ] **Step 1: Replace the stub with a subcommand dispatcher**
 
@@ -2825,10 +2881,10 @@ func runCheck(args []string) int {
 		fmt.Printf("[ OK ] Whisper model present: %s\n", modelPath)
 	}
 
-	// 3. libwhisper available — if we got here and built, it is. Just
-	//    note its location for the operator.
-	fmt.Printf("[ OK ] linked against libwhisper.dylib (Homebrew)\n")
-	fmt.Printf("[ OK ] linked against libdf.dylib (vendored)\n")
+	// 3. libwhisper / libdf — actual linkage is verified at runtime by the
+	//    transcribe and pipe subcommands once they are wired in (Tasks 16/17).
+	fmt.Printf("[INFO] libwhisper.dylib linkage verified at runtime by the transcribe subcommand\n")
+	fmt.Printf("[INFO] libdf.dylib linkage verified at runtime by the pipe subcommand (with build-tagged binary)\n")
 
 	if ok {
 		fmt.Println("\nAll checks passed.")

@@ -34,10 +34,10 @@ func runCheck(args []string) int {
 		fmt.Printf("[ OK ] Whisper model present: %s\n", modelPath)
 	}
 
-	// 3. libwhisper available — if we got here and built, it is. Just
-	//    note its location for the operator.
-	fmt.Printf("[ OK ] linked against libwhisper.dylib (Homebrew)\n")
-	fmt.Printf("[ OK ] linked against libdf.dylib (vendored)\n")
+	// 3. libwhisper / libdf — actual linkage is verified at runtime by the
+	//    transcribe and pipe subcommands once they are wired in (Tasks 16/17).
+	fmt.Printf("[INFO] libwhisper.dylib linkage verified at runtime by the transcribe subcommand\n")
+	fmt.Printf("[INFO] libdf.dylib linkage verified at runtime by the pipe subcommand (with build-tagged binary)\n")
 
 	if ok {
 		fmt.Println("\nAll checks passed.")
