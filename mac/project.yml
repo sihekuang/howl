@@ -39,6 +39,18 @@ targets:
       - name: Build Go core
         script: |
           set -e
+          # Xcode's GUI build doesn't inherit the user shell PATH, so make/go
+          # in /opt/homebrew/bin aren't found by default. Source the user's
+          # zprofile / bash_profile if present, then ensure /opt/homebrew/bin
+          # and /usr/local/bin are on PATH for the rest of this script.
+          [ -f "$HOME/.zprofile" ] && . "$HOME/.zprofile" >/dev/null 2>&1 || true
+          [ -f "$HOME/.bash_profile" ] && . "$HOME/.bash_profile" >/dev/null 2>&1 || true
+          export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+          # Sanity check toolchain — gives a clear error if anything's missing.
+          command -v make >/dev/null || { echo "error: make not found on PATH" >&2; exit 1; }
+          command -v go   >/dev/null || { echo "error: go not found (brew install go)" >&2; exit 1; }
+
           cd "$SRCROOT/../core"
           unset GOFLAGS
           make build-dylib

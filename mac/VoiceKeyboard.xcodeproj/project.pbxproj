@@ -283,7 +283,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\ncd \"$SRCROOT/../core\"\nunset GOFLAGS\nmake build-dylib\n";
+			shellScript = "set -e\n# Xcode's GUI build doesn't inherit the user shell PATH, so make/go\n# in /opt/homebrew/bin aren't found by default. Source the user's\n# zprofile / bash_profile if present, then ensure /opt/homebrew/bin\n# and /usr/local/bin are on PATH for the rest of this script.\n[ -f \"$HOME/.zprofile\" ] && . \"$HOME/.zprofile\" >/dev/null 2>&1 || true\n[ -f \"$HOME/.bash_profile\" ] && . \"$HOME/.bash_profile\" >/dev/null 2>&1 || true\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\"\n\n# Sanity check toolchain — gives a clear error if anything's missing.\ncommand -v make >/dev/null || { echo \"error: make not found on PATH\" >&2; exit 1; }\ncommand -v go   >/dev/null || { echo \"error: go not found (brew install go)\" >&2; exit 1; }\n\ncd \"$SRCROOT/../core\"\nunset GOFLAGS\nmake build-dylib\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
