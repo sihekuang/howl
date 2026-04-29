@@ -1696,6 +1696,8 @@ import (
 
 const malgoChannels = 1
 
+var _ Capture = (*MalgoCapture)(nil)
+
 // MalgoCapture captures PCM from the default system microphone using
 // miniaudio (via the malgo Go bindings). It produces float32 mono frames
 // at the requested sample rate.
@@ -1737,7 +1739,7 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 		// `in` is interleaved float32 mono. We reinterpret bytes as
 		// float32 via unsafe.Slice (Go 1.17+), then copy out so the
 		// caller owns the buffer.
-		if frameCount == 0 || len(in) == 0 {
+		if frameCount == 0 || len(in) < int(frameCount)*4 {
 			return
 		}
 		header := (*float32)(unsafe.Pointer(&in[0]))
@@ -1789,6 +1791,7 @@ func (m *MalgoCapture) Start(ctx context.Context, sampleRate int) (<-chan []floa
 		}
 		close(m.out)
 		m.out = nil
+		m.cancel = nil
 	}()
 
 	return out, nil
