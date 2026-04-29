@@ -56,13 +56,17 @@ func (e *engine) setLastError(msg string) {
 	e.mu.Unlock()
 }
 
-func (e *engine) buildPipeline() error {
+// buildPipeline assembles a fresh *pipeline.Pipeline from e.cfg without
+// mutating engine state. The caller is responsible for assigning the
+// returned pipeline to e.pipeline under e.mu. This avoids a TSAN-visible
+// race between vkb_configure (writer) and vkb_start_capture (reader).
+func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	tr, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 		ModelPath: e.cfg.WhisperModelPath,
 		Language:  e.cfg.Language,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cleaner := llm.NewAnthropic(llm.AnthropicOptions{
 		APIKey: e.cfg.LLMAPIKey,
@@ -78,6 +82,5 @@ func (e *engine) buildPipeline() error {
 	}
 
 	cap := audio.NewMalgoCapture()
-	e.pipeline = pipeline.New(cap, d, tr, dy, cleaner)
-	return nil
+	return pipeline.New(cap, d, tr, dy, cleaner), nil
 }
