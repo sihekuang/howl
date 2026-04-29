@@ -8,6 +8,8 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/voice-keyboard/core/internal/config"
@@ -97,10 +99,38 @@ func vkb_start_capture() C.int {
 	}
 	stopCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
+	pipe := e.pipeline
 	e.stopCh = stopCh
 	e.cancel = cancel
-	pipe := e.pipeline
 	e.mu.Unlock()
+
+	// Throttle level events to ~30Hz, taking max RMS in each window.
+	const levelHz = 30
+	levelInterval := time.Second / levelHz
+	var (
+		levelMu     sync.Mutex
+		levelMax    float32
+		levelLastAt time.Time
+	)
+	levelLastAt = time.Now()
+	pipe.LevelCallback = func(rms float32) {
+		levelMu.Lock()
+		defer levelMu.Unlock()
+		now := time.Now()
+		if rms > levelMax {
+			levelMax = rms
+		}
+		if now.Sub(levelLastAt) < levelInterval {
+			return
+		}
+		ev := event{Kind: "level", RMS: levelMax}
+		select {
+		case e.events <- ev:
+		default:
+		}
+		levelMax = 0
+		levelLastAt = now
+	}
 
 	go func() {
 		defer func() {

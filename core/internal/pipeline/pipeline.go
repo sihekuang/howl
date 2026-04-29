@@ -34,6 +34,11 @@ type Pipeline struct {
 	transcriber transcribe.Transcriber
 	dict        dict.Dictionary
 	cleaner     llm.Cleaner
+
+	// LevelCallback, if non-nil, is invoked with the post-denoise RMS
+	// (in [0, 1]) of each 480-sample frame. Set this on the Pipeline
+	// before calling Run. Safe to omit; nil means no level publication.
+	LevelCallback func(float32)
 }
 
 func New(c audio.Capture, d denoise.Denoiser, t transcribe.Transcriber,
@@ -57,7 +62,7 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 	}
 	defer p.capture.Stop()
 
-	denoised := captureAndDenoise(ctx, frames, stopCh, p.denoiser)
+	denoised := captureAndDenoise(ctx, frames, stopCh, p.denoiser, p.LevelCallback)
 
 	dec := resample.NewDecimate3()
 	pcm16k := dec.Process(denoised)
@@ -105,7 +110,13 @@ func (p *Pipeline) Close() error {
 // (10ms) frames. Stops draining when stopCh fires, ctx is cancelled, or
 // frames closes. Any partial trailing samples are zero-padded into a
 // final frame so we don't lose the tail of an utterance.
-func captureAndDenoise(ctx context.Context, frames <-chan []float32, stopCh <-chan struct{}, d denoise.Denoiser) []float32 {
+func captureAndDenoise(
+	ctx context.Context,
+	frames <-chan []float32,
+	stopCh <-chan struct{},
+	d denoise.Denoiser,
+	levelCb func(float32),
+) []float32 {
 	var pending []float32
 	var out []float32
 
@@ -113,6 +124,11 @@ func captureAndDenoise(ctx context.Context, frames <-chan []float32, stopCh <-ch
 		for len(pending) >= denoise.FrameSize {
 			frame := pending[:denoise.FrameSize]
 			out = append(out, d.Process(frame)...)
+			// Compute RMS over the post-denoise frame
+			denoisedTail := out[len(out)-denoise.FrameSize:]
+			if levelCb != nil {
+				levelCb(audio.RMS(denoisedTail))
+			}
 			pending = pending[denoise.FrameSize:]
 		}
 	}
@@ -136,6 +152,10 @@ finalize:
 		last := make([]float32, denoise.FrameSize)
 		copy(last, pending)
 		out = append(out, d.Process(last)...)
+		if levelCb != nil {
+			denoisedTail := out[len(out)-denoise.FrameSize:]
+			levelCb(audio.RMS(denoisedTail))
+		}
 	}
 	return out
 }

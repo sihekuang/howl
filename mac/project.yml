@@ -1,0 +1,67 @@
+name: VoiceKeyboard
+options:
+  bundleIdPrefix: com.voicekeyboard
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+packages:
+  VoiceKeyboardCore:
+    path: Packages/VoiceKeyboardCore
+targets:
+  VoiceKeyboard:
+    type: application
+    platform: macOS
+    sources:
+      - path: VoiceKeyboard
+        excludes:
+          - "Info.plist"
+          - "VoiceKeyboard.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicekeyboard.app
+        PRODUCT_NAME: VoiceKeyboard
+        INFOPLIST_FILE: VoiceKeyboard/Info.plist
+        CODE_SIGN_ENTITLEMENTS: VoiceKeyboard/VoiceKeyboard.entitlements
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../core/build"
+        OTHER_LDFLAGS: "-lvkb"
+    dependencies:
+      - package: VoiceKeyboardCore
+    preBuildScripts:
+      - name: Build Go core
+        script: |
+          set -e
+          cd "$SRCROOT/../core"
+          unset GOFLAGS
+          make build-dylib
+        outputFiles:
+          - "$(SRCROOT)/../core/build/libvkb.dylib"
+          - "$(SRCROOT)/../core/build/libvkb.h"
+    postCompileScripts:
+      - name: Copy libvkb.dylib into Frameworks
+        script: |
+          set -e
+          mkdir -p "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
+          cp -f "$SRCROOT/../core/build/libvkb.dylib" \
+                "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/"
+          install_name_tool -id "@rpath/libvkb.dylib" \
+                "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/libvkb.dylib"
+        inputFiles:
+          - "$(SRCROOT)/../core/build/libvkb.dylib"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+schemes:
+  VoiceKeyboard:
+    build:
+      targets:
+        VoiceKeyboard: all
+    run:
+      config: Debug
