@@ -90,3 +90,44 @@ func TestFakeCapture_ContextCancelHaltsEarly(t *testing.T) {
 		}
 	}
 }
+
+func TestFakeCapture_StartCancelsPrior(t *testing.T) {
+	src := make([]float32, 10000)
+	fake := NewFakeCapture(src, 1000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	first, err := fake.Start(ctx, 48000)
+	if err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	<-first // consume one frame
+
+	// Re-Start without Stopping; the first goroutine must be cancelled
+	// so its channel closes promptly rather than leaking.
+	second, err := fake.Start(ctx, 48000)
+	if err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+drain:
+	for {
+		select {
+		case _, ok := <-first:
+			if !ok {
+				break drain
+			}
+		case <-deadline:
+			t.Fatal("first frames channel did not close after re-Start within 500ms")
+		}
+	}
+
+	// Cleanup the second goroutine so the test exits promptly.
+	if err := fake.Stop(); err != nil {
+		t.Errorf("Stop: %v", err)
+	}
+	for range second {
+	}
+}

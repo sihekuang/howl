@@ -26,6 +26,9 @@ func (f *FakeCapture) Start(ctx context.Context, sampleRate int) (<-chan []float
 	}
 	subCtx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
+	if f.cancel != nil {
+		f.cancel() // cancel any prior goroutine to avoid leak on re-entry
+	}
 	f.cancel = cancel
 	f.mu.Unlock()
 
