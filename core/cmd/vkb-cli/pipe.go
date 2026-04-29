@@ -24,6 +24,10 @@ func runPipe(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *live && len(fs.Args()) > 0 {
+		fmt.Fprintln(os.Stderr, "usage: --live and FILE.wav are mutually exclusive")
+		return 2
+	}
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
