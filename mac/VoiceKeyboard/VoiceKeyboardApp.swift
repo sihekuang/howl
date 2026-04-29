@@ -19,6 +19,15 @@ struct VoiceKeyboardApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        // Settings scene wired in Task 11.
+        Settings {
+            SettingsView(composition: appDelegate.composition)
+        }
+
+        Window("Welcome", id: "first-run") {
+            FirstRunWindow(composition: appDelegate.composition) {
+                NSApp.windows.first { $0.identifier?.rawValue == "first-run" }?.orderOut(nil)
+            }
+        }
+        .windowResizability(.contentSize)
     }
 }
