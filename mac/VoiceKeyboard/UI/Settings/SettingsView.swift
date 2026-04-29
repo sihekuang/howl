@@ -20,7 +20,11 @@ struct SettingsView: View {
                 .tabItem { Label("Provider", systemImage: "key") }
             DictionaryTab(settings: $settings, onSave: save)
                 .tabItem { Label("Dictionary", systemImage: "books.vertical") }
-            PlaygroundTab(appState: composition.appState, hotkey: settings.hotkey)
+            PlaygroundTab(
+                appState: composition.appState,
+                hotkey: settings.hotkey,
+                coordinator: composition.coordinator
+            )
                 .tabItem { Label("Playground", systemImage: "waveform") }
         }
         .frame(width: 560, height: 400)

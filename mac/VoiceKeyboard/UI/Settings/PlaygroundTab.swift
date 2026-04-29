@@ -2,12 +2,14 @@ import SwiftUI
 import VoiceKeyboardCore
 
 /// A scratch text field where the user can try the full dictation flow
-/// without leaving the app: focus the editor, hold the PTT hotkey, speak,
-/// release. The cleaned text is pasted into the currently focused field —
-/// which is this one when the playground tab is open.
+/// without leaving the app: focus the editor, hold the PTT hotkey (or
+/// tap the Record button below) and speak. The cleaned text is pasted
+/// into the currently focused field — which is this one when the
+/// playground tab is open.
 struct PlaygroundTab: View {
     let appState: AppState
     let hotkey: VoiceKeyboardCore.KeyboardShortcut
+    let coordinator: EngineCoordinator
 
     @State private var scratch: String = ""
 
@@ -34,6 +36,25 @@ struct PlaygroundTab: View {
                 .frame(minHeight: 140)
 
             HStack {
+                Button {
+                    Task { @MainActor in
+                        switch appState.engineState {
+                        case .idle:
+                            await coordinator.manualPress()
+                        case .recording:
+                            await coordinator.manualRelease()
+                        case .processing:
+                            break
+                        }
+                    }
+                } label: {
+                    Label(recordButtonTitle, systemImage: recordButtonIcon)
+                        .frame(minWidth: 140)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(appState.engineState == .recording ? .red : .accentColor)
+                .disabled(appState.engineState == .processing)
+
                 if appState.engineState == .recording {
                     rmsMeter
                 }
@@ -57,6 +78,22 @@ struct PlaygroundTab: View {
         case .processing:
             Label("Processing…", systemImage: "ellipsis.circle.fill")
                 .foregroundStyle(.orange)
+        }
+    }
+
+    private var recordButtonTitle: String {
+        switch appState.engineState {
+        case .idle: return "Record"
+        case .recording: return "Stop"
+        case .processing: return "Processing…"
+        }
+    }
+
+    private var recordButtonIcon: String {
+        switch appState.engineState {
+        case .idle: return "mic.fill"
+        case .recording: return "stop.fill"
+        case .processing: return "ellipsis"
         }
     }
 

@@ -85,6 +85,11 @@ public final class EngineCoordinator {
         }
     }
 
+    /// Manual entry points for UI surfaces (e.g. Playground tab) that want
+    /// to drive recording without going through the global hotkey.
+    public func manualPress() async { await onPress() }
+    public func manualRelease() async { await onRelease() }
+
     private func onPress() async {
         composition.appState.engineState = .recording
         composition.overlay.show()
