@@ -9,7 +9,12 @@ struct SettingsView: View {
         TabView {
             GeneralTab(settings: $settings, onSave: save)
                 .tabItem { Label("General", systemImage: "gearshape") }
-            HotkeyTab(settings: $settings)
+            HotkeyTab(
+                settings: $settings,
+                onSave: save,
+                recorder: composition.recorder,
+                conflictChecker: composition.conflictChecker
+            )
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
             ProviderTab(secrets: composition.secrets)
                 .tabItem { Label("Provider", systemImage: "key") }

@@ -26,4 +26,7 @@ public final class CompositionRoot {
 
     public lazy var overlay = RecordingOverlayController(appState: appState)
     public lazy var coordinator = EngineCoordinator(composition: self)
+
+    public lazy var recorder: any HotkeyRecorder = CGEventHotkeyRecorder()
+    public lazy var conflictChecker: any SymbolicHotkeyChecker = DefaultSymbolicHotkeyChecker()
 }
