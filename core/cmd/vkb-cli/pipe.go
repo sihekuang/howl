@@ -50,10 +50,14 @@ func runPipe(args []string) int {
 	}
 	defer w.Close()
 
-	cleaner := llm.NewAnthropic(llm.AnthropicOptions{
+	cleaner, err := llm.NewAnthropic(llm.AnthropicOptions{
 		APIKey: apiKey,
 		Model:  "claude-sonnet-4-6",
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "anthropic: %v\n", err)
+		return 1
+	}
 
 	var terms []string
 	if *dictTerms != "" {

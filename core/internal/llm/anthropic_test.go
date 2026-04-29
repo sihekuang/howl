@@ -43,12 +43,15 @@ func TestAnthropicClean_HappyPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cleaner := NewAnthropic(AnthropicOptions{
+	cleaner, err := NewAnthropic(AnthropicOptions{
 		APIKey:  "sk-ant-test",
 		Model:   "claude-sonnet-4-6",
 		BaseURL: srv.URL,
 		Timeout: 5 * time.Second,
 	})
+	if err != nil {
+		t.Fatalf("NewAnthropic: %v", err)
+	}
 
 	got, err := cleaner.Clean(context.Background(), "hello um world", []string{"MCP"})
 	if err != nil {
@@ -66,29 +69,34 @@ func TestAnthropicClean_AuthError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cleaner := NewAnthropic(AnthropicOptions{
+	cleaner, err := NewAnthropic(AnthropicOptions{
 		APIKey:  "wrong",
 		Model:   "claude-sonnet-4-6",
 		BaseURL: srv.URL,
 		Timeout: 5 * time.Second,
 	})
+	if err != nil {
+		t.Fatalf("NewAnthropic: %v", err)
+	}
 
-	_, err := cleaner.Clean(context.Background(), "hi", nil)
+	_, err = cleaner.Clean(context.Background(), "hi", nil)
 	if err == nil {
 		t.Fatalf("expected auth error, got nil")
 	}
 }
 
 func TestAnthropicClean_MissingAPIKey(t *testing.T) {
-	cleaner := NewAnthropic(AnthropicOptions{
+	cleaner, err := NewAnthropic(AnthropicOptions{
 		APIKey:  "",
 		Model:   "claude-sonnet-4-6",
 		BaseURL: "http://example.invalid",
 		Timeout: time.Millisecond,
 	})
-	_, err := cleaner.Clean(context.Background(), "hi", nil)
 	if err == nil {
-		t.Fatalf("expected error for missing API key, got nil")
+		t.Fatalf("expected NewAnthropic to fail with empty APIKey, got nil")
+	}
+	if cleaner != nil {
+		t.Fatalf("expected nil cleaner on error, got %v", cleaner)
 	}
 }
 
@@ -111,13 +119,16 @@ func TestAnthropicClean_EmptyTextContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cleaner := NewAnthropic(AnthropicOptions{
+	cleaner, err := NewAnthropic(AnthropicOptions{
 		APIKey:  "sk-ant-test",
 		Model:   "claude-sonnet-4-6",
 		BaseURL: srv.URL,
 		Timeout: 5 * time.Second,
 	})
-	_, err := cleaner.Clean(context.Background(), "hi", nil)
+	if err != nil {
+		t.Fatalf("NewAnthropic: %v", err)
+	}
+	_, err = cleaner.Clean(context.Background(), "hi", nil)
 	if err == nil {
 		t.Fatalf("expected error for response with no text blocks, got nil")
 	}

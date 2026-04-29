@@ -29,8 +29,14 @@ type Anthropic struct {
 }
 
 // NewAnthropic constructs an Anthropic Cleaner. The returned value is safe
-// for concurrent use.
-func NewAnthropic(opts AnthropicOptions) *Anthropic {
+// for concurrent use. Returns an error if opts.APIKey is empty; we
+// validate explicitly so the SDK does not silently fall through to the
+// ANTHROPIC_API_KEY environment variable, which could otherwise pick up a
+// stale key the user thought they had cleared from Settings.
+func NewAnthropic(opts AnthropicOptions) (*Anthropic, error) {
+	if opts.APIKey == "" {
+		return nil, errors.New("anthropic: APIKey is required")
+	}
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = defaultTimeout
@@ -45,7 +51,7 @@ func NewAnthropic(opts AnthropicOptions) *Anthropic {
 		clientOpts = append(clientOpts, option.WithBaseURL(opts.BaseURL))
 	}
 	c := anthropic.NewClient(clientOpts...)
-	return &Anthropic{client: &c, model: opts.Model}
+	return &Anthropic{client: &c, model: opts.Model}, nil
 }
 
 // Clean sends the raw transcription to Anthropic and returns the cleaned text.

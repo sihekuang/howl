@@ -76,10 +76,14 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	if err != nil {
 		return nil, err
 	}
-	cleaner := llm.NewAnthropic(llm.AnthropicOptions{
+	cleaner, err := llm.NewAnthropic(llm.AnthropicOptions{
 		APIKey: e.cfg.LLMAPIKey,
 		Model:  e.cfg.LLMModel,
 	})
+	if err != nil {
+		_ = tr.Close()
+		return nil, err
+	}
 	dy := dict.NewFuzzy(e.cfg.CustomDict, 1)
 
 	var d denoise.Denoiser
