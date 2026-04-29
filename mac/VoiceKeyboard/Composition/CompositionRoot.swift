@@ -25,4 +25,5 @@ public final class CompositionRoot {
     }
 
     public lazy var overlay = RecordingOverlayController(appState: appState)
+    public lazy var coordinator = EngineCoordinator(composition: self)
 }

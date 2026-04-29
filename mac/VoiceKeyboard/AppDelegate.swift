@@ -22,13 +22,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !accessOK {
             composition.appState.setupGate = .needsAccessibility
+            openFirstRunWindow()
         } else if !modelOK {
             composition.appState.setupGate = .needsModel
+            openFirstRunWindow()
         } else if !keyOK {
             composition.appState.setupGate = .needsAPIKey
+            openFirstRunWindow()
         } else {
             composition.appState.setupGate = .ready
-            // Engine wiring lands in Task 12 (EngineCoordinator).
+            await composition.coordinator.start()
+        }
+    }
+
+    private func openFirstRunWindow() {
+        // SwiftUI's openWindow action requires an Environment. From AppKit
+        // we just bring the window to front by identifier — SwiftUI will
+        // realize it on demand.
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "first-run" }) {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            // Fall back: post a notification or open a standard panel.
+            // For now, log and continue — the user can click the menu bar
+            // icon to see the "needs setup" state.
+            print("first-run window not yet available")
+        }
+    }
+
+    /// Called by the first-run wizard's APIKeyPanel onComplete to start
+    /// the engine after setup completes mid-session.
+    func setupCompletedRetry() {
+        Task { @MainActor in
+            await self.evaluateSetup()
         }
     }
 }

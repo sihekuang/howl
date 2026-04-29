@@ -26,6 +26,7 @@ struct VoiceKeyboardApp: App {
         Window("Welcome", id: "first-run") {
             FirstRunWindow(composition: appDelegate.composition) {
                 NSApp.windows.first { $0.identifier?.rawValue == "first-run" }?.orderOut(nil)
+                appDelegate.setupCompletedRetry()
             }
         }
         .windowResizability(.contentSize)
