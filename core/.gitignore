@@ -1,0 +1,20 @@
+# Build outputs
+build/
+*.dylib
+*.so
+*.dll
+*.h
+!vendor/**/*.h
+
+# Go
+*.test
+*.out
+coverage.out
+vendor-go/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
