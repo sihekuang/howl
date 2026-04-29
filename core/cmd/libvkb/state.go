@@ -26,8 +26,16 @@ type engine struct {
 	lastErr string
 }
 
+// event is the JSON payload emitted via vkb_poll_event. Kind values:
+//
+//	"result"  — final cleaned text in Text
+//	"warning" — non-fatal degradation (e.g. LLM failure); Msg has detail,
+//	            and a "result" event with the dict-corrected fallback
+//	            text is emitted alongside it
+//	"error"   — terminal failure for this capture cycle; Msg has detail
+//	"level"   — periodic RMS level (TODO: not yet emitted)
 type event struct {
-	Kind string  `json:"kind"` // "level" | "result" | "error"
+	Kind string  `json:"kind"`
 	RMS  float32 `json:"rms,omitempty"`
 	Text string  `json:"text,omitempty"`
 	Msg  string  `json:"msg,omitempty"`

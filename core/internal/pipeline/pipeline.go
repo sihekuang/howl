@@ -80,6 +80,27 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
+// Close releases resources held by the transcriber and denoiser. It is
+// safe to call multiple times. Capture is started/stopped per Run, so
+// it is not closed here.
+func (p *Pipeline) Close() error {
+	if p == nil {
+		return nil
+	}
+	var firstErr error
+	if p.transcriber != nil {
+		if err := p.transcriber.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if p.denoiser != nil {
+		if err := p.denoiser.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 // captureAndDenoise drains the capture channel, denoising in 480-sample
 // (10ms) frames. Stops draining when stopCh fires, ctx is cancelled, or
 // frames closes. Any partial trailing samples are zero-padded into a

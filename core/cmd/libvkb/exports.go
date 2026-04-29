@@ -59,14 +59,19 @@ func vkb_configure(jsonC *C.char) C.int {
 	e.cfg = cfg
 	e.mu.Unlock()
 
+	// Build the new pipeline first; if it fails, the old one stays in place.
 	p, err := e.buildPipeline()
 	if err != nil {
 		e.setLastError("vkb_configure: " + err.Error())
 		return 3
 	}
 	e.mu.Lock()
+	oldPipe := e.pipeline
 	e.pipeline = p
 	e.mu.Unlock()
+	if oldPipe != nil {
+		_ = oldPipe.Close()
+	}
 	return 0
 }
 
@@ -112,9 +117,17 @@ func vkb_start_capture() C.int {
 			}
 			return
 		}
-		ev := event{Kind: "result", Text: res.Cleaned}
+		// Surface graceful degradation: if the LLM cleanup failed, ship a
+		// "warning" event so Swift can notify the user, and still emit
+		// the "result" event with the dict-corrected fallback text.
+		if res.LLMError != nil {
+			select {
+			case e.events <- event{Kind: "warning", Msg: "llm: " + res.LLMError.Error()}:
+			default:
+			}
+		}
 		select {
-		case e.events <- ev:
+		case e.events <- event{Kind: "result", Text: res.Cleaned}:
 		default:
 		}
 	}()
@@ -176,6 +189,13 @@ func vkb_destroy() {
 		return
 	}
 	_ = vkb_stop_capture()
+	e.mu.Lock()
+	pipe := e.pipeline
+	e.pipeline = nil
+	e.mu.Unlock()
+	if pipe != nil {
+		_ = pipe.Close()
+	}
 	setEngine(nil)
 }
 
