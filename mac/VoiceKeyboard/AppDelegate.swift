@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import VoiceKeyboardCore
 
@@ -7,6 +8,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let composition = CompositionRoot()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Trigger the macOS mic permission dialog at launch rather than
+        // on first Record click. TCC has been observed to silently
+        // resolve `requestAccess` to "denied" on later calls if a
+        // previous launch dismissed/declined the prompt without an
+        // explicit grant — doing this on launch maximizes the chance
+        // the user sees the dialog while the bundle identity is fresh.
+        // No-op when status is already determined.
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        }
         Task { @MainActor in
             await self.evaluateSetup()
         }
