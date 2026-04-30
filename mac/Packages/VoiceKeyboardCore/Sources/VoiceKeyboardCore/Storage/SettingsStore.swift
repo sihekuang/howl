@@ -11,6 +11,10 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// CoreAudio/AVCaptureDevice unique ID for the input device.
     /// `nil` (the default) means "follow the system default".
     public var inputDeviceUID: String?
+    /// Whether to apply Target Speaker Extraction during capture.
+    /// Requires a completed voice enrollment in
+    /// ~/Library/Application Support/VoiceKeyboard/voice/.
+    public var tseEnabled: Bool
 
     public init(
         whisperModelSize: String = "small",
@@ -20,7 +24,8 @@ public struct UserSettings: Codable, Equatable, Sendable {
         llmModel: String = "claude-sonnet-4-6",
         customDict: [String] = [],
         hotkey: KeyboardShortcut = .defaultPTT,
-        inputDeviceUID: String? = nil
+        inputDeviceUID: String? = nil,
+        tseEnabled: Bool = false
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
@@ -30,6 +35,25 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.customDict = customDict
         self.hotkey = hotkey
         self.inputDeviceUID = inputDeviceUID
+        self.tseEnabled = tseEnabled
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        whisperModelSize = try c.decodeIfPresent(String.self, forKey: .whisperModelSize) ?? "small"
+        language = try c.decodeIfPresent(String.self, forKey: .language) ?? "en"
+        disableNoiseSuppression = try c.decodeIfPresent(Bool.self, forKey: .disableNoiseSuppression) ?? false
+        llmProvider = try c.decodeIfPresent(String.self, forKey: .llmProvider) ?? "anthropic"
+        llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel) ?? "claude-sonnet-4-6"
+        customDict = try c.decodeIfPresent([String].self, forKey: .customDict) ?? []
+        hotkey = try c.decodeIfPresent(KeyboardShortcut.self, forKey: .hotkey) ?? .defaultPTT
+        inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
+        tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case whisperModelSize, language, disableNoiseSuppression
+        case llmProvider, llmModel, customDict, hotkey, inputDeviceUID, tseEnabled
     }
 }
 
