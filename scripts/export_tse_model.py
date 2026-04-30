@@ -3,12 +3,13 @@
 Export the combined TSE model to ONNX.
 
 Architecture:
-  1. ConvTasNet (mpariente/ConvTasNet_WHAM!_sepclean) separates mixed audio
-     into 2 sources.
+  1. ConvTasNet (JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k) separates mixed
+     audio into 2 sources. Native 16 kHz, trained on noisy 2-speaker mixes
+     (Libri2Mix sep_noisy task) — handles speech mixed with WHAM-style noise.
   2. Resemblyzer GE2E LSTM embeds each source (conv1d mel front-end for
      ONNX traceability).
-  3. Soft-select the source whose embedding is closest to the enrolled
-     speaker embedding (sharp softmax — no hard indexing, fully traceable).
+  3. Hard-select the source whose embedding is closest to the enrolled
+     speaker embedding.
 
 Inputs:  mixed         float32[1, T]   — 16kHz mono mixed audio
          ref_embedding float32[1, 256] — L2-normalised enrolled speaker embedding
@@ -116,8 +117,8 @@ def build_models():
             w = (sim >= best).float()                      # [1, 2] — 1 for winner, 0 for loser
             return w[:, 0:1] * src0 + w[:, 1:2] * src1  # [1, T]
 
-    print("Loading ConvTasNet separator...")
-    separator = ConvTasNet.from_pretrained("mpariente/ConvTasNet_WHAM!_sepclean")
+    print("Loading ConvTasNet separator (Libri2Mix sep_noisy 16k)...")
+    separator = ConvTasNet.from_pretrained("JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k")
     separator.eval()
 
     print("Loading resemblyzer GE2E encoder...")
