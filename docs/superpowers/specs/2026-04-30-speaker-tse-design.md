@@ -26,7 +26,7 @@ The current pipeline applies DeepFilterNet2 for stationary noise (fans, HVAC) an
 - The RMS gate fires on any loud audio, including background speakers
 - Whisper has no concept of "which speaker to transcribe" and will mix or alternate between voices in the output
 
-Target Speaker Extraction solves this at the audio level: given a short reference embedding of the user's voice (enrolled once), TSE outputs only that speaker's audio from any mixed signal. Two people talking simultaneously → Whisper hears only the user.
+Target Speaker Extraction solves this at the audio level: given a short reference audio clip of the user's voice (recorded once at enrollment), TSE outputs only that speaker's audio from any mixed signal. Two people talking simultaneously → Whisper hears only the user.
 
 ---
 
@@ -35,7 +35,7 @@ Target Speaker Extraction solves this at the audio level: given a short referenc
 ```
 Mic → malgo capture → DeepFilterNet (stationary noise)
     → chunker (Silero VAD gate)
-    → TSE: SpeakerBeam-SS (competing speech)  ← speaker.json (enrolled embedding)
+    → TSE: SpeakerBeam-SS (competing speech)  ← enrollment.wav (reference audio)
     → Whisper → LLM cleanup → cursor
 ```
 
@@ -60,7 +60,7 @@ type VAD interface {
 
 // TSEExtractor extracts the target speaker's audio from a mixed signal.
 // mixed: 16kHz mono chunk from the chunker
-// ref:   enrolled speaker embedding (loaded from speaker.json)
+// ref:   enrollment reference audio (loaded from enrollment.wav at startup)
 // Returns clean audio at the same sample rate and length as mixed.
 type TSEExtractor interface {
     Extract(ctx context.Context, mixed []float32, ref []float32) ([]float32, error)
@@ -75,22 +75,22 @@ Both interfaces are satisfied by fake implementations in tests. `nil` TSEExtract
 |---|---|
 | `vad.go` | `VAD` interface + `SileroVAD`: loads `silero_vad.onnx`, runs one inference per 100ms window |
 | `tse.go` | `TSEExtractor` interface |
-| `speakerbeam.go` | `SpeakerBeamSS`: loads `speakerbeam_ss.onnx` via onnxruntime_go, implements `TSEExtractor` |
-| `store.go` | Read/write `speaker.json` — enrollment embedding + metadata |
-| `enroller.go` | Records mic audio via malgo, extracts speaker embedding, calls `store.Save` |
+| `speakerbeam.go` | `SpeakerBeamSS`: loads `tse_model.onnx` via onnxruntime_go, implements `TSEExtractor` |
+| `store.go` | Read/write `speaker.json` — metadata + path to `enrollment.wav` |
+| `enroller.go` | Records mic audio via malgo, saves `enrollment.wav`, writes `speaker.json` |
 
 ### `speaker.json` schema
 
 ```json
 {
   "version": 1,
-  "embedding": [0.12, -0.34, "... 256 floats ..."],
+  "ref_audio": "~/.config/voice-keyboard/enrollment.wav",
   "enrolled_at": "2026-04-30T14:23:00Z",
   "duration_s": 10.2
 }
 ```
 
-Stored at `~/.config/voice-keyboard/speaker.json`. Path is configurable via a flag on the enroll CLI.
+`enrollment.wav` is the raw 16kHz mono recording from the enrollment session. `speaker.json` is the index — it holds metadata and the path to the WAV. Both stored under `~/.config/voice-keyboard/`. Paths are configurable via flags on the enroll CLI.
 
 ---
 
@@ -152,7 +152,7 @@ if p.TSE != nil {
 }
 ```
 
-`p.enrolledRef` is the embedding vector loaded from `speaker.json` at `Pipeline.New()`. It is read-only for the lifetime of the pipeline run.
+`p.enrolledRef` is the raw reference audio loaded from `enrollment.wav` at `Pipeline.New()`. It is read-only for the lifetime of the pipeline run. The TSE model runs its internal speaker encoder on this clip on each chunk call (~5–20ms overhead, acceptable given chunk intervals of 1–12s).
 
 Whisper always receives audio — no chunks are dropped. If the TSE output is near-silence (colleague speaking, user silent), Whisper returns `""` for that chunk, which the join step and LLM cleanup handle gracefully.
 
@@ -166,17 +166,16 @@ One new Go dependency:
 github.com/yalue/onnxruntime_go
 ```
 
-Thin CGo wrapper over the ONNX Runtime C library. Loads any `.onnx` model. Used for both Silero VAD (`silero_vad.onnx`) and SpeakerBeam-SS (`speakerbeam_ss.onnx`). No sherpa-onnx needed.
+Thin CGo wrapper over the ONNX Runtime C library. Loads any `.onnx` model. Used for both Silero VAD (`silero_vad.onnx`) and SpeakerBeam-SS (`tse_model.onnx`). No sherpa-onnx needed.
 
 ### Model files
 
 | File | Size | Source | Used by |
 |---|---|---|---|
 | `silero_vad.onnx` | ~2MB | Downloaded by `enroll.sh` from Silero GitHub releases | `SileroVAD` (chunker) |
-| `speaker_encoder.onnx` | ~1MB | Produced by `scripts/export_tse_model.py` | `Enroller` (enrollment only) |
-| `tse_separator.onnx` | ~7MB | Produced by `scripts/export_tse_model.py` | `SpeakerBeamSS` (inference) |
+| `tse_model.onnx` | ~8MB | Produced by `scripts/export_tse_model.py` | `SpeakerBeamSS` (inference) |
 
-SpeakerBeam-SS has two sub-components exported separately: the **speaker encoder** (takes raw audio → 256-dim embedding, used once at enrollment) and the **TSE separator** (takes mixed audio + embedding → clean audio, used at inference). Splitting them keeps the inference model lean and avoids re-encoding the reference on every chunk.
+Single consolidated model: inputs `(mixed [1,T], ref_audio [1,R])` → output `[1,T]`. The speaker encoder runs internally on each call. No separate enrollment inference step needed — enrollment just records and saves the WAV.
 
 Models are downloaded/built to `core/build/models/` by the shell scripts. Not committed to the repo.
 
@@ -189,12 +188,12 @@ Models are downloaded/built to `core/build/models/` by the shell scripts. Not co
 Runs once when adopting the model or upgrading its version:
 
 1. Downloads SpeakerBeam-SS pretrained weights from the Asteroid model hub
-2. Exports two ONNX models via `torch.onnx.export()`:
-   - `speaker_encoder.onnx`: input `ref_audio [1, R]` → output `embedding [1, 256]`
-   - `tse_separator.onnx`: inputs `mixed [1, T]` + `embedding [1, 256]` → output `[1, T]`
-3. Validates round-trip: feeds a synthetic 2-speaker mix through both models, asserts output energy is dominated by the target channel
+2. Exports one consolidated ONNX model via `torch.onnx.export()`:
+   - `tse_model.onnx`: inputs `mixed [1, T]` + `ref_audio [1, R]` → output `[1, T]`
+   - The speaker encoder runs as an internal subgraph — no separate export needed
+3. Validates round-trip: feeds a synthetic 2-speaker mix, asserts output energy is dominated by the target channel
 
-The resulting `speakerbeam_ss.onnx` is committed as a release artifact or stored in a known location documented in the README. No Python is required at runtime.
+The resulting `tse_model.onnx` is committed as a release artifact or stored in a known location documented in the README. No Python is required at runtime.
 
 ---
 
@@ -203,16 +202,15 @@ The resulting `speakerbeam_ss.onnx` is committed as a release artifact or stored
 ### `core/cmd/enroll/main.go`
 
 ```
-vkb-enroll [--duration=10] [--out=~/.config/voice-keyboard/speaker.json] [--models=core/build/models/]
+vkb-enroll [--duration=10] [--out=~/.config/voice-keyboard/] [--models=core/build/models/]
 ```
 
 Flow:
-1. Load `speakerbeam_ss.onnx` speaker encoder
-2. Open mic via malgo (same device selection as the main pipeline)
-3. Record for `--duration` seconds (or until keypress)
-4. Extract 256-dim speaker embedding from recorded audio
-5. Write `speaker.json`
-6. Print confirmation and cosine self-similarity score (sanity check: should be ~1.0)
+1. Open mic via malgo (same device selection as the main pipeline)
+2. Record for `--duration` seconds (or until keypress)
+3. Save 16kHz mono WAV to `enrollment.wav`
+4. Write `speaker.json` with path to WAV and metadata
+5. Print confirmation
 
 ### `enroll.sh`
 
@@ -251,8 +249,8 @@ Chunk #2 with empty output indicates TSE suppressed a background speaker — no 
 |---|---|
 | `SileroVAD.IsVoiced` true on sine wave, false on silence | Synthesized samples |
 | `SpeakerBeamSS.Extract` reduces RMS of interferer | Two tones at different frequencies; assert target channel dominates output |
-| `Store` round-trips embedding to/from JSON | Temp file |
-| `Enroller` extracts non-zero embedding from audio fixture | Pre-recorded `.wav`, build tag `speakerbeam` |
+| `Store` round-trips metadata + WAV path to/from JSON | Temp file |
+| `Enroller` writes non-empty WAV and valid `speaker.json` | Synthesized audio input, temp dir output |
 
 ### Chunker — existing tests unchanged
 
@@ -283,11 +281,11 @@ Feed a 2-speaker mixture WAV. Assert WER of target speaker is lower with TSE ena
 1. `onnxruntime_go` dep + `core/internal/speaker/` package skeleton (interfaces only)
 2. `SileroVAD` — load model, `IsVoiced`, unit tests
 3. Chunker VAD integration — `ChunkerOpts.VAD` field, nil fallback, test
-4. `Store` — `speaker.json` read/write, unit tests
-5. `SpeakerBeamSS` — ONNX inference wrapper, unit tests (build tag `speakerbeam`)
-6. `scripts/export_tse_model.py` — PyTorch → ONNX export + validation
-7. `Enroller` + `core/cmd/enroll/main.go`
-8. Pipeline TSE gate — `Pipeline.TSE` field, `Pipeline.New()` loads embedding, `Run` applies TSE
+4. `Store` — `speaker.json` + `enrollment.wav` read/write, unit tests
+5. `Enroller` + `core/cmd/enroll/main.go` — record WAV, write store
+6. `scripts/export_tse_model.py` — PyTorch → ONNX consolidated export + validation
+7. `SpeakerBeamSS` — ONNX inference wrapper, unit tests (build tag `speakerbeam`)
+8. Pipeline TSE gate — `Pipeline.TSE` field, `Pipeline.New()` loads WAV, `Run` applies TSE
 9. `enroll.sh` + `run-speaker.sh`
 10. Integration similarity test (build tag `speakerbeam`)
 
