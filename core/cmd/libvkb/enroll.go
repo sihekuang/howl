@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,14 +12,23 @@ import (
 	"github.com/voice-keyboard/core/internal/speaker"
 )
 
+const targetSampleRate = 16000
+
 // runEnrollCompute decimates 48 kHz samples to 16 kHz, computes the
-// speaker embedding, and atomically writes the three enrollment files
+// speaker embedding, and writes the three enrollment files
 // (enrollment.wav, enrollment.emb, speaker.json) to profileDir.
 //
-// Returns nil on success; on any error, profileDir is left as it was
-// (no partial files written).
+// On a fresh profile (empty dir), the function is atomic: either all
+// three files land or none do. On re-enrollment over an existing
+// profile, the rollback path can leave profileDir in a partially
+// updated state — for example if the speaker.json rename fails after
+// the wav and emb were already replaced, we delete the new wav/emb but
+// the old speaker.json remains pointing at deleted files. In practice
+// this is recoverable (the user re-enrolls), and it keeps the contract
+// simple. A future change can add full preserve-on-failure semantics
+// by renaming old targets to .bak first.
 func runEnrollCompute(samples48k []float32, profileDir, encoderPath, onnxLibPath string) error {
-	if err := os.MkdirAll(profileDir, 0755); err != nil {
+	if err := os.MkdirAll(profileDir, 0700); err != nil {
 		return fmt.Errorf("enroll: mkdir profile: %w", err)
 	}
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
@@ -55,7 +63,7 @@ func writeEnrollmentFiles(profileDir string, samples16k []float32, emb []float32
 		os.Remove(jsonTmp)
 	}
 
-	if err := speaker.SaveWAV(wavTmp, samples16k, 16000); err != nil {
+	if err := speaker.SaveWAV(wavTmp, samples16k, targetSampleRate); err != nil {
 		cleanup()
 		return fmt.Errorf("enroll: save wav: %w", err)
 	}
@@ -65,14 +73,14 @@ func writeEnrollmentFiles(profileDir string, samples16k []float32, emb []float32
 	}
 	wavPath := filepath.Join(profileDir, "enrollment.wav")
 	embPath := filepath.Join(profileDir, "enrollment.emb")
-	durationS := float64(len(samples16k)) / 16000.0
+	durationS := float64(len(samples16k)) / float64(targetSampleRate)
 	p := speaker.Profile{
 		Version:    1,
 		RefAudio:   wavPath,
 		EnrolledAt: time.Now().UTC(),
 		DurationS:  durationS,
 	}
-	if err := saveProfileTmp(jsonTmp, p); err != nil {
+	if err := speaker.WriteProfileTo(jsonTmp, p); err != nil {
 		cleanup()
 		return fmt.Errorf("enroll: save profile: %w", err)
 	}
@@ -93,19 +101,4 @@ func writeEnrollmentFiles(profileDir string, samples16k []float32, emb []float32
 		return fmt.Errorf("enroll: rename profile: %w", err)
 	}
 	return nil
-}
-
-// saveProfileTmp writes a Profile to an explicit path (temp file) using
-// the same JSON format as speaker.SaveProfile.
-//
-// We can't use speaker.SaveProfile directly because it writes to
-// <dir>/speaker.json (no path override), and we need to write to .tmp
-// first for atomic rename. If speaker.SaveProfile's format ever changes,
-// keep this in sync.
-func saveProfileTmp(path string, p speaker.Profile) error {
-	data, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
 }

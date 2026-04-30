@@ -18,13 +18,20 @@ type Profile struct {
 	DurationS  float64   `json:"duration_s"`
 }
 
-// SaveProfile writes speaker.json to dir.
-func SaveProfile(dir string, p Profile) error {
+// WriteProfileTo writes a Profile to an explicit path as JSON. Used directly
+// when the caller needs to write to a temp file for atomic rename; SaveProfile
+// is the convenience form for the canonical <dir>/speaker.json location.
+func WriteProfileTo(path string, p Profile) error {
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return fmt.Errorf("store: marshal profile: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, "speaker.json"), data, 0644)
+	return os.WriteFile(path, data, 0600)
+}
+
+// SaveProfile writes speaker.json to dir.
+func SaveProfile(dir string, p Profile) error {
+	return WriteProfileTo(filepath.Join(dir, "speaker.json"), p)
 }
 
 // LoadProfile reads speaker.json from dir. Returns an error if the file is absent.
