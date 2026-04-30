@@ -53,7 +53,7 @@ public actor LibvkbEngine: CoreEngine {
         }
     }
 
-    public func pushAudio(_ samples: [Float]) async throws {
+    public nonisolated func pushAudio(_ samples: [Float]) throws {
         guard !samples.isEmpty else { return }
         let rc = samples.withUnsafeBufferPointer { buf -> Int32 in
             guard let base = buf.baseAddress else { return 0 }

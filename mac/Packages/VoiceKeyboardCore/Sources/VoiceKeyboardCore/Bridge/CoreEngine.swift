@@ -14,10 +14,17 @@ public protocol CoreEngine: Sendable {
     func startCapture() async throws
 
     /// Push a chunk of Float32 mono 48 kHz audio into the in-flight
-    /// capture. Non-blocking on the audio thread: if the engine's
-    /// internal buffer is full the chunk is dropped (and the engine
-    /// emits a warning event once per cycle).
-    func pushAudio(_ samples: [Float]) async throws
+    /// capture. Synchronous and safe to call from any thread (the
+    /// underlying C ABI is internally synchronized). Non-blocking:
+    /// if the engine's internal buffer is full the chunk is dropped
+    /// and a single warning event is emitted per cycle.
+    ///
+    /// IMPORTANT: this MUST NOT be actor-isolated. Audio-thread
+    /// callbacks pushing through `Task.detached` race with
+    /// `stopCapture` for actor entry; many pushes lose the race and
+    /// vanish, causing the pipeline to receive only ~1/N of the
+    /// captured audio.
+    func pushAudio(_ samples: [Float]) throws
 
     /// End an in-flight capture by signaling end-of-input. The engine
     /// drains remaining frames, transcribes, cleans, and emits a

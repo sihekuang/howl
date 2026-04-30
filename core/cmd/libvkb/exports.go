@@ -167,9 +167,11 @@ func vkb_start_capture() C.int {
 			e.pushCh = nil
 			e.cancel = nil
 			drops := e.dropCount
+			pushes := e.pushCount
 			e.dropCount = 0
+			e.pushCount = 0
 			e.mu.Unlock()
-			log.Printf("[vkb] capture goroutine: exited (drops=%d)", drops)
+			log.Printf("[vkb] capture goroutine: exited (pushes=%d drops=%d)", pushes, drops)
 		}()
 		res, err := pipe.Run(ctx, pushCh)
 		// Terminal events (error/warning/result) MUST NOT be dropped:
@@ -230,8 +232,16 @@ func vkb_push_audio(samples *C.float, count C.int) C.int {
 
 	select {
 	case pushCh <- frame:
+		// Heartbeat: log every ~30 successful pushes so we can confirm
+		// audio is actually flowing into Go.
+		e.mu.Lock()
+		e.pushCount++
+		pc := e.pushCount
+		e.mu.Unlock()
+		if pc%30 == 1 {
+			log.Printf("[vkb] push_audio: heartbeat n=%d total=%d", n, pc)
+		}
 	default:
-		// Channel full — drop, but issue at most one warning per cycle.
 		e.mu.Lock()
 		e.dropCount++
 		first := e.dropCount == 1

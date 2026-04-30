@@ -15,7 +15,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
         configureCalls.append(config)
     }
     func startCapture() async throws { startCalls += 1 }
-    func pushAudio(_ samples: [Float]) async throws {
+    func pushAudio(_ samples: [Float]) throws {
         pushSampleCount += samples.count
     }
     func stopCapture() async throws { stopCalls += 1 }

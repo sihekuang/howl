@@ -119,14 +119,13 @@ public final class EngineCoordinator {
         do {
             try await composition.engine.startCapture()
             let settings = (try? composition.settings.get()) ?? UserSettings()
-            // Start AVAudioEngine and feed frames into the engine.
-            // The closure may run on the audio thread; hop to a Task
-            // so the actor-isolated engine.pushAudio call is safe.
+            // Push frames synchronously from the audio thread.
+            // pushAudio is nonisolated and the underlying C ABI is
+            // internally synchronized, so this is safe and avoids the
+            // detached-task race that was dropping ~99% of buffers.
             let engine = composition.engine
             try await composition.audioCapture.start(deviceUID: settings.inputDeviceUID) { samples in
-                Task.detached {
-                    try? await engine.pushAudio(samples)
-                }
+                try? engine.pushAudio(samples)
             }
             log.info("onPress: capture + engine running")
             composition.appState.transientWarning = nil

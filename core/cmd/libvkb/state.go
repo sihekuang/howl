@@ -30,6 +30,7 @@ type engine struct {
 	// full channel (used to issue at most one warning event per cycle).
 	pushCh    chan []float32
 	dropCount int
+	pushCount int
 
 	cancel context.CancelFunc
 
