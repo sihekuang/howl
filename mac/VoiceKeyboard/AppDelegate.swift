@@ -20,18 +20,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let modelOK = FileManager.default.fileExists(atPath: modelPath.path)
         let keyOK = (try? composition.secrets.getAPIKey()) != nil
 
+        // Update the gate badge for UI surfaces (menu bar, first-run
+        // wizard) so the user knows what's still missing.
         if !accessOK {
             composition.appState.setupGate = .needsAccessibility
-            openFirstRunWindow()
         } else if !modelOK {
             composition.appState.setupGate = .needsModel
-            openFirstRunWindow()
         } else if !keyOK {
             composition.appState.setupGate = .needsAPIKey
-            openFirstRunWindow()
         } else {
             composition.appState.setupGate = .ready
+        }
+
+        // Always start the coordinator if the engine has what it
+        // needs to configure (model + API key). Accessibility is only
+        // required for paste injection and the (now Carbon-based)
+        // hotkey doesn't need it either, so we shouldn't gate engine
+        // initialization on it. Without this, clicking Record in the
+        // Playground throws `notInitialized` immediately because the
+        // pipeline is never configured.
+        if modelOK && keyOK {
             await composition.coordinator.start()
+        }
+
+        // First-run wizard for anything still missing.
+        if !accessOK || !modelOK || !keyOK {
+            openFirstRunWindow()
         }
     }
 
