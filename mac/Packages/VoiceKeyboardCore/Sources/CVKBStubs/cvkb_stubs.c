@@ -16,6 +16,7 @@ int vkb_configure(char* json) { (void)json; return 0; }
 int vkb_start_capture(void)   { return 0; }
 int vkb_push_audio(const float* samples, int count) { (void)samples; (void)count; return 0; }
 int vkb_stop_capture(void)    { return 0; }
+int vkb_cancel_capture(void)  { return 0; }
 char* vkb_poll_event(void)    { return NULL; }
 void vkb_destroy(void)        {}
 char* vkb_last_error(void)    { return NULL; }

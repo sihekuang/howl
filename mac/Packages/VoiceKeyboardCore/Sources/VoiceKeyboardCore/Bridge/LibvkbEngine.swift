@@ -76,6 +76,10 @@ public actor LibvkbEngine: CoreEngine {
         }
     }
 
+    public nonisolated func cancelCapture() {
+        vkb_cancel_capture()
+    }
+
     public nonisolated func pollEvent() -> EngineEvent? {
         guard let cstr = vkb_poll_event() else { return nil }
         defer { vkb_free_string(cstr) }

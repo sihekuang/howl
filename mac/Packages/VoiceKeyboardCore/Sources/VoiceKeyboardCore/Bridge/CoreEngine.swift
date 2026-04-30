@@ -31,6 +31,10 @@ public protocol CoreEngine: Sendable {
     /// `result` event. Idempotent.
     func stopCapture() async throws
 
+    /// Aborts the in-flight capture (if any). The Go core emits a
+    /// `cancelled` event and runs no LLM cleanup. Idempotent.
+    func cancelCapture()
+
     /// Drain at most one event from the C ABI's event queue. Returns
     /// nil when the queue is empty. Caller polls on a timer.
     func pollEvent() -> EngineEvent?
