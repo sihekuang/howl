@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -257,6 +258,20 @@ func TestPipeline_NonStreamingCleanerWithCallbackStillUsesClean(t *testing.T) {
 	}
 }
 
+// toneFrames48k generates ms milliseconds of 440Hz sine at 48kHz with given peak amplitude.
+func toneFrames48k(ms int, peak float32) []float32 {
+	n := 48 * ms
+	out := make([]float32, n)
+	for i := 0; i < n; i++ {
+		out[i] = peak * float32(math.Sin(2*math.Pi*440*float64(i)/48000))
+	}
+	return out
+}
+
+func silence48k(ms int) []float32 {
+	return make([]float32, 48*ms)
+}
+
 func TestPipeline_EmptyTranscriptionYieldsEmptyResult(t *testing.T) {
 	src := make([]float32, 240) // half a frame
 	d := denoise.NewPassthrough()
@@ -274,5 +289,149 @@ func TestPipeline_EmptyTranscriptionYieldsEmptyResult(t *testing.T) {
 	}
 	if res.Cleaned != "" {
 		t.Errorf("expected empty cleaned for empty raw, got %q", res.Cleaned)
+	}
+}
+
+// fakeMultiTranscriber returns a different string per call.
+type fakeMultiTranscriber struct {
+	calls   int
+	outputs []string
+}
+
+func (f *fakeMultiTranscriber) Transcribe(ctx context.Context, _ []float32) (string, error) {
+	if f.calls >= len(f.outputs) {
+		return "", nil
+	}
+	out := f.outputs[f.calls]
+	f.calls++
+	return out, nil
+}
+func (f *fakeMultiTranscriber) Close() error { return nil }
+
+func TestPipeline_MultiChunkJoinedAndCleanedOnce(t *testing.T) {
+	tr := &fakeMultiTranscriber{outputs: []string{"hello", "world"}}
+	cl := &fakeStreamingCleaner{out: "Hello world.", chunks: []string{"Hello ", "world."}}
+	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
+	p.LLMDeltaCallback = func(string) {}
+	p.ChunkerOpts = ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  100, // tiny so the test silences split
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 100,
+	}
+
+	frames := make(chan []float32, 4)
+	frames <- toneFrames48k(500, 0.3) // 500ms tone
+	frames <- silence48k(200)         // 200ms silence > SilenceHangMs (100ms)
+	frames <- toneFrames48k(500, 0.3) // 500ms tone
+	close(frames)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := p.Run(ctx, frames)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if tr.calls != 2 {
+		t.Errorf("transcribe calls = %d, want 2", tr.calls)
+	}
+	if cl.streamCalls != 1 {
+		t.Errorf("CleanStream calls = %d, want 1", cl.streamCalls)
+	}
+	if res.Raw != "hello world" {
+		t.Errorf("Raw = %q, want %q", res.Raw, "hello world")
+	}
+	if res.Cleaned != "Hello world." {
+		t.Errorf("Cleaned = %q, want %q", res.Cleaned, "Hello world.")
+	}
+}
+
+type errOnNthTranscriber struct {
+	calls  int
+	failOn int
+}
+
+func (f *errOnNthTranscriber) Transcribe(ctx context.Context, _ []float32) (string, error) {
+	f.calls++
+	if f.calls == f.failOn {
+		return "", errors.New("whisper boom")
+	}
+	return "ok", nil
+}
+func (f *errOnNthTranscriber) Close() error { return nil }
+
+func TestPipeline_WorkerErrorPropagates(t *testing.T) {
+	tr := &errOnNthTranscriber{failOn: 2}
+	cl := &fakeStreamingCleaner{}
+	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
+	p.LLMDeltaCallback = func(string) {}
+	p.ChunkerOpts = ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  100,
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 100,
+	}
+
+	frames := make(chan []float32, 6)
+	frames <- toneFrames48k(500, 0.3)
+	frames <- silence48k(200)
+	frames <- toneFrames48k(500, 0.3)
+	frames <- silence48k(200)
+	frames <- toneFrames48k(500, 0.3)
+	close(frames)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.Run(ctx, frames)
+	if err == nil || err.Error() != "whisper boom" {
+		t.Fatalf("err = %v, want whisper boom", err)
+	}
+	if cl.streamCalls != 0 {
+		t.Errorf("CleanStream called %d times, want 0 (LLM should not run on transcribe error)", cl.streamCalls)
+	}
+}
+
+type slowTranscriber struct {
+	delay time.Duration
+}
+
+func (s *slowTranscriber) Transcribe(ctx context.Context, _ []float32) (string, error) {
+	select {
+	case <-time.After(s.delay):
+		return "ok", nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+func (s *slowTranscriber) Close() error { return nil }
+
+func TestPipeline_CancelMidRecordingReturnsContextErr(t *testing.T) {
+	tr := &slowTranscriber{delay: 200 * time.Millisecond}
+	cl := &fakeStreamingCleaner{}
+	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
+	p.LLMDeltaCallback = func(string) {}
+	p.ChunkerOpts = ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  100,
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 100,
+	}
+
+	frames := make(chan []float32, 4)
+	go func() {
+		frames <- toneFrames48k(500, 0.3)
+		frames <- silence48k(200)
+		frames <- toneFrames48k(500, 0.3)
+		// don't close — let cancel cut us off
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Run(ctx, frames)
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded or Canceled", err)
+	}
+	if cl.streamCalls != 0 {
+		t.Errorf("CleanStream called %d times after cancel, want 0", cl.streamCalls)
 	}
 }
