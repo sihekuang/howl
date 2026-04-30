@@ -1,18 +1,21 @@
 // Package pipeline orchestrates one PTT cycle:
 //
-//	frames (pushed) → denoise → decimate → transcribe → dict → clean → Result
+//	frames (pushed) → denoise → decimate → chunk → transcribe (per chunk) → dict → clean → Result
 //
 // Capture is no longer the pipeline's concern: callers push 48 kHz mono
 // Float32 frames in over a channel and close it when done. Pipeline.Run
-// drains, denoises in 480-sample frames, then runs the rest of the
-// stages and returns Result. Lifecycle (where audio comes from) belongs
-// to the composition root.
+// drains, denoises in 480-sample frames, feeds the Chunker which emits
+// utterance-aligned 16kHz chunks, and a single worker goroutine transcribes
+// each chunk in arrival order. Chunk texts are joined before the dict + LLM
+// stages. Lifecycle (where audio comes from) belongs to the composition root.
 package pipeline
 
 import (
 	"context"
 	"errors"
 	"log"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/voice-keyboard/core/internal/audio"
@@ -49,6 +52,23 @@ type Pipeline struct {
 	// before the full response lands. Safe to omit — pipeline falls
 	// back to non-streaming Clean.
 	LLMDeltaCallback func(string)
+
+	// ChunkerOpts overrides the default chunker thresholds. Zero-value
+	// fields fall back to DefaultChunkerOpts. Unset for production; the
+	// CLI/tests set this to drive specific scenarios.
+	ChunkerOpts ChunkerOpts
+
+	// ChunkEmittedCallback fires when the chunker emits a chunk
+	// (idx, durationMs, reason). Optional — used by --latency-report.
+	ChunkEmittedCallback func(idx int, durationMs int, reason string)
+
+	// ChunkTranscribedCallback fires after each chunk's Transcribe call
+	// returns (idx, transcribeMs, text). Optional.
+	ChunkTranscribedCallback func(idx int, transcribeMs int, text string)
+
+	// LLMFirstTokenCallback fires when the first LLM delta arrives,
+	// measured from when transcribe joined the final raw text. Optional.
+	LLMFirstTokenCallback func(elapsedMs int)
 }
 
 func New(d denoise.Denoiser, t transcribe.Transcriber,
@@ -73,21 +93,102 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 		log.Printf("[vkb] pipeline.Run: total elapsed %v", time.Since(tStart))
 	}()
 
-	denoised := drainAndDenoise(ctx, frames, p.denoiser, p.LevelCallback)
-	log.Printf("[vkb] pipeline.Run: capture+denoise done samples=%d (%.2fs of audio)", len(denoised), float64(len(denoised))/float64(inputSampleRate))
+	opts := p.ChunkerOpts
+	if opts.VoiceThreshold == 0 && opts.SilenceHangMs == 0 && opts.MaxChunkMs == 0 {
+		opts = DefaultChunkerOpts()
+	}
+
+	// Chunk channel — bounded at 4 (≈48s in flight at MaxChunkMs=12s).
+	chunkCh := make(chan ChunkEmission, 4)
 
 	dec := resample.NewDecimate3()
-	pcm16k := dec.Process(denoised)
-	log.Printf("[vkb] pipeline.Run: decimated to 16k samples=%d", len(pcm16k))
+	var chunkIdx int
+	chunker := NewChunker(opts, func(e ChunkEmission) {
+		chunkIdx++
+		dur := len(e.Samples) * 1000 / chunkerSampleRate
+		log.Printf("[vkb] chunk emitted #%d: %dms (%s)", chunkIdx, dur, e.Reason)
+		if p.ChunkEmittedCallback != nil {
+			p.ChunkEmittedCallback(chunkIdx, dur, string(e.Reason))
+		}
+		select {
+		case chunkCh <- e:
+		case <-ctx.Done():
+		}
+	})
 
-	tTrans := time.Now()
-	log.Printf("[vkb] pipeline.Run: transcribing…")
-	raw, err := p.transcriber.Transcribe(ctx, pcm16k)
-	if err != nil {
-		log.Printf("[vkb] pipeline.Run: transcribe FAILED after %v: %v", time.Since(tTrans), err)
-		return Result{}, err
+	// Transcribe worker — single goroutine, processes chunks in arrival order.
+	var (
+		mu          sync.Mutex
+		chunkTexts  []string
+		workerErr   error
+		workerDone  = make(chan struct{})
+		transcribed int
+	)
+	go func() {
+		defer close(workerDone)
+		for {
+			select {
+			case <-ctx.Done():
+				workerErr = ctx.Err()
+				for range chunkCh {
+				}
+				return
+			case e, ok := <-chunkCh:
+				if !ok {
+					return
+				}
+				t0 := time.Now()
+				text, err := p.transcriber.Transcribe(ctx, e.Samples)
+				if err != nil {
+					mu.Lock()
+					workerErr = err
+					mu.Unlock()
+					for range chunkCh {
+					}
+					return
+				}
+				transcribed++
+				ms := int(time.Since(t0).Milliseconds())
+				log.Printf("[vkb] chunk #%d transcribe: %dms → %q", transcribed, ms, text)
+				if p.ChunkTranscribedCallback != nil {
+					p.ChunkTranscribedCallback(transcribed, ms, text)
+				}
+				mu.Lock()
+				chunkTexts = append(chunkTexts, text)
+				mu.Unlock()
+			}
+		}
+	}()
+
+	// Denoise + decimate + chunk in the foreground.
+	for {
+		var f []float32
+		var ok bool
+		select {
+		case f, ok = <-frames:
+		case <-ctx.Done():
+			ok = false
+		}
+		if !ok {
+			break
+		}
+		denoised := drainAndDenoiseStreaming(f, p.denoiser, p.LevelCallback)
+		decimated := dec.Process(denoised)
+		chunker.Push(decimated)
 	}
-	log.Printf("[vkb] pipeline.Run: transcribe done in %v rawLen=%d raw=%q", time.Since(tTrans), len(raw), raw)
+	chunker.Flush()
+	close(chunkCh)
+	<-workerDone
+
+	if workerErr != nil {
+		log.Printf("[vkb] pipeline.Run: worker error: %v", workerErr)
+		return Result{}, workerErr
+	}
+
+	mu.Lock()
+	raw := strings.TrimSpace(strings.Join(chunkTexts, " "))
+	mu.Unlock()
+	log.Printf("[vkb] pipeline.Run: joined raw len=%d raw=%q", len(raw), raw)
 	if raw == "" {
 		log.Printf("[vkb] pipeline.Run: empty transcription; skipping LLM")
 		return Result{}, nil
@@ -99,9 +200,25 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	tLLM := time.Now()
 	var cleaned string
 	var llmErr error
-	if streamer, ok := p.cleaner.(llm.StreamingCleaner); ok && p.LLMDeltaCallback != nil {
+	firstTokenSeen := false
+	deltaCb := p.LLMDeltaCallback
+	wrappedDelta := func(s string) {
+		if !firstTokenSeen {
+			firstTokenSeen = true
+			elapsed := int(time.Since(tLLM).Milliseconds())
+			log.Printf("[vkb] LLM stream first token: %dms after stop", elapsed)
+			if p.LLMFirstTokenCallback != nil {
+				p.LLMFirstTokenCallback(elapsed)
+			}
+		}
+		if deltaCb != nil {
+			deltaCb(s)
+		}
+	}
+
+	if streamer, ok := p.cleaner.(llm.StreamingCleaner); ok && deltaCb != nil {
 		log.Printf("[vkb] pipeline.Run: cleaning via LLM (streaming)…")
-		cleaned, llmErr = streamer.CleanStream(ctx, corrected, terms, p.LLMDeltaCallback)
+		cleaned, llmErr = streamer.CleanStream(ctx, corrected, terms, wrappedDelta)
 	} else {
 		log.Printf("[vkb] pipeline.Run: cleaning via LLM…")
 		cleaned, llmErr = p.cleaner.Clean(ctx, corrected, terms)
@@ -133,50 +250,31 @@ func (p *Pipeline) Close() error {
 	return firstErr
 }
 
-// drainAndDenoise reads frames from `frames` until the channel closes
-// or ctx is cancelled, denoising in 480-sample (10 ms) chunks. Any
-// trailing partial frame is zero-padded so we don't drop the tail.
-func drainAndDenoise(
-	ctx context.Context,
-	frames <-chan []float32,
+// drainAndDenoiseStreaming denoises one batch of input frames in
+// 480-sample chunks, returning the concatenated denoised output.
+// Sub-frame trailing samples are zero-padded so the tail isn't dropped.
+func drainAndDenoiseStreaming(
+	f []float32,
 	d denoise.Denoiser,
 	levelCb func(float32),
 ) []float32 {
-	var pending []float32
-	var out []float32
-
-	flush := func() {
-		for len(pending) >= denoise.FrameSize {
-			frame := pending[:denoise.FrameSize]
-			out = append(out, d.Process(frame)...)
-			denoisedTail := out[len(out)-denoise.FrameSize:]
-			if levelCb != nil {
-				levelCb(audio.RMS(denoisedTail))
-			}
-			pending = pending[denoise.FrameSize:]
-		}
-	}
-
-	for {
-		select {
-		case f, ok := <-frames:
-			if !ok {
-				goto finalize
-			}
-			pending = append(pending, f...)
-			flush()
-		case <-ctx.Done():
-			goto finalize
-		}
-	}
-finalize:
-	if len(pending) > 0 {
-		last := make([]float32, denoise.FrameSize)
-		copy(last, pending)
-		out = append(out, d.Process(last)...)
+	out := make([]float32, 0, len(f))
+	i := 0
+	for ; i+denoise.FrameSize <= len(f); i += denoise.FrameSize {
+		frame := f[i : i+denoise.FrameSize]
+		dn := d.Process(frame)
+		out = append(out, dn...)
 		if levelCb != nil {
-			denoisedTail := out[len(out)-denoise.FrameSize:]
-			levelCb(audio.RMS(denoisedTail))
+			levelCb(audio.RMS(dn))
+		}
+	}
+	if i < len(f) {
+		last := make([]float32, denoise.FrameSize)
+		copy(last, f[i:])
+		dn := d.Process(last)
+		out = append(out, dn...)
+		if levelCb != nil {
+			levelCb(audio.RMS(dn))
 		}
 	}
 	return out

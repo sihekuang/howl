@@ -73,6 +73,9 @@ func pushChan(samples []float32, chunkSize int) <-chan []float32 {
 
 func TestPipeline_HappyPath(t *testing.T) {
 	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1 // voiced — above VoiceThreshold so the chunker emits
+	}
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "hello webrt world"}
@@ -97,6 +100,9 @@ func TestPipeline_HappyPath(t *testing.T) {
 
 func TestPipeline_LLMErrorFallsBackToDictText(t *testing.T) {
 	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1
+	}
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "use webrt please"}
@@ -158,6 +164,9 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 
 func TestPipeline_StreamingCleanerEmitsDeltas(t *testing.T) {
 	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1
+	}
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hello world"}
@@ -199,6 +208,9 @@ func TestPipeline_StreamingCleanerEmitsDeltas(t *testing.T) {
 
 func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
 	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1
+	}
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hello"}
