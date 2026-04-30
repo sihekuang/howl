@@ -19,4 +19,6 @@ void vkb_destroy(void);
 char* vkb_last_error(void);
 void vkb_free_string(char* s);
 
+int vkb_enroll_compute(const float* samples, int count, int sample_rate, const char* profile_dir);
+
 #endif
