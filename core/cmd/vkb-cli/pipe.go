@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -202,7 +201,7 @@ func runOneLive(ctx context.Context, cancel context.CancelFunc, p *pipeline.Pipe
 		line = strings.TrimSpace(line)
 		notifyStop()
 		if line == "cancel" {
-			log.Printf("[vkb] --live: stdin sentinel 'cancel' — aborting pipeline")
+			fmt.Fprintln(os.Stderr, "[vkb] --live: stdin sentinel 'cancel' — aborting pipeline")
 			cancel()
 		} else {
 			_ = cap.Stop()
@@ -304,6 +303,10 @@ func printLatencyReport(stopAt time.Time, chunks []chunkInfo, firstTok time.Dura
 	if sawFirst {
 		fmt.Fprintf(w, "[vkb]   post-stop-llm-first:   %dms after transcribe done\n", int(firstTok.Milliseconds()))
 	}
-	totalPostStop := postStopTransc + int(firstTok.Milliseconds())
-	fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms\n", totalPostStop)
+	if sawFirst {
+		totalPostStop := postStopTransc + int(firstTok.Milliseconds())
+		fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms\n", totalPostStop)
+	} else {
+		fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms (no LLM call)\n", postStopTransc)
+	}
 }

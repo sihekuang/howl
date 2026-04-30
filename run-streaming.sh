@@ -8,18 +8,15 @@
 #
 # Usage:
 #   ./run-streaming.sh                # any key stops, q cancels
-#   ./run-streaming.sh --keep-wav     # also save the captured audio
 #   VKB_DICT="MCP,WebRTC" ./run-streaming.sh
 #
 # Reads ANTHROPIC_API_KEY from ./.env. Cleaned text → stdout.
 # Live chunk events + latency report → stderr.
 set -e
 
-KEEP_WAV=0
 for arg in "$@"; do
   case "$arg" in
-    --keep-wav) KEEP_WAV=1 ;;
-    *)          echo "unknown arg: $arg" >&2; exit 2 ;;
+    *)  echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
 
