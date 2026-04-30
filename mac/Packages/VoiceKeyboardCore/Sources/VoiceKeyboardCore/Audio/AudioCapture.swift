@@ -52,13 +52,18 @@ public enum AudioCaptureError: Error, Equatable {
 /// invoking the callback.
 public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private let engine = AVAudioEngine()
-    private var converter: AVAudioConverter?
-    private var targetFormat: AVAudioFormat?
     private var isRunning = false
 
+    // Optional converter for the rare case the input device isn't
+    // 48 kHz (most macOS mics are). For 48 kHz we do channel mix
+    // manually — way simpler than wrestling with AVAudioConverter's
+    // input-block contract, which we previously got wrong (single-shot
+    // Once flag caused all buffers after the first to convert to 0
+    // samples and silently drop).
+    private var converter: AVAudioConverter?
+
     // Throttled tap-callback diagnostics: every ~30 callbacks, log
-    // frame count + peak amplitude so we can tell at a glance whether
-    // audio is reaching us and whether it's all zeros or has energy.
+    // frame count + peak amplitude.
     private var diagCounter: Int = 0
     private var diagPeak: Float = 0
 
@@ -141,22 +146,23 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         let inputFormat = inputNode.inputFormat(forBus: 0)
         log.info("AVAudioInputCapture.start: input format sr=\(inputFormat.sampleRate, privacy: .public) ch=\(inputFormat.channelCount, privacy: .public)")
 
-        guard let target = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 48000,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw AudioCaptureError.formatUnavailable
+        // Build a converter only if we need rate conversion. For pure
+        // channel mixing at 48 kHz we mix manually in deliver().
+        if inputFormat.sampleRate != 48000 {
+            guard let target = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48000,
+                channels: 1,
+                interleaved: false
+            ), let conv = AVAudioConverter(from: inputFormat, to: target) else {
+                throw AudioCaptureError.formatUnavailable
+            }
+            converter = conv
+            log.info("AVAudioInputCapture.start: using AVAudioConverter for non-48k input")
+        } else {
+            converter = nil
         }
-        guard let conv = AVAudioConverter(from: inputFormat, to: target) else {
-            throw AudioCaptureError.formatUnavailable
-        }
-        targetFormat = target
-        converter = conv
 
-        // Install a tap on the input node. Tap buffer size (4096) is a
-        // hint; the system may give us fewer samples per call.
         log.info("AVAudioInputCapture.start: installing tap")
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
@@ -206,20 +212,42 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     }
 
     private func deliver(buffer: AVAudioPCMBuffer, onFrame: @Sendable ([Float]) -> Void) {
-        guard let converter, let targetFormat else { return }
+        let n = Int(buffer.frameLength)
+        if n == 0 { return }
 
-        // Convert to 48 kHz mono Float32. Estimate output capacity
-        // generously so AVAudioConverter never truncates a buffer.
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 64)
-        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outCapacity) else {
+        // Fast path: 48 kHz input — mix channels to mono manually.
+        if buffer.format.sampleRate == 48000, let channels = buffer.floatChannelData {
+            let chCount = Int(buffer.format.channelCount)
+            var mono = [Float](repeating: 0, count: n)
+            if chCount == 1 {
+                let src = channels[0]
+                for i in 0..<n { mono[i] = src[i] }
+            } else {
+                let scale = 1.0 / Float(chCount)
+                for c in 0..<chCount {
+                    let src = channels[c]
+                    for i in 0..<n { mono[i] += src[i] * scale }
+                }
+            }
+            onFrame(mono)
             return
         }
 
-        // The converter input block is invoked synchronously inside
-        // `converter.convert(...)`, so a class-wrapped flag is fine.
-        // Marked @unchecked Sendable to satisfy strict concurrency —
-        // the runtime never escapes this method.
+        // Fallback path: non-48 kHz input — use AVAudioConverter.
+        // Recreate the converter's expected output format each call;
+        // AVAudioConverter is stateful around rate conversion.
+        guard let converter else { return }
+        guard let target = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48000,
+            channels: 1,
+            interleaved: false
+        ) else { return }
+        let ratio = target.sampleRate / buffer.format.sampleRate
+        let outCapacity = AVAudioFrameCount(Double(n) * ratio + 64)
+        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outCapacity) else {
+            return
+        }
         final class Once: @unchecked Sendable { var done = false }
         let once = Once()
         var error: NSError?
@@ -236,10 +264,10 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
             log.error("AVAudioInputCapture: convert FAILED: \(String(describing: error), privacy: .public)")
             return
         }
-        guard let channelData = outBuffer.floatChannelData?[0] else { return }
+        guard let cd = outBuffer.floatChannelData?[0] else { return }
         let count = Int(outBuffer.frameLength)
         if count == 0 { return }
-        let samples = Array(UnsafeBufferPointer(start: channelData, count: count))
+        let samples = Array(UnsafeBufferPointer(start: cd, count: count))
         onFrame(samples)
     }
 
