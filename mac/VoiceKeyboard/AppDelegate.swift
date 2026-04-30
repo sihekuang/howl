@@ -121,4 +121,21 @@ enum ModelPaths {
     static func whisperModel(size: String) -> URL {
         modelsDir.appendingPathComponent("ggml-\(size).en.bin")
     }
+    static var tseModel: URL {
+        modelsDir.appendingPathComponent("tse_model.onnx")
+    }
+    static var speakerEncoder: URL {
+        modelsDir.appendingPathComponent("speaker_encoder.onnx")
+    }
+    /// Where enrollment artefacts live (enrollment.wav, enrollment.emb, speaker.json).
+    static var voiceProfileDir: URL {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        return appSupport.appendingPathComponent("VoiceKeyboard/voice")
+    }
+    /// Default location for the ONNX Runtime shared library on Apple Silicon.
+    static var onnxLib: URL {
+        URL(fileURLWithPath: "/opt/homebrew/lib/libonnxruntime.dylib")
+    }
 }
