@@ -1,0 +1,128 @@
+// Package pipeline — Chunker splits a stream of 16kHz mono samples into
+// utterance-aligned chunks suitable for one-shot whisper.cpp inference.
+//
+// State machine: idle → voiced (on first above-threshold 100ms window),
+// voiced → idle (on SILENCE_HANG_MS of below-threshold). Pre-speech
+// silence is dropped. Trailing silence under the hang is absorbed into
+// the chunk. Long unbroken speech is force-cut at MAX_CHUNK_MS, with
+// the cut placed at the lowest-energy 100ms window inside the last
+// FORCE_CUT_SCAN_MS.
+package pipeline
+
+import "github.com/voice-keyboard/core/internal/audio"
+
+const (
+	chunkerSampleRate = 16000
+	chunkerWindowMs   = 100
+	chunkerWindowSize = chunkerSampleRate * chunkerWindowMs / 1000 // 1600 samples
+)
+
+// ChunkerOpts holds the tunable thresholds. DefaultChunkerOpts returns
+// a sensible production set; tests pass smaller values.
+type ChunkerOpts struct {
+	VoiceThreshold   float32
+	SilenceHangMs    int
+	MaxChunkMs       int
+	ForceCutScanMs   int
+}
+
+func DefaultChunkerOpts() ChunkerOpts {
+	return ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  500,
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 800,
+	}
+}
+
+// ChunkEmission is one chunk handed off to the transcribe worker.
+type ChunkEmission struct {
+	Samples []float32 // 16kHz mono, defensively-copied
+	Reason  string    // "vad-cut" | "force-cut" | "tail"
+}
+
+type chunkerState int
+
+const (
+	stateIdle chunkerState = iota
+	stateVoiced
+)
+
+// Chunker is NOT safe for concurrent calls. One instance per Pipeline.Run.
+type Chunker struct {
+	opts   ChunkerOpts
+	emit   func(ChunkEmission)
+
+	state     chunkerState
+	chunkBuf  []float32
+	silenceMs int
+
+	// pending samples not yet aligned to a 100ms window
+	pending []float32
+}
+
+func NewChunker(opts ChunkerOpts, emit func(ChunkEmission)) *Chunker {
+	return &Chunker{opts: opts, emit: emit}
+}
+
+// Push feeds a slice of 16kHz mono samples. May synchronously call emit
+// zero or more times.
+func (c *Chunker) Push(samples []float32) {
+	c.pending = append(c.pending, samples...)
+	for len(c.pending) >= chunkerWindowSize {
+		w := c.pending[:chunkerWindowSize]
+		c.processWindow(w)
+		c.pending = c.pending[chunkerWindowSize:]
+	}
+}
+
+// Flush emits any accumulated tail chunk. Call once on input close.
+// Pending sub-window samples are included in the tail chunk.
+func (c *Chunker) Flush() {
+	if c.state == stateVoiced {
+		if len(c.pending) > 0 {
+			c.chunkBuf = append(c.chunkBuf, c.pending...)
+			c.pending = nil
+		}
+		c.emitChunk("tail")
+	}
+	c.state = stateIdle
+	c.silenceMs = 0
+	c.pending = nil
+}
+
+func (c *Chunker) processWindow(w []float32) {
+	rms := audio.RMS(w)
+	voiced := rms > c.opts.VoiceThreshold
+
+	switch c.state {
+	case stateIdle:
+		if voiced {
+			c.state = stateVoiced
+			c.chunkBuf = append(c.chunkBuf, w...)
+		}
+		// else: drop pre-speech silence on the floor
+	case stateVoiced:
+		c.chunkBuf = append(c.chunkBuf, w...)
+		if voiced {
+			c.silenceMs = 0
+		} else {
+			c.silenceMs += chunkerWindowMs
+			if c.silenceMs >= c.opts.SilenceHangMs {
+				c.emitChunk("vad-cut")
+				c.state = stateIdle
+				c.silenceMs = 0
+			}
+		}
+	}
+}
+
+func (c *Chunker) emitChunk(reason string) {
+	if len(c.chunkBuf) == 0 {
+		return
+	}
+	out := make([]float32, len(c.chunkBuf))
+	copy(out, c.chunkBuf)
+	c.chunkBuf = nil
+	c.emit(ChunkEmission{Samples: out, Reason: reason})
+}
