@@ -119,6 +119,7 @@ func (c *Chunker) forceCut() {
 	}
 	if scanWindows < 1 {
 		c.emitChunk(ReasonForceCut)
+		c.silenceMs = 0
 		return
 	}
 
