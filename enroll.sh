@@ -15,11 +15,15 @@ if [[ ! -f "$MODELS_DIR/silero_vad.onnx" ]]; then
   curl -L -o "$MODELS_DIR/silero_vad.onnx" "$SILERO_URL"
 fi
 
-# Check that tse_model.onnx exists (produced by scripts/export_tse_model.py)
+# Build tse_model.onnx if missing (requires Python + PyTorch + asteroid)
 if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]]; then
-  echo "ERROR: $MODELS_DIR/tse_model.onnx not found."
-  echo "Run: python scripts/export_tse_model.py --out $MODELS_DIR/tse_model.onnx"
-  exit 1
+  echo "Building tse_model.onnx (requires Python, PyTorch, asteroid-filterbanks)..."
+  if ! command -v python3 &>/dev/null; then
+    echo "ERROR: python3 not found. Install Python 3.10+ and re-run."
+    exit 1
+  fi
+  python3 -m pip install --quiet torch asteroid-filterbanks soundfile numpy
+  python3 "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
 # Build vkb-enroll
