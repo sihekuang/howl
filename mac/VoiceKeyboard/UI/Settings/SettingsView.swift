@@ -9,6 +9,13 @@ struct SettingsView: View {
         TabView {
             GeneralTab(settings: $settings, onSave: save, audioCapture: composition.audioCapture)
                 .tabItem { Label("General", systemImage: "gearshape") }
+            VoiceTab(
+                settings: $settings,
+                onSave: save,
+                audioCapture: composition.audioCapture,
+                engine: composition.engine
+            )
+                .tabItem { Label("Voice", systemImage: "person.wave.2") }
             HotkeyTab(
                 settings: $settings,
                 onSave: save,
@@ -34,7 +41,7 @@ struct SettingsView: View {
             )
                 .tabItem { Label("Playground", systemImage: "waveform") }
         }
-        .frame(width: 560, height: 400)
+        .frame(width: 560, height: 460)
         .task {
             settings = (try? composition.settings.get()) ?? UserSettings()
         }

@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/anthropics/anthropic-sdk-go v1.38.0
 	github.com/gen2brain/malgo v0.11.24
+	github.com/yalue/onnxruntime_go v1.29.0
 )
 
 require (

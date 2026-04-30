@@ -12,6 +12,97 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 )
 
+// fakeTSEExtractor records calls and returns zeros (simulates TSE suppressing all audio).
+type fakeTSEExtractor struct {
+	calls int
+	out   []float32 // if nil, returns zeros of mixed length
+}
+
+func (f *fakeTSEExtractor) Extract(_ context.Context, mixed []float32, _ []float32) ([]float32, error) {
+	f.calls++
+	if f.out != nil {
+		return f.out, nil
+	}
+	return make([]float32, len(mixed)), nil
+}
+
+func TestPipeline_TSENilSkipsExtract(t *testing.T) {
+	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1
+	}
+	tse := &fakeTSEExtractor{}
+	p := New(denoise.NewPassthrough(), &fakeTranscriber{out: "hello"}, dict.NewFuzzy(nil, 1), &fakeCleaner{out: "hello"})
+	// TSE is nil — not set on pipeline
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if tse.calls != 0 {
+		t.Errorf("Extract called %d times, want 0 when TSE is nil", tse.calls)
+	}
+}
+
+func TestPipeline_TSEActiveCallsExtractPerChunk(t *testing.T) {
+	tr := &fakeMultiTranscriber{outputs: []string{"hello", "world"}}
+	cl := &fakeCleaner{out: "Hello world."}
+	tse := &fakeTSEExtractor{}
+
+	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
+	p.TSE = tse
+	p.TSERef = make([]float32, 16000) // 1s of silence as ref
+	p.ChunkerOpts = ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  100,
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 100,
+	}
+
+	frames := make(chan []float32, 4)
+	frames <- toneFrames48k(500, 0.3)
+	frames <- silence48k(200)
+	frames <- toneFrames48k(500, 0.3)
+	close(frames)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.Run(ctx, frames)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if tse.calls != 2 {
+		t.Errorf("Extract calls = %d, want 2 (one per chunk)", tse.calls)
+	}
+}
+
+func TestPipeline_TSEOutputZeroYieldsEmptyResult(t *testing.T) {
+	// TSE returns zeros → Whisper gets silence → empty transcription → empty Result
+	src := make([]float32, 24000)
+	for i := range src {
+		src[i] = 0.1
+	}
+	tse := &fakeTSEExtractor{} // returns zeros by default
+	tr := &fakeTranscriber{out: ""}
+	cl := &fakeCleaner{out: "should not be called"}
+
+	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 1), cl)
+	p.TSE = tse
+	p.TSERef = make([]float32, 16000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Cleaned != "" {
+		t.Errorf("expected empty Cleaned when TSE zeroes audio, got %q", res.Cleaned)
+	}
+}
+
 type fakeTranscriber struct {
 	out string
 	err error

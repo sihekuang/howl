@@ -21,6 +21,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     func stopCapture() async throws { stopCalls += 1 }
     func cancelCapture() {}
     func pollEvent() -> EngineEvent? { defer { nextEvent = nil }; return nextEvent }
+    func computeEnrollment(samples: [Float], sampleRate: Int, profileDir: String) async throws {}
     func lastError() -> String? { nil }
     func shutdown() {}
 }

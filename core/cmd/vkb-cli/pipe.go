@@ -42,6 +42,7 @@ func runPipe(args []string) int {
 	dictTerms := fs.String("dict", "", "comma-separated custom terms")
 	latencyReport := fs.Bool("latency-report", false, "print per-chunk timing + post-stop latency summary on stderr")
 	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no ANTHROPIC_API_KEY needed)")
+	speakerMode := fs.Bool("speaker", false, "enable speaker gating; requires a prior ./enroll.sh run")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -104,6 +105,33 @@ func runPipe(args []string) int {
 	defer cancel()
 
 	p := pipeline.New(d, w, dy, cleaner)
+
+	if *speakerMode {
+		profileDir := os.Getenv("VKB_PROFILE_DIR")
+		if profileDir == "" {
+			profileDir = os.ExpandEnv("$HOME/.config/voice-keyboard")
+		}
+		modelsDir := os.Getenv("VKB_MODELS_DIR")
+		if modelsDir == "" {
+			modelsDir = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models")
+		}
+		onnxLib := os.Getenv("ONNXRUNTIME_LIB_PATH")
+		if onnxLib == "" {
+			onnxLib = "/opt/homebrew/lib/libonnxruntime.dylib"
+		}
+		tse, ref, err := pipeline.LoadTSE(profileDir, modelsDir+"/tse_model.onnx", onnxLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
+			return 1
+		}
+		if tse == nil {
+			fmt.Fprintln(os.Stderr, "speaker gate: no enrollment found — run ./enroll.sh first")
+			return 1
+		}
+		p.TSE = tse
+		p.TSERef = ref
+		fmt.Fprintln(os.Stderr, "[vkb] speaker gating active")
+	}
 
 	var (
 		repMu        sync.Mutex

@@ -21,3 +21,4 @@ char* vkb_poll_event(void)    { return NULL; }
 void vkb_destroy(void)        {}
 char* vkb_last_error(void)    { return NULL; }
 void vkb_free_string(char* s) { (void)s; }
+int vkb_enroll_compute(const float* samples, int count, int sample_rate, const char* profile_dir) { (void)samples; (void)count; (void)sample_rate; (void)profile_dir; return 0; }

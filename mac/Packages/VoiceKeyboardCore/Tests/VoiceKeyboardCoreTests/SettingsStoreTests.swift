@@ -30,4 +30,15 @@ struct SettingsStoreTests {
         #expect(got.llmModel == "claude-sonnet-4-6")
         #expect(got.customDict == [])
     }
+
+    @Test func tseEnabledRoundTrip() throws {
+        let store = InMemorySettingsStore()
+        var s = try store.get()
+        #expect(s.tseEnabled == false, "default tseEnabled should be false")
+
+        s.tseEnabled = true
+        try store.set(s)
+        let got = try store.get()
+        #expect(got.tseEnabled == true)
+    }
 }

@@ -13,7 +13,9 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/resample"
+	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
@@ -69,6 +72,14 @@ type Pipeline struct {
 	// LLMFirstTokenCallback fires when the first LLM delta arrives,
 	// measured from when transcribe joined the final raw text. Optional.
 	LLMFirstTokenCallback func(elapsedMs int)
+
+	// TSE, when non-nil, extracts the enrolled user's voice from each chunk
+	// before it reaches Whisper. Nil means TSE is off — pipeline behaves as today.
+	TSE speaker.TSEExtractor
+
+	// TSERef is the enrolled reference audio (loaded from enrollment.wav).
+	// Required when TSE is non-nil; read-only during Run.
+	TSERef []float32
 }
 
 func New(d denoise.Denoiser, t transcribe.Transcriber,
@@ -136,6 +147,18 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 			case e, ok := <-chunkCh:
 				if !ok {
 					return
+				}
+				if p.TSE != nil {
+					cleaned, tseErr := p.TSE.Extract(ctx, e.Samples, p.TSERef)
+					if tseErr != nil {
+						mu.Lock()
+						workerErr = fmt.Errorf("tse: %w", tseErr)
+						mu.Unlock()
+						for range chunkCh {
+						}
+						return
+					}
+					e.Samples = cleaned
 				}
 				t0 := time.Now()
 				text, err := p.transcriber.Transcribe(ctx, e.Samples)
@@ -229,6 +252,35 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	}
 	log.Printf("[vkb] pipeline.Run: LLM done in %v cleanedLen=%d", time.Since(tLLM), len(cleaned))
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
+}
+
+// LoadTSE initialises a SpeakerGate and loads the enrollment embedding from profileDir.
+// Returns nil extractor + nil error when speaker.json is absent (TSE off).
+// Returns error only on partial state (json present but embedding missing/corrupt).
+func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
+	_, err := speaker.LoadProfile(profileDir)
+	if os.IsNotExist(err) {
+		return nil, nil, nil // no enrollment — TSE off
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("load tse: profile: %w", err)
+	}
+	embPath := profileDir + "/enrollment.emb"
+	ref, err := speaker.LoadEmbedding(embPath)
+	if os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("load tse: embedding: %w", err)
+	}
+	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
+		return nil, nil, fmt.Errorf("load tse: onnx runtime: %w", err)
+	}
+	tse, err := speaker.NewSpeakerGate(modelPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load tse: model: %w", err)
+	}
+	return tse, ref, nil
 }
 
 // Close releases resources held by the transcriber and denoiser.

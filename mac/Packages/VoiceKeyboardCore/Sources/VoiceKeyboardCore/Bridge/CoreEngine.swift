@@ -39,6 +39,14 @@ public protocol CoreEngine: Sendable {
     /// nil when the queue is empty. Caller polls on a timer.
     func pollEvent() -> EngineEvent?
 
+    /// Compute and persist a voice enrollment from a single recorded buffer.
+    /// `samples` must be 48 kHz mono Float32. The engine decimates to 16 kHz
+    /// internally, runs the encoder, and writes enrollment.wav,
+    /// enrollment.emb, speaker.json into `profileDir`. The directory is
+    /// created if missing. Throws if the engine is not configured with
+    /// `speakerEncoderPath` and `onnxLibPath` set, or if compute fails.
+    func computeEnrollment(samples: [Float], sampleRate: Int, profileDir: String) async throws
+
     /// The last error message set by the engine, if any.
     func lastError() -> String?
 
