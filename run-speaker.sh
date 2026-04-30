@@ -7,6 +7,10 @@ PROFILE_DIR="${HOME}/.config/voice-keyboard"
 DICT="${DICT_PATH:-}"
 ONNX_LIB="${ONNXRUNTIME_LIB_PATH:-/opt/homebrew/lib/libonnxruntime.dylib}"
 
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a; . "$SCRIPT_DIR/.env"; set +a
+fi
+
 # Check enrollment
 if [[ ! -f "$PROFILE_DIR/speaker.json" ]]; then
   echo "No voice enrollment found. Run ./enroll.sh first."

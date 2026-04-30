@@ -110,8 +110,10 @@ def build_models():
             emb0, emb1 = self._embed(src0), self._embed(src1)
             sim0 = F.cosine_similarity(ref_embedding, emb0, dim=1)
             sim1 = F.cosine_similarity(ref_embedding, emb1, dim=1)
-            # Sharp softmax — fully traceable, no hard indexing
-            w = torch.softmax(torch.stack([sim0, sim1], dim=1) * 20, dim=1)
+            # Hard select: weight the winner 1.0, loser 0.0
+            sim = torch.stack([sim0, sim1], dim=1)        # [1, 2]
+            best = sim.max(dim=1, keepdim=True).values    # [1, 1]
+            w = (sim >= best).float()                      # [1, 2] — 1 for winner, 0 for loser
             return w[:, 0:1] * src0 + w[:, 1:2] * src1  # [1, T]
 
     print("Loading ConvTasNet separator...")
