@@ -5,9 +5,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/denoise"
@@ -17,11 +20,20 @@ import (
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
+type chunkInfo struct {
+	emittedAt time.Time
+	dur       int
+	reason    string
+	transcMs  int
+	text      string
+}
+
 func runPipe(args []string) int {
 	fs := flag.NewFlagSet("pipe", flag.ContinueOnError)
 	live := fs.Bool("live", false, "record from mic; press Enter to stop")
 	persistent := fs.Bool("persistent", false, "stay running; loop capture+transcribe+clean cycles (implies --live; incompatible with FILE.wav)")
 	dictTerms := fs.String("dict", "", "comma-separated custom terms")
+	latencyReport := fs.Bool("latency-report", false, "print per-chunk timing + post-stop latency summary on stderr")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -76,6 +88,55 @@ func runPipe(args []string) int {
 
 	p := pipeline.New(d, w, dy, cleaner)
 
+	var (
+		repMu        sync.Mutex
+		repChunks    []chunkInfo
+		repStopAt    time.Time
+		repFirstTok  time.Duration
+		repFirstSeen bool
+	)
+
+	if *latencyReport {
+		p.ChunkEmittedCallback = func(idx int, durationMs int, reason string) {
+			repMu.Lock()
+			repChunks = append(repChunks, chunkInfo{
+				emittedAt: time.Now(), dur: durationMs, reason: reason,
+			})
+			repMu.Unlock()
+		}
+		p.ChunkTranscribedCallback = func(idx int, transcribeMs int, text string) {
+			repMu.Lock()
+			if idx-1 < len(repChunks) {
+				repChunks[idx-1].transcMs = transcribeMs
+				repChunks[idx-1].text = text
+			}
+			repMu.Unlock()
+		}
+		p.LLMFirstTokenCallback = func(elapsedMs int) {
+			repMu.Lock()
+			repFirstTok = time.Duration(elapsedMs) * time.Millisecond
+			repFirstSeen = true
+			repMu.Unlock()
+		}
+	}
+
+	notifyStop := func() {
+		repMu.Lock()
+		repStopAt = time.Now()
+		repMu.Unlock()
+	}
+	reportFn := func() {
+		if *latencyReport {
+			repMu.Lock()
+			chunks := append([]chunkInfo{}, repChunks...)
+			stopAt := repStopAt
+			firstTok := repFirstTok
+			firstSeen := repFirstSeen
+			repMu.Unlock()
+			printLatencyReport(stopAt, chunks, firstTok, firstSeen)
+		}
+	}
+
 	if *persistent {
 		// Persistent mode: reuse the same MalgoCapture across cycles so
 		// the Whisper model stays warm. MalgoCapture supports re-Start
@@ -86,7 +147,7 @@ func runPipe(args []string) int {
 
 	if *live {
 		cap := audio.NewMalgoCapture()
-		return runOneLive(ctx, p, cap)
+		return runOneLive(ctx, cancel, p, cap, notifyStop, reportFn)
 	}
 
 	// File mode.
@@ -128,8 +189,8 @@ func runPipe(args []string) int {
 }
 
 // runOneLive starts the mic, runs one capture+transcribe+clean cycle,
-// stops the mic on Enter or ctx cancel.
-func runOneLive(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCapture) int {
+// stops the mic on Enter or ctx cancel. Typing "cancel" aborts the pipeline.
+func runOneLive(ctx context.Context, cancel context.CancelFunc, p *pipeline.Pipeline, cap *audio.MalgoCapture, notifyStop func(), reportFn func()) int {
 	frames, err := cap.Start(ctx, 48000)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "capture: %v\n", err)
@@ -137,12 +198,23 @@ func runOneLive(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCaptu
 	}
 	fmt.Fprintln(os.Stderr, "Speak; press Enter to stop.")
 	go func() {
-		bufio.NewReader(os.Stdin).ReadString('\n') //nolint:errcheck
-		_ = cap.Stop()
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		line = strings.TrimSpace(line)
+		notifyStop()
+		if line == "cancel" {
+			log.Printf("[vkb] --live: stdin sentinel 'cancel' — aborting pipeline")
+			cancel()
+		} else {
+			_ = cap.Stop()
+		}
 	}()
 
 	res, err := p.Run(ctx, frames)
 	_ = cap.Stop() // idempotent; ensures we exit cleanly on ctx cancel too
+	if ctx.Err() != nil {
+		fmt.Fprintln(os.Stderr, "Cancelled. No transcript produced.")
+		return 0
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pipeline: %v\n", err)
 		return 1
@@ -150,6 +222,7 @@ func runOneLive(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCaptu
 	if res.LLMError != nil {
 		fmt.Fprintf(os.Stderr, "[LLM warning: %v]\n", res.LLMError)
 	}
+	reportFn()
 	if res.Cleaned == "" {
 		fmt.Fprintln(os.Stderr, "(empty result)")
 		return 0
@@ -212,4 +285,25 @@ func runPipeLoop(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCapt
 			fmt.Println(res.Cleaned)
 		}
 	}
+}
+
+func printLatencyReport(stopAt time.Time, chunks []chunkInfo, firstTok time.Duration, sawFirst bool) {
+	w := os.Stderr
+	fmt.Fprintln(w, "[vkb] === latency report ===")
+	var preStopTransc, postStopTransc int
+	for _, c := range chunks {
+		if c.emittedAt.Before(stopAt) {
+			preStopTransc += c.transcMs
+		} else {
+			postStopTransc += c.transcMs
+		}
+	}
+	fmt.Fprintf(w, "[vkb]   chunks emitted:        %d\n", len(chunks))
+	fmt.Fprintf(w, "[vkb]   transcribe-during-rec: %dms\n", preStopTransc)
+	fmt.Fprintf(w, "[vkb]   post-stop-transcribe:  %dms\n", postStopTransc)
+	if sawFirst {
+		fmt.Fprintf(w, "[vkb]   post-stop-llm-first:   %dms after transcribe done\n", int(firstTok.Milliseconds()))
+	}
+	totalPostStop := postStopTransc + int(firstTok.Milliseconds())
+	fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms\n", totalPostStop)
 }
