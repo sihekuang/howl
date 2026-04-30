@@ -40,14 +40,22 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         bound = Bound(onPress: onPress, onRelease: onRelease, isHeld: false)
 
         // fn/Globe key can't be registered with Carbon — use NSEvent
-        // flagsChanged monitoring instead.
-        if shortcut.isFnKey {
-            log.info("PTT (flagsChanged) start: fn/Globe key")
+        // flagsChanged monitoring instead. Works for fn alone or fn+modifier
+        // combos: press fires when ALL required flags are held, release fires
+        // when any of them drops.
+        if shortcut.isFnBased {
+            let required = shortcut.modifiers
+            log.info("PTT (flagsChanged) start: fn/Globe mods=\(String(format: "0x%X", required.rawValue), privacy: .public)")
             fnMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
                 guard let self else { return }
-                let fnDown = event.modifierFlags.contains(.function)
+                let flags = event.modifierFlags
+                var allHeld = flags.contains(.function)
+                if required.contains(.shift)   { allHeld = allHeld && flags.contains(.shift) }
+                if required.contains(.control) { allHeld = allHeld && flags.contains(.control) }
+                if required.contains(.option)  { allHeld = allHeld && flags.contains(.option) }
+                if required.contains(.command) { allHeld = allHeld && flags.contains(.command) }
                 DispatchQueue.main.async {
-                    if fnDown { self.firePress() } else { self.fireRelease() }
+                    if allHeld { self.firePress() } else { self.fireRelease() }
                 }
             }
             return

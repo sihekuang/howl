@@ -22,12 +22,27 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
     /// fn/Globe key alone — detected via NSEvent.flagsChanged, not Carbon.
     public static let fnKey = KeyboardShortcut(keyCode: kVK_Function, modifiers: [])
 
+    /// True for fn alone (no companion modifiers).
     public var isFnKey: Bool {
         keyCode == Self.kVK_Function && modifiers.isEmpty
     }
 
+    /// True for fn alone or fn+modifier combos — any shortcut that uses the
+    /// fn/Globe key as the base, monitored via NSEvent.flagsChanged rather
+    /// than Carbon RegisterEventHotKey (which doesn't support fn).
+    public var isFnBased: Bool {
+        keyCode == Self.kVK_Function
+    }
+
     public var displayString: String {
-        if isFnKey { return "fn" }
+        if isFnBased {
+            var s = "fn"
+            if modifiers.contains(.control) { s += "⌃" }
+            if modifiers.contains(.option)  { s += "⌥" }
+            if modifiers.contains(.shift)   { s += "⇧" }
+            if modifiers.contains(.command) { s += "⌘" }
+            return s
+        }
         var s = ""
         if modifiers.contains(.control) { s += "⌃" }
         if modifiers.contains(.option) { s += "⌥" }

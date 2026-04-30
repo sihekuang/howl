@@ -172,8 +172,11 @@ final class KeyListenerView: NSView {
     // delivered to SwiftUI-hosted NSViews through the responder chain, so
     // we install a local monitor that fires before sendEvent dispatches.
     private var localFlagsMonitor: Any?
-    // Debounce: suppress repeated fires while fn is held (flagsChanged fires
-    // again for every other modifier that changes while fn is held).
+    // Composing state: fn-press starts composing; fn-release commits the
+    // recorded combo (fn alone, fn+Shift, fn+Control, etc.).
+    private var pendingFn = false
+    private var pendingFnNSFlags: NSEvent.ModifierFlags = []
+    // Shared debounce guard (local monitor + responder override).
     private var fnSeen = false
 
     override var acceptsFirstResponder: Bool { true }
@@ -209,22 +212,57 @@ final class KeyListenerView: NSView {
         if let m = localFlagsMonitor {
             NSEvent.removeMonitor(m)
             localFlagsMonitor = nil
+        }
+        pendingFn = false
+        pendingFnNSFlags = []
+        fnSeen = false
+        log.info("KeyListenerView: removed local flagsChanged monitor")
+    }
+
+    // Called by both the local monitor and the responder-chain override.
+    // fn-press enters composing mode; fn-release commits whatever modifier
+    // combo was held alongside fn (fn alone, fn+Shift, fn+Control, etc.).
+    private func handleFlagsChanged(_ event: NSEvent) {
+        let flags = event.modifierFlags
+        let fnDown = flags.contains(.function)
+
+        if fnDown {
+            // fn pressed or a co-modifier changed while fn is held.
+            pendingFn = true
+            fnSeen = true
+            pendingFnNSFlags = flags   // track latest modifier state while fn held
+            let desc = composedFnDisplay(flags)
+            log.info("KeyListenerView fn composing: \(desc, privacy: .public)")
+            onKeySeen?(desc)
+        } else if pendingFn {
+            // fn released — commit the recorded combination.
+            pendingFn = false
             fnSeen = false
-            log.info("KeyListenerView: removed local flagsChanged monitor")
+            let shortcut = fnShortcut(from: pendingFnNSFlags)
+            log.info("KeyListenerView fn committed: \(shortcut.displayString, privacy: .public)")
+            onRecord?(shortcut)
         }
     }
 
-    // Called by both the local monitor and the responder-chain override so
-    // that whichever fires first wins and the other is a no-op.
-    private func handleFlagsChanged(_ event: NSEvent) {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard flags.contains(.function) else { fnSeen = false; return }
-        guard !fnSeen else { return }
-        fnSeen = true
-        let desc = "fn (keyCode=\(event.keyCode))"
-        log.info("KeyListenerView fn detected: \(desc, privacy: .public)")
-        onKeySeen?(desc)
-        onRecord?(VoiceKeyboardCore.KeyboardShortcut(keyCode: VoiceKeyboardCore.KeyboardShortcut.kVK_Function, modifiers: []))
+    private func composedFnDisplay(_ flags: NSEvent.ModifierFlags) -> String {
+        var s = "fn"
+        if flags.contains(.control) { s += "⌃" }
+        if flags.contains(.option)  { s += "⌥" }
+        if flags.contains(.shift)   { s += "⇧" }
+        if flags.contains(.command) { s += "⌘" }
+        return s
+    }
+
+    private func fnShortcut(from flags: NSEvent.ModifierFlags) -> VoiceKeyboardCore.KeyboardShortcut {
+        var mods: ModifierFlags = []
+        if flags.contains(.shift)   { mods.insert(.shift) }
+        if flags.contains(.control) { mods.insert(.control) }
+        if flags.contains(.option)  { mods.insert(.option) }
+        if flags.contains(.command) { mods.insert(.command) }
+        return VoiceKeyboardCore.KeyboardShortcut(
+            keyCode: VoiceKeyboardCore.KeyboardShortcut.kVK_Function,
+            modifiers: mods
+        )
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -237,12 +275,20 @@ final class KeyListenerView: NSView {
         log.info("KeyListenerView.keyDown \(desc, privacy: .public)")
         onKeySeen?(desc)
 
-        if event.keyCode == UInt16(kVK_Escape) && flags.isEmpty {
+        // Escape cancels — ignore fn if it's held alongside.
+        let nonFnFlags = flags.subtracting(.function)
+        if event.keyCode == UInt16(kVK_Escape) && nonFnFlags.isEmpty {
+            pendingFn = false
+            fnSeen = false
             onCancel?()
             return
         }
 
-        guard !flags.isEmpty else {
+        // While fn is composing, ignore regular key presses.
+        // fn+modifier combos are committed on fn-release via handleFlagsChanged.
+        if pendingFn { return }
+
+        guard !nonFnFlags.isEmpty else {
             log.debug("KeyListenerView: ignoring — no modifiers")
             return
         }
