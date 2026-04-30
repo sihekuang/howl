@@ -70,9 +70,14 @@ public struct ModifierFlags: OptionSet, Codable, Sendable {
 
 public protocol HotkeyMonitor: Sendable {
     /// Begin monitoring for the given shortcut. Replaces any prior shortcut.
-    /// Throws if the OS rejects the event tap install.
+    /// Throws if the OS rejects the registration (binding already in use,
+    /// event handler install failed, etc.).
     func start(_ shortcut: KeyboardShortcut, onPress: @escaping @Sendable () -> Void, onRelease: @escaping @Sendable () -> Void) throws
 
     /// Cancel the current shortcut binding (idempotent).
     func stop()
+}
+
+public enum HotkeyError: Error {
+    case tapInstallFailed
 }

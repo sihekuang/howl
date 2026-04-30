@@ -16,7 +16,7 @@ public final class CompositionRoot {
         self.appState = AppState()
         self.engine = LibvkbEngine()
         self.audioCapture = AVAudioInputCapture()
-        self.hotkey = CGEventHotkeyMonitor()
+        self.hotkey = CarbonHotkeyMonitor()
         self.injector = ClipboardPasteInjector(
             pasteboard: SystemPasteboard(),
             keystroke: CGEventKeystrokeSender()
