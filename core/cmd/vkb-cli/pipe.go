@@ -19,6 +19,12 @@ import (
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
+type passthroughCleaner struct{}
+
+func (passthroughCleaner) Clean(_ context.Context, text string, _ []string) (string, error) {
+	return text, nil
+}
+
 type chunkInfo struct {
 	emittedAt time.Time
 	dur       int
@@ -33,6 +39,7 @@ func runPipe(args []string) int {
 	persistent := fs.Bool("persistent", false, "stay running; loop capture+transcribe+clean cycles (implies --live; incompatible with FILE.wav)")
 	dictTerms := fs.String("dict", "", "comma-separated custom terms")
 	latencyReport := fs.Bool("latency-report", false, "print per-chunk timing + post-stop latency summary on stderr")
+	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no ANTHROPIC_API_KEY needed)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -42,7 +49,7 @@ func runPipe(args []string) int {
 	}
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if apiKey == "" {
+	if !*noLLM && apiKey == "" {
 		fmt.Fprintln(os.Stderr, "ANTHROPIC_API_KEY required")
 		return 1
 	}
@@ -62,13 +69,22 @@ func runPipe(args []string) int {
 	}
 	defer w.Close()
 
-	cleaner, err := llm.NewAnthropic(llm.AnthropicOptions{
-		APIKey: apiKey,
-		Model:  "claude-sonnet-4-6",
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "anthropic: %v\n", err)
-		return 1
+	var cleaner llm.Cleaner
+	if *noLLM {
+		cleaner = passthroughCleaner{}
+	} else {
+		llmModel := os.Getenv("ANTHROPIC_MODEL")
+		if llmModel == "" {
+			llmModel = "claude-sonnet-4-6"
+		}
+		cleaner, err = llm.NewAnthropic(llm.AnthropicOptions{
+			APIKey: apiKey,
+			Model:  llmModel,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "anthropic: %v\n", err)
+			return 1
+		}
 	}
 
 	var terms []string

@@ -31,18 +31,18 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY not set (looked in ./.env)" >&2; exit 1
 fi
 
-if [ ! -x core/build/vkb-cli ]; then
-  echo "Building vkb-cli..." >&2
-  make -C core build-cli >&2
-fi
+echo "Building vkb-cli..." >&2
+make -C core build-cli >&2
 
 FIFO="$(mktemp -u /tmp/vkb-streaming.XXXXXX.fifo)"
 mkfifo "$FIFO"
 cleanup() { rm -f "$FIFO"; }
 trap cleanup EXIT
 
+MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+
 # Start the CLI in the background, with stdin from the fifo.
-core/build/vkb-cli pipe --dict "$DICT" --live --latency-report < "$FIFO" &
+ANTHROPIC_MODEL="$MODEL" core/build/vkb-cli pipe --dict "$DICT" --live --latency-report < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 
