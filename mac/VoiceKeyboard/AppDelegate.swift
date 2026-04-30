@@ -23,6 +23,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task { @MainActor in
             await self.evaluateSetup()
+            self.openPlaygroundWindow()
+        }
+    }
+
+    private func openPlaygroundWindow() {
+        // Open the standalone Playground window at launch so the user
+        // has an immediate test surface without digging through Settings.
+        // The Window scene with id "playground" is declared in
+        // VoiceKeyboardApp; SwiftUI realizes it on first reference.
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "playground" }) {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 

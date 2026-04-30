@@ -36,5 +36,20 @@ struct VoiceKeyboardApp: App {
             }
         }
         .windowResizability(.contentSize)
+
+        Window("Playground", id: "playground") {
+            PlaygroundTab(
+                appState: appDelegate.composition.appState,
+                hotkey: shortcutForLaunch(appDelegate),
+                coordinator: appDelegate.composition.coordinator
+            )
+            .frame(minWidth: 520, minHeight: 360)
+        }
+        .windowResizability(.contentSize)
+    }
+
+    private func shortcutForLaunch(_ delegate: AppDelegate) -> VoiceKeyboardCore.KeyboardShortcut {
+        let s = (try? delegate.composition.settings.get()) ?? UserSettings()
+        return s.hotkey
     }
 }
