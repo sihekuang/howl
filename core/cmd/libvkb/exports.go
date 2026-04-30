@@ -397,3 +397,66 @@ func vkb_free_string(s *C.char) {
 		C.free(unsafe.Pointer(s))
 	}
 }
+
+// vkb_enroll_compute computes a speaker embedding from a single recorded
+// buffer and writes enrollment.wav, enrollment.emb, and speaker.json
+// atomically to profileDir.
+//
+// samples:    Float32 mono PCM (must not be NULL)
+// count:      number of samples (must be > 0)
+// sampleRate: must be 48000
+// profileDir: NUL-terminated UTF-8 path
+//
+// Not safe to call concurrently against the same profileDir.
+// The host (Swift app) is responsible for serializing.
+//
+// Return codes:
+//
+//	0 = success
+//	1 = engine not initialized
+//	5 = invalid argument (count <= 0, profileDir empty, sr != 48000,
+//	    speaker_encoder_path / onnx_lib_path not configured)
+//	6 = compute failed (see vkb_last_error)
+//
+//export vkb_enroll_compute
+func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profileDirC *C.char) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if count <= 0 || sampleRate != 48000 || profileDirC == nil {
+		e.setLastError("vkb_enroll_compute: invalid argument")
+		return 5
+	}
+	profileDir := C.GoString(profileDirC)
+	if profileDir == "" {
+		e.setLastError("vkb_enroll_compute: empty profile dir")
+		return 5
+	}
+
+	e.mu.Lock()
+	encoderPath := e.cfg.SpeakerEncoderPath
+	onnxLibPath := e.cfg.ONNXLibPath
+	e.mu.Unlock()
+	if encoderPath == "" || onnxLibPath == "" {
+		e.setLastError("vkb_enroll_compute: speaker_encoder_path or onnx_lib_path not configured")
+		return 5
+	}
+
+	// Copy out of C memory before any Go-side work.
+	n := int(count)
+	cSlice := unsafe.Slice(samples, n)
+	buf := make([]float32, n)
+	for i := 0; i < n; i++ {
+		buf[i] = float32(cSlice[i])
+	}
+
+	log.Printf("[vkb] vkb_enroll_compute: count=%d sr=%d profileDir=%q", n, int(sampleRate), profileDir)
+	if err := runEnrollCompute(buf, profileDir, encoderPath, onnxLibPath); err != nil {
+		e.setLastError("vkb_enroll_compute: " + err.Error())
+		log.Printf("[vkb] vkb_enroll_compute: FAILED %v", err)
+		return 6
+	}
+	log.Printf("[vkb] vkb_enroll_compute: success")
+	return 0
+}
