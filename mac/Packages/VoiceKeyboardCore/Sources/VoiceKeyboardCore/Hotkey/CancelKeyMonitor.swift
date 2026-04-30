@@ -3,6 +3,11 @@ import AppKit
 /// Watches for the Escape key (keyCode 53) globally while recording is
 /// active. Start it on PTT press; stop it on PTT release, result, or
 /// error so normal Esc use outside of recording is unaffected.
+///
+/// THREAD SAFETY: `start()` and `stop()` must only be called from the
+/// main actor. `@unchecked Sendable` is required because `NSEvent`
+/// monitor tokens (`Any?`) are not `Sendable`; all mutations are
+/// serialized on the main thread by the caller (`EngineCoordinator`).
 public final class CancelKeyMonitor: @unchecked Sendable {
     private static let escKeyCode: UInt16 = 53
 

@@ -62,6 +62,7 @@ public final class EngineCoordinator {
     }
 
     public func stop() {
+        composition.cancelKeyMonitor.stop()
         composition.hotkey.stop()
         pollTask?.cancel()
         pollTask = nil
