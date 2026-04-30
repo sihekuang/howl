@@ -15,7 +15,7 @@ fi
 
 # Build vkb-cli
 echo "Building vkb-cli..."
-(cd "$SCRIPT_DIR/core" && go build -o build/vkb-cli ./cmd/vkb-cli/)
+(cd "$SCRIPT_DIR/core" && go build -tags whispercpp -o build/vkb-cli ./cmd/vkb-cli/)
 
 FIFO=$(mktemp -t vkb-speaker-XXXXX)
 rm -f "$FIFO"

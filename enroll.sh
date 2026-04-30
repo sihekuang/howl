@@ -15,18 +15,24 @@ if [[ ! -f "$MODELS_DIR/silero_vad.onnx" ]]; then
   curl -L -o "$MODELS_DIR/silero_vad.onnx" "$SILERO_URL"
 fi
 
-# Build tse_model.onnx if missing (requires Python + PyTorch + asteroid)
+# Build tse_model.onnx if missing (requires Python 3.12 + PyTorch + asteroid)
 if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]]; then
-  echo "Building tse_model.onnx (requires Python, PyTorch, asteroid-filterbanks)..."
-  if ! command -v python3 &>/dev/null; then
-    echo "ERROR: python3 not found. Install Python 3.10+ and re-run."
+  echo "Building tse_model.onnx (requires Python 3.12, PyTorch, asteroid)..."
+  PYTHON312="${PYTHON312:-$(command -v python3.12 2>/dev/null)}"
+  if [[ -z "$PYTHON312" ]]; then
+    echo "ERROR: python3.12 not found. Install with: brew install python@3.12"
     exit 1
   fi
   VENV="$SCRIPT_DIR/core/build/.venv-tse"
-  if [[ ! -d "$VENV" ]]; then
-    python3 -m venv "$VENV"
+  # Recreate venv if it's not running Python 3.12
+  if [[ -d "$VENV" ]] && ! "$VENV/bin/python" --version 2>&1 | grep -q "3\.12"; then
+    echo "Recreating venv (wrong Python version)..."
+    rm -rf "$VENV"
   fi
-  "$VENV/bin/pip" install --quiet torch asteroid-filterbanks soundfile numpy
+  if [[ ! -d "$VENV" ]]; then
+    "$PYTHON312" -m venv "$VENV"
+  fi
+  "$VENV/bin/pip" install --quiet torch resemblyzer requests onnxscript onnxruntime soundfile numpy
   "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
@@ -42,6 +48,14 @@ ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
   "$SCRIPT_DIR/core/build/vkb-enroll" \
   --duration=10s \
   --out="$PROFILE_DIR"
+
+# Compute and save the speaker embedding from the just-recorded WAV
+echo "Computing speaker embedding..."
+VENV="$SCRIPT_DIR/core/build/.venv-tse"
+"$VENV/bin/python" "$SCRIPT_DIR/scripts/compute_enrollment_embedding.py" \
+  --model "$MODELS_DIR/tse_model.onnx" \
+  --wav   "$PROFILE_DIR/enrollment.wav" \
+  --out   "$PROFILE_DIR/enrollment.emb"
 
 echo ""
 echo "✓ Voice enrolled. Run ./run-speaker.sh to test."

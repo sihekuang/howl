@@ -1,6 +1,7 @@
 package speaker
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -37,6 +38,33 @@ func LoadProfile(dir string) (Profile, error) {
 		return Profile{}, fmt.Errorf("store: unmarshal profile: %w", err)
 	}
 	return p, nil
+}
+
+// SaveEmbedding writes a float32 embedding slice to path as raw little-endian binary.
+func SaveEmbedding(path string, emb []float32) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("store: create embedding: %w", err)
+	}
+	defer f.Close()
+	return binary.Write(f, binary.LittleEndian, emb)
+}
+
+// LoadEmbedding reads a raw float32 little-endian binary written by SaveEmbedding
+// (or by compute_enrollment_embedding.py).
+func LoadEmbedding(path string) ([]float32, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("store: read embedding: %w", err)
+	}
+	if len(data)%4 != 0 {
+		return nil, fmt.Errorf("store: embedding file size %d not a multiple of 4", len(data))
+	}
+	emb := make([]float32, len(data)/4)
+	if err := binary.Read(bytes.NewReader(data), binary.LittleEndian, emb); err != nil {
+		return nil, fmt.Errorf("store: decode embedding: %w", err)
+	}
+	return emb, nil
 }
 
 // SaveWAV writes samples as a 16kHz mono IEEE float32 WAV to path.

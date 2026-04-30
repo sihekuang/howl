@@ -254,25 +254,33 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
-// LoadTSE initialises SpeakerBeamSS and loads the enrollment WAV from profileDir.
+// LoadTSE initialises a SpeakerGate and loads the enrollment embedding from profileDir.
 // Returns nil extractor + nil error when speaker.json is absent (TSE off).
-// Returns error only on partial state (json present but WAV missing/corrupt).
-func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
-	p, err := speaker.LoadProfile(profileDir)
+// Returns error only on partial state (json present but embedding missing/corrupt).
+// threshold is the cosine-similarity gate cutoff (0–1); pass 0 to use the default (0.45).
+func LoadTSE(profileDir, modelPath, onnxLibPath string, threshold float32) (speaker.TSEExtractor, []float32, error) {
+	_, err := speaker.LoadProfile(profileDir)
 	if os.IsNotExist(err) {
 		return nil, nil, nil // no enrollment — TSE off
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("load tse: profile: %w", err)
 	}
-	ref, err := speaker.LoadWAV(p.RefAudio)
+	embPath := profileDir + "/enrollment.emb"
+	ref, err := speaker.LoadEmbedding(embPath)
+	if os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
+	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("load tse: ref wav: %w", err)
+		return nil, nil, fmt.Errorf("load tse: embedding: %w", err)
 	}
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
 		return nil, nil, fmt.Errorf("load tse: onnx runtime: %w", err)
 	}
-	tse, err := speaker.NewSpeakerBeamSS(modelPath)
+	if threshold <= 0 {
+		threshold = 0.45
+	}
+	tse, err := speaker.NewSpeakerGate(modelPath, threshold)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load tse: model: %w", err)
 	}
