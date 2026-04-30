@@ -1,26 +1,24 @@
 import AppKit
 import Carbon
+import CoreGraphics
 import os
 
 private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
 
 /// Carbon Event-Manager-based global hotkey monitor.
 ///
-/// We previously used `CGEvent.tapCreate` (a session-level event tap) for
-/// PTT — that approach requires Input Monitoring (and Accessibility on
-/// some macOS versions) and silently fails with `tapInstallFailed` when
-/// the user hasn't granted both. Carbon's `RegisterEventHotKey` works
-/// through the Window Server's hotkey machinery and needs none of those
-/// TCC permissions, which is the right tradeoff for a PTT shortcut.
-///
-/// We subscribe to both `kEventHotKeyPressed` and `kEventHotKeyReleased`
-/// so PTT semantics still work cleanly. The class is named for the
-/// implementation strategy, not the protocol — older callsites referred
-/// to `CGEventHotkeyMonitor`; that name is no longer accurate.
+/// Normal key+modifier shortcuts use Carbon's `RegisterEventHotKey`, which
+/// requires no TCC permissions. fn/Globe key can't be registered with Carbon,
+/// so we fall back to `CGEvent.tapCreate` (session-level passive tap) — the
+/// same approach OpenWhisper uses. The tap requires Accessibility, which the
+/// app already holds for paste injection.
 public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
-    private var fnMonitor: Any?   // NSEvent global monitor for fn/Globe key
+    // fn/Globe key path — CGEventTap instead of NSEvent global monitor.
+    fileprivate var fnEventTap: CFMachPort?
+    fileprivate var fnRunLoopSource: CFRunLoopSource?
+    fileprivate var fnRequired: ModifierFlags = []
     private var bound: Bound?
 
     private struct Bound {
@@ -39,25 +37,33 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         stop()
         bound = Bound(onPress: onPress, onRelease: onRelease, isHeld: false)
 
-        // fn/Globe key can't be registered with Carbon — use NSEvent
-        // flagsChanged monitoring instead. Works for fn alone or fn+modifier
-        // combos: press fires when ALL required flags are held, release fires
-        // when any of them drops.
+        // fn/Globe key: use CGEvent.tapCreate with .maskSecondaryFn — the
+        // same technique OpenWhisper uses. NSEvent.addGlobalMonitorForEvents
+        // isn't reliable for Globe key on macOS 15+.
         if shortcut.isFnBased {
-            let required = shortcut.modifiers
-            log.info("PTT (flagsChanged) start: fn/Globe mods=\(String(format: "0x%X", required.rawValue), privacy: .public)")
-            fnMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-                guard let self else { return }
-                let flags = event.modifierFlags
-                var allHeld = flags.contains(.function)
-                if required.contains(.shift)   { allHeld = allHeld && flags.contains(.shift) }
-                if required.contains(.control) { allHeld = allHeld && flags.contains(.control) }
-                if required.contains(.option)  { allHeld = allHeld && flags.contains(.option) }
-                if required.contains(.command) { allHeld = allHeld && flags.contains(.command) }
-                DispatchQueue.main.async {
-                    if allHeld { self.firePress() } else { self.fireRelease() }
-                }
+            fnRequired = shortcut.modifiers
+            let reqRaw = fnRequired.rawValue
+            log.info("PTT (CGEventTap/fn) start: mods=\(String(format: "0x%X", reqRaw), privacy: .public)")
+
+            let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+            let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+            guard let tap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .listenOnly,
+                eventsOfInterest: mask,
+                callback: fnGlobeEventTapCallback,
+                userInfo: selfPtr
+            ) else {
+                log.error("PTT (CGEventTap/fn): tapCreate failed — Accessibility permission required")
+                throw HotkeyError.tapInstallFailed
             }
+            fnEventTap = tap
+            let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+            CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
+            fnRunLoopSource = src
+            log.info("PTT (CGEventTap/fn): tap registered")
             return
         }
 
@@ -113,7 +119,6 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         )
         if registerRC != noErr {
             log.error("PTT (Carbon) start: RegisterEventHotKey FAILED rc=\(registerRC, privacy: .public) (likely conflict with another app or a system shortcut)")
-            // Tear down the handler we just installed so we don't leak.
             if let h = eventHandler {
                 RemoveEventHandler(h)
                 eventHandler = nil
@@ -133,14 +138,18 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             RemoveEventHandler(handler)
             eventHandler = nil
         }
-        if let m = fnMonitor {
-            NSEvent.removeMonitor(m)
-            fnMonitor = nil
+        if let tap = fnEventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            if let src = fnRunLoopSource {
+                CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes)
+                fnRunLoopSource = nil
+            }
+            fnEventTap = nil
         }
         bound = nil
     }
 
-    private func firePress() {
+    fileprivate func firePress() {
         guard var b = bound, !b.isHeld else { return }
         b.isHeld = true
         bound = b
@@ -148,7 +157,7 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         b.onPress()
     }
 
-    private func fireRelease() {
+    fileprivate func fireRelease() {
         guard var b = bound, b.isHeld else { return }
         b.isHeld = false
         bound = b
@@ -164,4 +173,35 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         if m.contains(.control) { out |= UInt32(controlKey) }
         return out
     }
+}
+
+// File-scope C callback for the CGEventTap — mirrors OpenWhisper's
+// macos-globe-listener.swift. userInfo is an unretained CarbonHotkeyMonitor.
+private func fnGlobeEventTapCallback(
+    _ proxy: CGEventTapProxy,
+    _ type: CGEventType,
+    _ event: CGEvent,
+    _ userInfo: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    guard let userInfo else { return Unmanaged.passUnretained(event) }
+    let monitor = Unmanaged<CarbonHotkeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+
+    // Re-enable the tap if the system disabled it.
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if let tap = monitor.fnEventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+        return Unmanaged.passUnretained(event)
+    }
+
+    let flags = event.flags
+    var allHeld = flags.contains(.maskSecondaryFn)
+    let req = monitor.fnRequired
+    if req.contains(.shift)   { allHeld = allHeld && flags.contains(.maskShift) }
+    if req.contains(.control) { allHeld = allHeld && flags.contains(.maskControl) }
+    if req.contains(.option)  { allHeld = allHeld && flags.contains(.maskAlternate) }
+    if req.contains(.command) { allHeld = allHeld && flags.contains(.maskCommand) }
+
+    DispatchQueue.main.async {
+        if allHeld { monitor.firePress() } else { monitor.fireRelease() }
+    }
+    return Unmanaged.passUnretained(event)
 }
