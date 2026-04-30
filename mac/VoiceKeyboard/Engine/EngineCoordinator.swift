@@ -237,7 +237,7 @@ public final class EngineCoordinator {
             llmAPIKey: key,
             customDict: settings.customDict
         )
-        log.info("applyConfig: model=\(modelPath, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public)")
+        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")

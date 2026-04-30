@@ -12,13 +12,22 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
     /// Carbon virtual key codes we care about.
     public static let kVK_Space: UInt16 = 49
     public static let kVK_Escape: UInt16 = 53
+    public static let kVK_Function: UInt16 = 63
 
     public static let defaultPTT = KeyboardShortcut(
         keyCode: kVK_Space,
         modifiers: [.control]
     )
 
+    /// fn/Globe key alone — detected via NSEvent.flagsChanged, not Carbon.
+    public static let fnKey = KeyboardShortcut(keyCode: kVK_Function, modifiers: [])
+
+    public var isFnKey: Bool {
+        keyCode == Self.kVK_Function && modifiers.isEmpty
+    }
+
     public var displayString: String {
+        if isFnKey { return "fn" }
         var s = ""
         if modifiers.contains(.control) { s += "⌃" }
         if modifiers.contains(.option) { s += "⌥" }
@@ -45,6 +54,8 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
         // Digits
         29: "0", 18: "1", 19: "2", 20: "3", 21: "4",
         23: "5", 22: "6", 26: "7", 28: "8", 25: "9",
+        // fn/Globe key
+        63: "fn",
         // Function keys
         122: "F1",  120: "F2",  99: "F3",   118: "F4",
         96:  "F5",  97:  "F6",  98: "F7",   100: "F8",

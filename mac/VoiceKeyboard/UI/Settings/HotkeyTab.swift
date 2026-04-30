@@ -185,6 +185,15 @@ final class KeyListenerView: NSView {
         }
     }
 
+    override func flagsChanged(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.function) else { return }
+        let desc = "fn (keyCode=\(event.keyCode))"
+        log.info("KeyListenerView.flagsChanged fn detected: \(desc, privacy: .public)")
+        onKeySeen?(desc)
+        onRecord?(VoiceKeyboardCore.KeyboardShortcut(keyCode: VoiceKeyboardCore.KeyboardShortcut.kVK_Function, modifiers: []))
+    }
+
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let desc = "kc=\(event.keyCode) flags=0x\(String(flags.rawValue, radix: 16))"

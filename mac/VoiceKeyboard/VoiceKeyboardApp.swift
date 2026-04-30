@@ -4,6 +4,7 @@ import VoiceKeyboardCore
 @main
 struct VoiceKeyboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         // Snapshot the current hotkey at scene-construction time. Real-time
@@ -22,6 +23,14 @@ struct VoiceKeyboardApp: App {
             )
         } label: {
             MenuBarIcon(appState: appDelegate.composition.appState)
+                .background(
+                    // Register openWindow with AppDelegate so it can reliably
+                    // open the settings window at launch — Window scenes are
+                    // lazily realized and may not be in NSApp.windows yet.
+                    Color.clear.onAppear {
+                        appDelegate.openWindowBridge = { openWindow(id: $0) }
+                    }
+                )
         }
         .menuBarExtraStyle(.window)
 

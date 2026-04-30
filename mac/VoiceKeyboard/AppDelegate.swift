@@ -9,6 +9,7 @@ private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Setup")
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let composition = CompositionRoot()
+    var openWindowBridge: ((String) -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Trigger the macOS mic permission dialog at launch rather than
@@ -28,17 +29,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openSettingsWindow() {
-        // Bring the main Settings window to the front at launch and
-        // float it above other apps so the user always has a test
-        // surface visible.
-        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) else {
-            log.error("openSettingsWindow: window 'settings' not realized yet")
+        // Use the SwiftUI openWindow bridge when available (registered by
+        // VoiceKeyboardApp once the MenuBarExtra label appears at launch).
+        // This reliably realizes the Window scene even on first run when
+        // no saved window state exists.
+        if let bridge = openWindowBridge {
+            bridge("settings")
+        } else if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            log.error("openSettingsWindow: no bridge and window not realized")
             return
         }
-        window.level = .floating
-        window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // Apply NSWindow customizations after SwiftUI has had a chance to
+        // realize the window from the openWindow call above.
+        Task { @MainActor in
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) else { return }
+            window.level = .floating
+            window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func evaluateSetup() async {

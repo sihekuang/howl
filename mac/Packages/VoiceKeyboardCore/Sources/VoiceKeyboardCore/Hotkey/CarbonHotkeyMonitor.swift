@@ -20,6 +20,7 @@ private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
 public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
+    private var fnMonitor: Any?   // NSEvent global monitor for fn/Globe key
     private var bound: Bound?
 
     private struct Bound {
@@ -37,6 +38,20 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
     ) throws {
         stop()
         bound = Bound(onPress: onPress, onRelease: onRelease, isHeld: false)
+
+        // fn/Globe key can't be registered with Carbon — use NSEvent
+        // flagsChanged monitoring instead.
+        if shortcut.isFnKey {
+            log.info("PTT (flagsChanged) start: fn/Globe key")
+            fnMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+                guard let self else { return }
+                let fnDown = event.modifierFlags.contains(.function)
+                DispatchQueue.main.async {
+                    if fnDown { self.firePress() } else { self.fireRelease() }
+                }
+            }
+            return
+        }
 
         log.info("PTT (Carbon) start: key=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
 
@@ -109,6 +124,10 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         if let handler = eventHandler {
             RemoveEventHandler(handler)
             eventHandler = nil
+        }
+        if let m = fnMonitor {
+            NSEvent.removeMonitor(m)
+            fnMonitor = nil
         }
         bound = nil
     }
