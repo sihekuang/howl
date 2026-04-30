@@ -116,6 +116,9 @@ public final class EngineCoordinator {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
         composition.appState.engineState = .recording
         composition.overlay.show()
+        composition.cancelKeyMonitor.start(onCancel: { [weak self] in
+            Task { @MainActor in await self?.onCancel() }
+        })
         do {
             try await composition.engine.startCapture()
             let settings = (try? composition.settings.get()) ?? UserSettings()
@@ -132,6 +135,7 @@ public final class EngineCoordinator {
         } catch {
             log.error("onPress: FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("start: \(error)")
+            composition.cancelKeyMonitor.stop()
             composition.audioCapture.stop()
             try? await composition.engine.stopCapture()
             composition.appState.engineState = .idle
@@ -142,6 +146,7 @@ public final class EngineCoordinator {
     private func onRelease() async {
         log.info("onRelease: setting state=processing, stopping Swift capture, signaling engine EOI")
         composition.appState.engineState = .processing
+        composition.cancelKeyMonitor.stop()
         // Stop the mic FIRST so no more frames push into the engine.
         composition.audioCapture.stop()
         do {
@@ -153,6 +158,14 @@ public final class EngineCoordinator {
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
+    }
+
+    private func onCancel() async {
+        log.info("onCancel: Esc pressed during recording — cancelling capture")
+        composition.cancelKeyMonitor.stop()
+        composition.audioCapture.stop()
+        composition.engine.cancelCapture()
+        composition.appState.engineState = .processing
     }
 
     private func handle(event: EngineEvent) {
@@ -169,6 +182,7 @@ public final class EngineCoordinator {
             }
         case .result(let text):
             Task { @MainActor in
+                composition.cancelKeyMonitor.stop()
                 // If streaming already typed everything, skip clipboard
                 // paste; otherwise (non-streaming path) fall back to it.
                 if streamedSoFar.isEmpty, !text.isEmpty {
@@ -182,11 +196,17 @@ public final class EngineCoordinator {
                 composition.appState.engineState = .idle
                 composition.overlay.hide()
             }
+        case .cancelled:
+            streamedSoFar = ""
+            composition.cancelKeyMonitor.stop()
+            composition.appState.engineState = .idle
+            composition.overlay.hide()
         case .warning(let msg):
             setTransientWarning(msg)
         case .error(let msg):
             setTransientWarning(msg)
             streamedSoFar = ""
+            composition.cancelKeyMonitor.stop()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
