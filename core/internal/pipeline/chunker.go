@@ -9,7 +9,10 @@
 // FORCE_CUT_SCAN_MS.
 package pipeline
 
-import "github.com/voice-keyboard/core/internal/audio"
+import (
+	"github.com/voice-keyboard/core/internal/audio"
+	"github.com/voice-keyboard/core/internal/speaker"
+)
 
 const (
 	chunkerSampleRate = 16000
@@ -20,7 +23,9 @@ const (
 // ChunkerOpts holds the tunable thresholds. DefaultChunkerOpts returns
 // a sensible production set; tests pass smaller values.
 type ChunkerOpts struct {
-	VoiceThreshold float32
+	// VAD, when non-nil, replaces the RMS threshold for voiced/silence decisions.
+	VAD            speaker.VAD
+	VoiceThreshold float32 // used only when VAD is nil
 	SilenceHangMs  int
 	MaxChunkMs     int
 	ForceCutScanMs int
@@ -148,8 +153,12 @@ func (c *Chunker) forceCut() {
 }
 
 func (c *Chunker) processWindow(w []float32) {
-	rms := audio.RMS(w)
-	voiced := rms > c.opts.VoiceThreshold
+	var voiced bool
+	if c.opts.VAD != nil {
+		voiced = c.opts.VAD.IsVoiced(w)
+	} else {
+		voiced = audio.RMS(w) > c.opts.VoiceThreshold
+	}
 
 	switch c.state {
 	case stateIdle:

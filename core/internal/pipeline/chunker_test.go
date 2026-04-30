@@ -5,6 +5,50 @@ import (
 	"testing"
 )
 
+// vadFunc wraps a plain function as a speaker.VAD — avoids importing speaker in tests.
+type vadFunc func([]float32) bool
+
+func (f vadFunc) IsVoiced(s []float32) bool { return f(s) }
+
+func TestChunker_UsesVADWhenSet(t *testing.T) {
+	// fakeVAD returns voiced=true for first 8 calls (800ms), then false.
+	calls := 0
+	callsVoiced := 8
+	isVoiced := func(_ []float32) bool {
+		calls++
+		return calls <= callsVoiced
+	}
+
+	var emitted []ChunkEmission
+	opts := ChunkerOpts{
+		VAD:            vadFunc(isVoiced),
+		SilenceHangMs:  100,
+		MaxChunkMs:     12_000,
+		ForceCutScanMs: 100,
+	}
+	c := NewChunker(opts, func(e ChunkEmission) { emitted = append(emitted, e) })
+
+	// Push 16 windows of 1600 samples each at amplitude 0.1
+	// (RMS would pass default threshold — testing VAD overrides it).
+	window := make([]float32, 1600)
+	for i := range window {
+		window[i] = 0.1
+	}
+	for i := 0; i < 16; i++ {
+		c.Push(window)
+	}
+	c.Flush()
+
+	if len(emitted) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(emitted))
+	}
+	// 8 voiced windows + 1 silence window absorbed by hang = 9 * 1600 samples
+	wantSamples := 9 * 1600
+	if len(emitted[0].Samples) != wantSamples {
+		t.Errorf("chunk samples = %d, want %d", len(emitted[0].Samples), wantSamples)
+	}
+}
+
 // tone16k generates `ms` milliseconds of a 440Hz sine wave at 16kHz, peak amplitude `peak`.
 func tone16k(ms int, peak float32) []float32 {
 	n := chunkerSampleRate / 1000 * ms
