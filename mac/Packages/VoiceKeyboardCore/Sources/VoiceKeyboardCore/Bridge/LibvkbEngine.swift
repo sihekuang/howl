@@ -8,6 +8,8 @@ public enum LibvkbError: Error, Equatable {
     case startFailed(String)
     case pushFailed(String)
     case stopFailed(String)
+    case enrollFailed(String)
+    case enrollInvalidArgument(String)
 }
 
 /// Thin Swift wrapper over the libvkb C ABI.
@@ -93,6 +95,33 @@ public actor LibvkbEngine: CoreEngine {
 
     public nonisolated func shutdown() {
         vkb_destroy()
+    }
+
+    public func computeEnrollment(samples: [Float], sampleRate: Int, profileDir: String) async throws {
+        guard !samples.isEmpty else {
+            throw LibvkbError.enrollInvalidArgument("empty samples buffer")
+        }
+        guard sampleRate == 48000 else {
+            throw LibvkbError.enrollInvalidArgument("sampleRate must be 48000, got \(sampleRate)")
+        }
+
+        let rc: Int32 = samples.withUnsafeBufferPointer { sampleBuf in
+            profileDir.withCString { dirCStr in
+                guard let base = sampleBuf.baseAddress else { return 5 }
+                return vkb_enroll_compute(base, Int32(sampleBuf.count), Int32(sampleRate), dirCStr)
+            }
+        }
+
+        switch rc {
+        case 0: return
+        case 1: throw LibvkbError.notInitialized
+        case 5:
+            let msg = readLastError() ?? "vkb_enroll_compute: invalid argument"
+            throw LibvkbError.enrollInvalidArgument(msg)
+        default:
+            let msg = readLastError() ?? "vkb_enroll_compute rc=\(rc)"
+            throw LibvkbError.enrollFailed(msg)
+        }
     }
 
     private nonisolated func readLastError() -> String? {
