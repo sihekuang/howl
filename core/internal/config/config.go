@@ -12,6 +12,14 @@ type Config struct {
 	LLMModel                string   `json:"llm_model"`
 	LLMAPIKey               string   `json:"llm_api_key"`
 	CustomDict              []string `json:"custom_dict"`
+
+	// TSE (Target Speaker Extraction) fields. All optional; when
+	// TSEEnabled is false the pipeline runs without the TSE stage.
+	TSEEnabled         bool   `json:"tse_enabled"`
+	TSEProfileDir      string `json:"tse_profile_dir"`
+	TSEModelPath       string `json:"tse_model_path"`
+	SpeakerEncoderPath string `json:"speaker_encoder_path"`
+	ONNXLibPath        string `json:"onnx_lib_path"`
 }
 
 func WithDefaults(c *Config) {

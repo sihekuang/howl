@@ -73,3 +73,23 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 		t.Errorf("expected default LLMModel=claude-sonnet-4-6, got %q", empty.LLMModel)
 	}
 }
+
+func TestWithDefaults_TSEFieldsLeftEmpty(t *testing.T) {
+	c := Config{}
+	WithDefaults(&c)
+	if c.TSEEnabled {
+		t.Error("TSEEnabled default should be false")
+	}
+	if c.TSEProfileDir != "" {
+		t.Errorf("TSEProfileDir default should be empty, got %q", c.TSEProfileDir)
+	}
+	if c.TSEModelPath != "" {
+		t.Errorf("TSEModelPath default should be empty, got %q", c.TSEModelPath)
+	}
+	if c.SpeakerEncoderPath != "" {
+		t.Errorf("SpeakerEncoderPath default should be empty, got %q", c.SpeakerEncoderPath)
+	}
+	if c.ONNXLibPath != "" {
+		t.Errorf("ONNXLibPath default should be empty, got %q", c.ONNXLibPath)
+	}
+}
