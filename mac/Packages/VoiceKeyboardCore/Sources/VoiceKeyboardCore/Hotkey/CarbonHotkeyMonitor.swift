@@ -19,7 +19,11 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
     fileprivate var fnEventTap: CFMachPort?
     fileprivate var fnRunLoopSource: CFRunLoopSource?
     fileprivate var fnRequired: ModifierFlags = []
+    /// For fn+letter combos: the target key code to match on keyDown/keyUp.
+    /// -1 means fn-alone or fn+modifier mode (flagsChanged detection instead).
+    fileprivate var fnLetterKeyCode: Int64 = -1
     private var bound: Bound?
+    fileprivate var isHeld: Bool { bound?.isHeld == true }
 
     private struct Bound {
         let onPress: @Sendable () -> Void
@@ -42,15 +46,24 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         // isn't reliable for Globe key on macOS 15+.
         if shortcut.isFnBased {
             fnRequired = shortcut.modifiers
+            fnLetterKeyCode = shortcut.isFnLetterCombo ? Int64(shortcut.keyCode) : -1
             let reqRaw = fnRequired.rawValue
-            log.info("PTT (CGEventTap/fn) start: mods=\(String(format: "0x%X", reqRaw), privacy: .public)")
+            log.info("PTT (CGEventTap/fn) start: mods=0x\(String(format: "%X", reqRaw), privacy: .public) letterKC=\(self.fnLetterKeyCode, privacy: .public)")
 
-            let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+            let mask = CGEventMask(
+                (1 << CGEventType.flagsChanged.rawValue) |
+                (1 << CGEventType.keyDown.rawValue) |
+                (1 << CGEventType.keyUp.rawValue)
+            )
+            // fn+letter needs an active tap so we can swallow the keyDown
+            // (otherwise the letter gets typed in the focused app).
+            // fn-alone / fn+modifier can stay listenOnly — flagsChanged can't be swallowed.
+            let tapOptions: CGEventTapOptions = shortcut.isFnLetterCombo ? CGEventTapOptions(rawValue: 0)! : .listenOnly
             let selfPtr = Unmanaged.passUnretained(self).toOpaque()
             guard let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap,
+                tap: .cghidEventTap,
                 place: .headInsertEventTap,
-                options: .listenOnly,
+                options: tapOptions,
                 eventsOfInterest: mask,
                 callback: fnGlobeEventTapCallback,
                 userInfo: selfPtr
@@ -192,8 +205,32 @@ private func fnGlobeEventTapCallback(
         return Unmanaged.passUnretained(event)
     }
 
+    let letterKC = monitor.fnLetterKeyCode
+
+    // fn+letter mode: detect via keyDown/keyUp on the target key code.
+    if letterKC >= 0 {
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        if type == .keyDown && event.flags.contains(.maskSecondaryFn) && keyCode == letterKC {
+            log.info("CGEventTap keyDown fn+letter kc=\(keyCode, privacy: .public): press")
+            DispatchQueue.main.async { monitor.firePress() }
+            return nil  // swallow — prevent the letter from being typed
+        }
+        // Only swallow keyUp if PTT is currently held — otherwise regular
+        // typing of the same key (no fn) would lose its keyUp and appear stuck.
+        if type == .keyUp && keyCode == letterKC && monitor.isHeld {
+            log.info("CGEventTap keyUp fn+letter kc=\(keyCode, privacy: .public): release")
+            DispatchQueue.main.async { monitor.fireRelease() }
+            return nil  // swallow
+        }
+        return Unmanaged.passUnretained(event)
+    }
+
+    // fn-alone / fn+modifier mode: detect via flagsChanged.
+    guard type == .flagsChanged else { return Unmanaged.passUnretained(event) }
     let flags = event.flags
+    let rawFlags = flags.rawValue
     var allHeld = flags.contains(.maskSecondaryFn)
+    log.info("CGEventTap flagsChanged: raw=0x\(String(format: "%X", rawFlags), privacy: .public) maskSecondaryFn=\(allHeld, privacy: .public)")
     let req = monitor.fnRequired
     if req.contains(.shift)   { allHeld = allHeld && flags.contains(.maskShift) }
     if req.contains(.control) { allHeld = allHeld && flags.contains(.maskControl) }

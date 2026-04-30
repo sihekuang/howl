@@ -9,6 +9,7 @@ public final class EngineCoordinator {
     let composition: CompositionRoot
     private var pollTask: Task<Void, Never>?
     private var lastWarningTask: Task<Void, Never>?
+    private var hotkeyPaused = false
 
     public init(composition: CompositionRoot) {
         self.composition = composition
@@ -73,6 +74,10 @@ public final class EngineCoordinator {
     /// hotkey monitor too.
     public func reapplyConfig() async {
         await applyConfig()
+        guard !hotkeyPaused else {
+            log.info("reapplyConfig: hotkey paused for recording — skipping hotkey restart")
+            return
+        }
         do {
             let settings = try composition.settings.get()
             composition.hotkey.stop()
@@ -87,6 +92,41 @@ public final class EngineCoordinator {
             )
         } catch {
             setTransientWarning("reapply: \(error)")
+        }
+    }
+
+    /// Stop the hotkey monitor while the user records a new shortcut in
+    /// Settings. Any in-flight reapplyConfig calls will skip hotkey.start
+    /// while paused.
+    public func pauseHotkeyForRecording() {
+        hotkeyPaused = true
+        composition.hotkey.stop()
+        log.info("hotkey paused for recording")
+    }
+
+    /// Allow reapplyConfig to restart the hotkey. Called from save() so the
+    /// next reapplyConfig picks up the new shortcut.
+    public func clearHotkeyPause() {
+        hotkeyPaused = false
+    }
+
+    /// Restart the hotkey after a cancelled recording (no save was called).
+    public func resumeHotkeyAfterRecording() async {
+        hotkeyPaused = false
+        do {
+            let settings = try composition.settings.get()
+            try composition.hotkey.start(
+                settings.hotkey,
+                onPress: { [weak self] in
+                    Task { @MainActor in await self?.onPress() }
+                },
+                onRelease: { [weak self] in
+                    Task { @MainActor in await self?.onRelease() }
+                }
+            )
+            log.info("hotkey resumed after recording cancel")
+        } catch {
+            setTransientWarning("hotkey resume: \(error)")
         }
     }
 

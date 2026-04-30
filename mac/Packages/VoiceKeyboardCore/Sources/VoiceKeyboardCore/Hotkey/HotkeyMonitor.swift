@@ -27,15 +27,22 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
         keyCode == Self.kVK_Function && modifiers.isEmpty
     }
 
-    /// True for fn alone or fn+modifier combos — any shortcut that uses the
-    /// fn/Globe key as the base, monitored via NSEvent.flagsChanged rather
-    /// than Carbon RegisterEventHotKey (which doesn't support fn).
+    /// True for any shortcut that requires fn/Globe monitoring:
+    /// fn alone, fn+modifier, or fn+letter (keyCode != 63, modifiers has .fn).
     public var isFnBased: Bool {
-        keyCode == Self.kVK_Function
+        keyCode == Self.kVK_Function || modifiers.contains(.fn)
+    }
+
+    /// True for fn+letter combos (e.g. fn+U): a regular key held with fn.
+    public var isFnLetterCombo: Bool {
+        keyCode != Self.kVK_Function && modifiers.contains(.fn)
     }
 
     public var displayString: String {
         if isFnBased {
+            if isFnLetterCombo {
+                return "fn \(keyName)"
+            }
             var s = "fn"
             if modifiers.contains(.control) { s += "⌃" }
             if modifiers.contains(.option)  { s += "⌥" }
@@ -92,6 +99,8 @@ public struct ModifierFlags: OptionSet, Codable, Sendable {
     public static let control = ModifierFlags(rawValue: 1 << 1)
     public static let option  = ModifierFlags(rawValue: 1 << 2)
     public static let command = ModifierFlags(rawValue: 1 << 3)
+    /// fn/Globe key held as a modifier alongside a regular key (e.g. fn+U).
+    public static let fn      = ModifierFlags(rawValue: 1 << 4)
 }
 
 public protocol HotkeyMonitor: Sendable {

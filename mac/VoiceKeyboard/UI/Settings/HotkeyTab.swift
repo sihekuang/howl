@@ -9,6 +9,8 @@ private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
 struct HotkeyTab: View {
     @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
+    let onRecordingStart: () -> Void
+    let onRecordingEnd: () -> Void
     let conflictChecker: any SymbolicHotkeyChecker
     let permissions: any AccessibilityPermissions
     let audioCapture: any AudioCapture
@@ -62,6 +64,7 @@ struct HotkeyTab: View {
                     isRecording.toggle()
                     lastSeen = nil
                     log.info("HotkeyTab: record toggled isRecording=\(isRecording, privacy: .public)")
+                    if isRecording { onRecordingStart() } else { onRecordingEnd() }
                 } label: {
                     Text(isRecording ? "Press a shortcut… (Esc to cancel)" : settings.hotkey.displayString)
                         .font(.system(.body, design: .monospaced))
@@ -80,13 +83,14 @@ struct HotkeyTab: View {
                                 onRecord: { shortcut in
                                     log.info("HotkeyTab: recorded kc=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
                                     settings.hotkey = shortcut
-                                    onSave(settings)
+                                    onSave(settings)  // onSave calls reapplyConfig which restarts hotkey
                                     isRecording = false
                                     refreshConflicts()
                                 },
                                 onCancel: {
                                     log.info("HotkeyTab: record cancelled")
                                     isRecording = false
+                                    onRecordingEnd()  // restart hotkey (onSave not called on cancel)
                                 },
                                 onKeySeen: { description in
                                     lastSeen = description
@@ -285,9 +289,21 @@ final class KeyListenerView: NSView {
             return
         }
 
-        // fn is composing — swallow keyDown silently. flagsChanged already
-        // shows live feedback ("fn", "fn⌃", etc.) and commits on release.
-        if pendingFn { return }
+        // fn is composing — if a non-modifier key is pressed, commit fn+letter.
+        // If it's a pure modifier (shift, ctrl, etc.), fall through to flagsChanged.
+        if pendingFn {
+            let isModifierOnly = [kVK_Shift, kVK_RightShift, kVK_Control, kVK_RightControl,
+                                  kVK_Option, kVK_RightOption, kVK_Command, kVK_RightCommand,
+                                  kVK_CapsLock, kVK_Function].contains(Int(event.keyCode))
+            if !isModifierOnly {
+                pendingFn = false
+                fnSeen = false
+                let shortcut = VoiceKeyboardCore.KeyboardShortcut(keyCode: event.keyCode, modifiers: [.fn])
+                log.info("KeyListenerView fn+letter committed: kc=\(event.keyCode, privacy: .public)")
+                onRecord?(shortcut)
+            }
+            return
+        }
 
         onKeySeen?(desc)
 

@@ -12,6 +12,12 @@ struct SettingsView: View {
             HotkeyTab(
                 settings: $settings,
                 onSave: save,
+                onRecordingStart: {
+                    composition.coordinator.pauseHotkeyForRecording()
+                },
+                onRecordingEnd: {
+                    Task { @MainActor in await composition.coordinator.resumeHotkeyAfterRecording() }
+                },
                 conflictChecker: composition.conflictChecker,
                 permissions: composition.permissions,
                 audioCapture: composition.audioCapture
@@ -36,8 +42,9 @@ struct SettingsView: View {
 
     private func save(_ s: UserSettings) {
         try? composition.settings.set(s)
-        // Fix I1: reapply config so settings changes take effect immediately.
         Task { @MainActor in
+            // Clear the recording pause before reapplyConfig so it restarts the hotkey.
+            composition.coordinator.clearHotkeyPause()
             await composition.coordinator.reapplyConfig()
         }
     }
