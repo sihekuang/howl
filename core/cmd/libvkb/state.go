@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"github.com/voice-keyboard/core/internal/config"
@@ -116,8 +117,28 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		d = denoise.NewPassthrough()
 	}
 
-	// Audio capture is no longer the core's responsibility: the host
-	// (Swift app via vkb_push_audio, or vkb-cli via direct Go API)
-	// pushes frames in.
-	return pipeline.New(d, tr, dy, cleaner), nil
+	p := pipeline.New(d, tr, dy, cleaner)
+
+	if e.cfg.TSEEnabled {
+		tse, ref, tseErr := pipeline.LoadTSE(
+			e.cfg.TSEProfileDir,
+			e.cfg.TSEModelPath,
+			e.cfg.ONNXLibPath,
+		)
+		if tseErr != nil {
+			log.Printf("[vkb] buildPipeline: TSE load failed, continuing without TSE: %v", tseErr)
+			// Note: we deliberately don't fail the whole configure call.
+			// User keeps a working pipeline; the warning surfaces via
+			// vkb_last_error and the next configure attempt can fix it.
+			e.setLastError("tse: " + tseErr.Error())
+		} else if tse != nil {
+			p.TSE = tse
+			p.TSERef = ref
+			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
+		} else {
+			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)
+		}
+	}
+
+	return p, nil
 }
