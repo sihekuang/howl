@@ -22,8 +22,12 @@ if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]]; then
     echo "ERROR: python3 not found. Install Python 3.10+ and re-run."
     exit 1
   fi
-  python3 -m pip install --quiet torch asteroid-filterbanks soundfile numpy
-  python3 "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
+  VENV="$SCRIPT_DIR/core/build/.venv-tse"
+  if [[ ! -d "$VENV" ]]; then
+    python3 -m venv "$VENV"
+  fi
+  "$VENV/bin/pip" install --quiet torch asteroid-filterbanks soundfile numpy
+  "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
 # Build vkb-enroll
