@@ -107,3 +107,28 @@ func TestChunker_ShortPauseDoesNotSplit(t *testing.T) {
 		t.Errorf("chunk[0].Reason = %q, want %q", emitted[0].Reason, ReasonTail)
 	}
 }
+
+func TestChunker_ForceCutAtMaxChunk(t *testing.T) {
+	opts := ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  500,
+		MaxChunkMs:     2000, // small for test
+		ForceCutScanMs: 200,
+	}
+	var emitted []ChunkEmission
+	c := NewChunker(opts, func(e ChunkEmission) { emitted = append(emitted, e) })
+
+	c.Push(tone16k(5000, 0.3)) // 5s continuous tone, no silences
+	c.Flush()
+
+	// MaxChunkMs=2000 → expect 3 chunks (~2s, ~2s, ~1s tail).
+	if len(emitted) != 3 {
+		t.Fatalf("want 3 chunks, got %d", len(emitted))
+	}
+	if emitted[0].Reason != ReasonForceCut || emitted[1].Reason != ReasonForceCut {
+		t.Errorf("first two reasons = %q, %q; want both force-cut", emitted[0].Reason, emitted[1].Reason)
+	}
+	if emitted[2].Reason != ReasonTail {
+		t.Errorf("last reason = %q, want tail", emitted[2].Reason)
+	}
+}

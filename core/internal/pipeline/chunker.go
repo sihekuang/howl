@@ -104,6 +104,17 @@ func (c *Chunker) Flush() {
 	c.pending = nil
 }
 
+func (c *Chunker) chunkDurationMs() int {
+	return len(c.chunkBuf) * 1000 / chunkerSampleRate
+}
+
+// forceCut emits chunkBuf as a "force-cut" chunk; state stays voiced so the
+// next window continues into a new chunk. Task 5 will refine the cut point.
+func (c *Chunker) forceCut() {
+	c.emitChunk(ReasonForceCut)
+	c.silenceMs = 0
+}
+
 func (c *Chunker) processWindow(w []float32) {
 	rms := audio.RMS(w)
 	voiced := rms > c.opts.VoiceThreshold
@@ -125,7 +136,12 @@ func (c *Chunker) processWindow(w []float32) {
 				c.emitChunk(ReasonVADCut)
 				c.state = stateIdle
 				c.silenceMs = 0
+				return
 			}
+		}
+
+		if c.chunkDurationMs() >= c.opts.MaxChunkMs {
+			c.forceCut()
 		}
 	}
 }
