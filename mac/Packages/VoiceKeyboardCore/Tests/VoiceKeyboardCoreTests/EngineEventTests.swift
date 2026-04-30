@@ -44,6 +44,12 @@ struct EngineEventTests {
         #expect(msg == "capture failed")
     }
 
+    @Test func decodeCancelled() throws {
+        let json = #"{"kind":"cancelled"}"#
+        let event = try JSONDecoder().decode(EngineEvent.self, from: Data(json.utf8))
+        #expect(event == .cancelled)
+    }
+
     @Test func decodeUnknownKind() {
         let json = #"{"kind":"meow"}"#
         #expect(throws: DecodingError.self) {

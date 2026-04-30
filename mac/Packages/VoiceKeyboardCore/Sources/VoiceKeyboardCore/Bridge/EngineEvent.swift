@@ -7,6 +7,7 @@ public enum EngineEvent: Sendable, Decodable, Equatable {
     case result(text: String)
     case warning(msg: String)
     case error(msg: String)
+    case cancelled
 
     private enum CodingKeys: String, CodingKey {
         case kind, rms, text, msg
@@ -26,6 +27,8 @@ public enum EngineEvent: Sendable, Decodable, Equatable {
             self = .warning(msg: try c.decodeIfPresent(String.self, forKey: .msg) ?? "")
         case "error":
             self = .error(msg: try c.decodeIfPresent(String.self, forKey: .msg) ?? "")
+        case "cancelled":
+            self = .cancelled
         default:
             throw DecodingError.dataCorrupted(.init(
                 codingPath: c.codingPath,
