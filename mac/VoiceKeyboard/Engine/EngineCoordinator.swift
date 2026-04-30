@@ -275,9 +275,14 @@ public final class EngineCoordinator {
             llmProvider: settings.llmProvider,
             llmModel: settings.llmModel,
             llmAPIKey: key,
-            customDict: settings.customDict
+            customDict: settings.customDict,
+            tseEnabled: settings.tseEnabled && tseAssetsPresent(),
+            tseProfileDir: ModelPaths.voiceProfileDir.path,
+            tseModelPath: ModelPaths.tseModel.path,
+            speakerEncoderPath: ModelPaths.speakerEncoder.path,
+            onnxLibPath: ModelPaths.onnxLib.path
         )
-        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public)")
+        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")
@@ -285,5 +290,17 @@ public final class EngineCoordinator {
             log.error("applyConfig: configure FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("configure: \(error)")
         }
+    }
+
+    /// True when both TSE models and the enrollment profile exist on disk.
+    /// Guards us from telling the engine `tse_enabled=true` when assets are
+    /// missing — the engine would otherwise log a warning and disable TSE,
+    /// which is fine but misleading from a UI standpoint.
+    private func tseAssetsPresent() -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: ModelPaths.tseModel.path) &&
+               fm.fileExists(atPath: ModelPaths.speakerEncoder.path) &&
+               fm.fileExists(atPath: ModelPaths.voiceProfileDir.appendingPathComponent("speaker.json").path) &&
+               fm.fileExists(atPath: ModelPaths.voiceProfileDir.appendingPathComponent("enrollment.emb").path)
     }
 }
