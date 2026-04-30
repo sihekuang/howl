@@ -13,6 +13,14 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var llmAPIKey: String
     public var customDict: [String]
 
+    // TSE (Target Speaker Extraction) fields. Defaults are off/empty so
+    // existing call sites and the CLI continue to work unchanged.
+    public var tseEnabled: Bool
+    public var tseProfileDir: String
+    public var tseModelPath: String
+    public var speakerEncoderPath: String
+    public var onnxLibPath: String
+
     public init(
         whisperModelPath: String,
         whisperModelSize: String,
@@ -22,7 +30,12 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         llmProvider: String,
         llmModel: String,
         llmAPIKey: String,
-        customDict: [String]
+        customDict: [String],
+        tseEnabled: Bool = false,
+        tseProfileDir: String = "",
+        tseModelPath: String = "",
+        speakerEncoderPath: String = "",
+        onnxLibPath: String = ""
     ) {
         self.whisperModelPath = whisperModelPath
         self.whisperModelSize = whisperModelSize
@@ -33,6 +46,11 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.llmModel = llmModel
         self.llmAPIKey = llmAPIKey
         self.customDict = customDict
+        self.tseEnabled = tseEnabled
+        self.tseProfileDir = tseProfileDir
+        self.tseModelPath = tseModelPath
+        self.speakerEncoderPath = speakerEncoderPath
+        self.onnxLibPath = onnxLibPath
     }
 
     enum CodingKeys: String, CodingKey {
@@ -45,5 +63,10 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case llmModel = "llm_model"
         case llmAPIKey = "llm_api_key"
         case customDict = "custom_dict"
+        case tseEnabled = "tse_enabled"
+        case tseProfileDir = "tse_profile_dir"
+        case tseModelPath = "tse_model_path"
+        case speakerEncoderPath = "speaker_encoder_path"
+        case onnxLibPath = "onnx_lib_path"
     }
 }
