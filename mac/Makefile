@@ -1,7 +1,13 @@
 .PHONY: project build test clean run
 
+# Bootstrap per-machine signing config from sample if missing
+Local.xcconfig:
+	@cp Local.xcconfig.sample Local.xcconfig
+	@echo "Created mac/Local.xcconfig — edit it and set DEVELOPMENT_TEAM, then re-run."
+	@exit 1
+
 # Regenerate Xcode project from project.yml
-project:
+project: Local.xcconfig
 	xcodegen generate
 
 # Build the .app

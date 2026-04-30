@@ -1,0 +1,9 @@
+// Copy to Local.xcconfig and fill in your Apple Developer Team ID.
+// Find it at https://developer.apple.com/account → Membership Details,
+// or run: security find-identity -v -p codesigning
+//
+// Set CODE_SIGN_IDENTITY to "-" for ad-hoc signing (no Apple ID required,
+// but TCC permissions reset on every rebuild).
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
