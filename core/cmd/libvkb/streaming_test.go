@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 )
 
 // TestEvent_ChunkJSONEncoding pins the wire format Swift decodes —
@@ -35,4 +38,99 @@ func TestEvent_ChunkJSONEncoding(t *testing.T) {
 			t.Errorf("event %+v encoded = %s, want %s", c.ev, b, c.want)
 		}
 	}
+}
+
+// TestCaptureGoroutine_CancelEmitsCancelledNotError verifies that when
+// pipe.Run returns context.Canceled (e.g. because vkb_cancel_capture
+// called the engine's cancel func), the capture goroutine emits a
+// "cancelled" event rather than an "error" event.
+//
+// We can't call the C export directly from _test.go, so we mirror the
+// goroutine's error-handling shape with a fake pipe.Run.
+func TestCaptureGoroutine_CancelEmitsCancelledNotError(t *testing.T) {
+	events := make(chan event, 8)
+
+	// Simulate the relevant block from vkb_start_capture's goroutine.
+	emitForRunErr := func(err error) {
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				events <- event{Kind: "cancelled"}
+				return
+			}
+			events <- event{Kind: "error", Msg: err.Error()}
+			return
+		}
+		events <- event{Kind: "result"}
+	}
+
+	emitForRunErr(context.Canceled)
+	emitForRunErr(context.DeadlineExceeded)
+	emitForRunErr(errors.New("whisper boom"))
+	emitForRunErr(nil)
+
+	wantKinds := []string{"cancelled", "cancelled", "error", "result"}
+	for i, want := range wantKinds {
+		select {
+		case ev := <-events:
+			if ev.Kind != want {
+				t.Errorf("event[%d].Kind = %q, want %q", i, ev.Kind, want)
+			}
+		case <-time.After(50 * time.Millisecond):
+			t.Fatalf("event[%d] timeout", i)
+		}
+	}
+}
+
+// TestCancelHelper_DropsPushChAndCallsCancel verifies the engine state
+// transitions inside vkb_cancel_capture without going through the C ABI.
+func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
+	pushCh := make(chan []float32, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelCalled := false
+	wrappedCancel := func() {
+		cancelCalled = true
+		cancel()
+	}
+	e := &engine{events: make(chan event, 4)}
+	e.pushCh = pushCh
+	e.cancel = wrappedCancel
+
+	// Mirror the body of vkb_cancel_capture (minus the C return code).
+	e.mu.Lock()
+	c := e.cancel
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	e.cancel = nil
+	e.mu.Unlock()
+	if c != nil {
+		c()
+	}
+
+	if !cancelCalled {
+		t.Error("cancel func was not invoked")
+	}
+	if e.pushCh != nil {
+		t.Error("pushCh was not nilled")
+	}
+	if e.cancel != nil {
+		t.Error("cancel field was not nilled")
+	}
+	if ctx.Err() != context.Canceled {
+		t.Errorf("ctx not cancelled: %v", ctx.Err())
+	}
+	// Verify the "no active capture" no-op path is safe (idempotent).
+	e.mu.Lock()
+	c = e.cancel
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	e.cancel = nil
+	e.mu.Unlock()
+	if c != nil {
+		c()
+	}
+	// If we got here without panic, the no-op path is safe.
 }
