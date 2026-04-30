@@ -257,8 +257,7 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 // LoadTSE initialises a SpeakerGate and loads the enrollment embedding from profileDir.
 // Returns nil extractor + nil error when speaker.json is absent (TSE off).
 // Returns error only on partial state (json present but embedding missing/corrupt).
-// threshold is the cosine-similarity gate cutoff (0–1); pass 0 to use the default (0.45).
-func LoadTSE(profileDir, modelPath, onnxLibPath string, threshold float32) (speaker.TSEExtractor, []float32, error) {
+func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
 	_, err := speaker.LoadProfile(profileDir)
 	if os.IsNotExist(err) {
 		return nil, nil, nil // no enrollment — TSE off
@@ -277,10 +276,7 @@ func LoadTSE(profileDir, modelPath, onnxLibPath string, threshold float32) (spea
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
 		return nil, nil, fmt.Errorf("load tse: onnx runtime: %w", err)
 	}
-	if threshold <= 0 {
-		threshold = 0.45
-	}
-	tse, err := speaker.NewSpeakerGate(modelPath, threshold)
+	tse, err := speaker.NewSpeakerGate(modelPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load tse: model: %w", err)
 	}

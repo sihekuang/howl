@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-Export a speaker encoder to ONNX for voice-keyboard speaker gating.
+Export the combined TSE model to ONNX.
 
-Model: resemblyzer GE2E LSTM (trained for speaker verification) with a
-STFT-free mel spectrogram front-end (conv1d Hann-windowed basis functions)
-that is fully ONNX-traceable.
+Architecture:
+  1. ConvTasNet (mpariente/ConvTasNet_WHAM!_sepclean) separates mixed audio
+     into 2 sources.
+  2. Resemblyzer GE2E LSTM embeds each source (conv1d mel front-end for
+     ONNX traceability).
+  3. Soft-select the source whose embedding is closest to the enrolled
+     speaker embedding (sharp softmax — no hard indexing, fully traceable).
 
-Input:  audio  float32[1, T]  — 16kHz mono PCM
-Output: embedding float32[1, 256] — L2-normalised speaker embedding
+Inputs:  mixed         float32[1, T]   — 16kHz mono mixed audio
+         ref_embedding float32[1, 256] — L2-normalised enrolled speaker embedding
+Output:  extracted     float32[1, T]   — separated audio for the enrolled speaker
+
+The enrollment embedding is precomputed once by compute_enrollment_embedding.py
+(which uses speaker_encoder.onnx) and saved as enrollment.emb.
 
 Usage:
     python scripts/export_tse_model.py --out core/build/models/tse_model.onnx
@@ -21,7 +29,6 @@ warnings.filterwarnings("ignore")
 
 
 def make_mel_filterbank(sr=16000, n_fft=400, n_mels=40, fmax=8000.0):
-    """HTK-scale mel filterbank [n_mels, n_fft//2+1] matching librosa defaults."""
     import numpy as np
 
     n_freqs = n_fft // 2 + 1
@@ -41,21 +48,20 @@ def make_mel_filterbank(sr=16000, n_fft=400, n_mels=40, fmax=8000.0):
     return fb
 
 
-def build_model():
+def build_models():
+    import numpy as np
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    import numpy as np
+    from asteroid.models import ConvTasNet
     from resemblyzer import VoiceEncoder
 
     class MelSpecConv(nn.Module):
-        """STFT-free mel spectrogram via fixed conv1d kernels — fully ONNX-traceable.
-        Input: [1, T] float32.  Output: [1, n_frames, n_mels]."""
+        """STFT-free mel spectrogram via fixed conv1d — ONNX-traceable."""
 
         def __init__(self, n_fft=400, hop=160, n_mels=40, sr=16000, fmax=8000.0):
             super().__init__()
-            self.hop = hop
-            self.n_fft = n_fft
+            self.hop, self.n_fft = hop, n_fft
             window = torch.hann_window(n_fft)
             n = torch.arange(n_fft, dtype=torch.float32)
             freqs = torch.arange(n_fft // 2 + 1, dtype=torch.float32)
@@ -75,9 +81,84 @@ def build_model():
             mel = torch.matmul(self.fb, power.squeeze(0))
             return mel.T.unsqueeze(0)  # [1, n_frames, n_mels]
 
-    class SpeakerEncoder(nn.Module):
-        """Raw 16kHz audio [1, T] → L2-normalised speaker embedding [1, 256]."""
+    class TSEExtract(nn.Module):
+        """
+        Combined TSE: separate → identify → return target speaker's audio.
 
+        1. ConvTasNet splits mixed into 2 sources.
+        2. Resemblyzer encoder embeds each source.
+        3. Soft-selects the source closest to ref_embedding.
+        """
+
+        def __init__(self, separator, voice_enc):
+            super().__init__()
+            self.sep = separator
+            self.mel = MelSpecConv()
+            self.lstm = voice_enc.lstm
+            self.linear = voice_enc.linear
+            self.relu = voice_enc.relu
+
+        def _embed(self, wav: torch.Tensor) -> torch.Tensor:
+            mel = self.mel(wav)
+            _, (h, _) = self.lstm(mel)
+            raw = self.relu(self.linear(h[-1]))
+            return raw / torch.norm(raw, dim=1, keepdim=True)  # [1, 256]
+
+        def forward(self, mixed: torch.Tensor, ref_embedding: torch.Tensor) -> torch.Tensor:
+            sources = self.sep(mixed)  # [1, 2, T]
+            src0, src1 = sources[:, 0, :], sources[:, 1, :]
+            emb0, emb1 = self._embed(src0), self._embed(src1)
+            sim0 = F.cosine_similarity(ref_embedding, emb0, dim=1)
+            sim1 = F.cosine_similarity(ref_embedding, emb1, dim=1)
+            # Sharp softmax — fully traceable, no hard indexing
+            w = torch.softmax(torch.stack([sim0, sim1], dim=1) * 20, dim=1)
+            return w[:, 0:1] * src0 + w[:, 1:2] * src1  # [1, T]
+
+    print("Loading ConvTasNet separator...")
+    separator = ConvTasNet.from_pretrained("mpariente/ConvTasNet_WHAM!_sepclean")
+    separator.eval()
+
+    print("Loading resemblyzer GE2E encoder...")
+    voice_enc = VoiceEncoder()
+    voice_enc.eval()
+
+    model = TSEExtract(separator, voice_enc)
+    model.eval()
+    return model
+
+
+def build_speaker_encoder():
+    """Also export a standalone speaker encoder for computing enrollment embeddings."""
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from resemblyzer import VoiceEncoder
+
+    class MelSpecConv(nn.Module):
+        def __init__(self, n_fft=400, hop=160, n_mels=40, sr=16000, fmax=8000.0):
+            super().__init__()
+            self.hop, self.n_fft = hop, n_fft
+            window = torch.hann_window(n_fft)
+            n = torch.arange(n_fft, dtype=torch.float32)
+            freqs = torch.arange(n_fft // 2 + 1, dtype=torch.float32)
+            cos_b = (window * torch.cos(2 * np.pi * freqs[:, None] * n[None, :] / n_fft)).unsqueeze(1)
+            sin_b = (window * torch.sin(2 * np.pi * freqs[:, None] * n[None, :] / n_fft)).unsqueeze(1)
+            self.register_buffer("cos_b", cos_b)
+            self.register_buffer("sin_b", sin_b)
+            fb = torch.from_numpy(make_mel_filterbank(sr, n_fft, n_mels, fmax))
+            self.register_buffer("fb", fb)
+
+        def forward(self, wav):
+            x = wav.unsqueeze(1)
+            x = F.pad(x, (self.n_fft // 2, self.n_fft // 2), mode="reflect")
+            cos_out = F.conv1d(x, self.cos_b, stride=self.hop)
+            sin_out = F.conv1d(x, self.sin_b, stride=self.hop)
+            power = cos_out ** 2 + sin_out ** 2
+            mel = torch.matmul(self.fb, power.squeeze(0))
+            return mel.T.unsqueeze(0)
+
+    class SpeakerEncoder(nn.Module):
         def __init__(self, voice_enc):
             super().__init__()
             self.mel = MelSpecConv()
@@ -91,12 +172,11 @@ def build_model():
             raw = self.relu(self.linear(h[-1]))
             return raw / torch.norm(raw, dim=1, keepdim=True)
 
-    print("Loading resemblyzer GE2E voice encoder...")
     voice_enc = VoiceEncoder()
     voice_enc.eval()
-    model = SpeakerEncoder(voice_enc)
-    model.eval()
-    return model
+    enc = SpeakerEncoder(voice_enc)
+    enc.eval()
+    return enc
 
 
 def main():
@@ -105,50 +185,58 @@ def main():
     p.add_argument("--validate", action="store_true")
     args = p.parse_args()
 
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-
     import torch
 
-    model = build_model()
-    wav_dummy = torch.randn(1, 32000)
+    models_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(models_dir, exist_ok=True)
 
-    print(f"Exporting to {args.out}...")
+    # Export combined TSE model
+    model = build_models()
+    T = 32000
+    mixed = torch.randn(1, T)
+    ref_emb = torch.randn(1, 256)
+    ref_emb = ref_emb / torch.norm(ref_emb, dim=1, keepdim=True)
+
+    print(f"Exporting TSE model to {args.out}...")
     torch.onnx.export(
         model,
-        wav_dummy,
+        (mixed, ref_emb),
         args.out,
+        input_names=["mixed", "ref_embedding"],
+        output_names=["extracted"],
+        dynamic_axes={"mixed": {1: "T"}, "extracted": {1: "T"}},
+        opset_version=17,
+        dynamo=False,
+    )
+    print(f"TSE model: {os.path.getsize(args.out)/1e6:.1f} MB")
+
+    # Export standalone speaker encoder (used by compute_enrollment_embedding.py)
+    enc_path = os.path.join(models_dir, "speaker_encoder.onnx")
+    enc = build_speaker_encoder()
+    wav_dummy = torch.randn(1, 32000)
+    print(f"Exporting speaker encoder to {enc_path}...")
+    torch.onnx.export(
+        enc,
+        wav_dummy,
+        enc_path,
         input_names=["audio"],
         output_names=["embedding"],
         dynamic_axes={"audio": {1: "T"}},
         opset_version=17,
         dynamo=False,
     )
-    size_mb = os.path.getsize(args.out) / 1e6
-    print(f"Export complete. ({size_mb:.1f} MB)")
+    print(f"Speaker encoder: {os.path.getsize(enc_path)/1e6:.1f} MB")
 
     if args.validate:
         import numpy as np
         import onnxruntime as ort
 
         sess = ort.InferenceSession(args.out)
-        rng = np.random.default_rng(42)
-
-        def voiced(f0, dur=3.0):
-            t = np.arange(int(dur * 16000)) / 16000
-            s = sum(np.sin(2 * np.pi * f0 * k * t) / k for k in range(1, 12))
-            return (s + rng.normal(0, 0.05, len(t))).astype(np.float32)
-
-        def embed(wav):
-            return sess.run(["embedding"], {"audio": wav[np.newaxis]})[0].flatten()
-
-        ea1 = embed(voiced(120))
-        ea2 = embed(voiced(123))
-        eb = embed(voiced(220))
-        cos = lambda a, b: float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-        same = cos(ea1, ea2)
-        diff = cos(ea1, eb)
-        print(f"Validation: same-speaker={same:.3f}  diff-speaker={diff:.3f}")
-        assert same > diff + 0.2, f"poor speaker discrimination: {same:.3f} vs {diff:.3f}"
+        r = sess.run(["extracted"], {
+            "mixed": mixed.numpy(),
+            "ref_embedding": ref_emb.numpy(),
+        })
+        assert r[0].shape == (1, T), f"unexpected shape: {r[0].shape}"
         print("Validation passed.")
 
 

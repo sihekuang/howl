@@ -3,86 +3,75 @@ package speaker
 import (
 	"context"
 	"fmt"
-	"math"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// SpeakerGate implements TSEExtractor using the speaker encoder ONNX model.
-// It computes cosine similarity between the enrolled speaker embedding and
-// each incoming audio chunk's embedding; chunks below Threshold are zeroed.
+// SpeakerGate implements TSEExtractor using the combined tse_model.onnx.
 //
-// The ONNX model (tse_model.onnx) takes raw 16 kHz mono audio [1, T] and
-// returns an L2-normalised 256-dim speaker embedding [1, 256].
+// The model separates mixed audio into 2 sources (ConvTasNet), embeds each
+// source with the resemblyzer GE2E encoder, and soft-selects the source
+// closest to the enrolled speaker embedding. It returns actual extracted audio,
+// not a gated/zeroed copy.
+//
+// Inputs:  mixed         float32[1, T]   — 16 kHz mono audio
+//
+//	ref_embedding float32[1, 256] — L2-normalised enrolled speaker embedding
+//
+// Output:  extracted     float32[1, T]   — separated audio for enrolled speaker
 type SpeakerGate struct {
-	session   *ort.DynamicAdvancedSession
-	Threshold float32
+	session *ort.DynamicAdvancedSession
 }
 
 // NewSpeakerGate loads tse_model.onnx from modelPath.
 // Call InitONNXRuntime before this.
-// threshold is the cosine-similarity cutoff; chunks below it are silenced.
-// 0.45 works well for typical indoor conditions.
-func NewSpeakerGate(modelPath string, threshold float32) (*SpeakerGate, error) {
+func NewSpeakerGate(modelPath string) (*SpeakerGate, error) {
 	session, err := ort.NewDynamicAdvancedSession(
 		modelPath,
-		[]string{"audio"},
-		[]string{"embedding"},
+		[]string{"mixed", "ref_embedding"},
+		[]string{"extracted"},
 		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("speakergate: load %q: %w", modelPath, err)
 	}
-	return &SpeakerGate{session: session, Threshold: threshold}, nil
+	return &SpeakerGate{session: session}, nil
 }
 
-// Extract gates the chunk based on speaker identity.
-//   - mixed: 16 kHz mono PCM chunk to check.
+// Extract runs speaker extraction inference.
+//   - mixed: 16 kHz mono PCM chunk.
 //   - ref:   L2-normalised 256-dim enrollment embedding (from enrollment.emb).
 //
-// Returns mixed unchanged when cosine similarity ≥ Threshold, or zeros otherwise.
+// Returns the separated audio for the enrolled speaker.
 func (g *SpeakerGate) Extract(_ context.Context, mixed []float32, ref []float32) ([]float32, error) {
-	audioT, err := ort.NewTensor(ort.NewShape(1, int64(len(mixed))), mixed)
+	mixedT, err := ort.NewTensor(ort.NewShape(1, int64(len(mixed))), mixed)
 	if err != nil {
-		return nil, fmt.Errorf("speakergate: audio tensor: %w", err)
+		return nil, fmt.Errorf("speakergate: mixed tensor: %w", err)
 	}
-	defer audioT.Destroy()
+	defer mixedT.Destroy()
 
-	embT, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 256))
+	refT, err := ort.NewTensor(ort.NewShape(1, int64(len(ref))), ref)
 	if err != nil {
-		return nil, fmt.Errorf("speakergate: embedding tensor: %w", err)
+		return nil, fmt.Errorf("speakergate: ref tensor: %w", err)
 	}
-	defer embT.Destroy()
+	defer refT.Destroy()
 
-	if err := g.session.Run([]ort.Value{audioT}, []ort.Value{embT}); err != nil {
+	outT, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(len(mixed))))
+	if err != nil {
+		return nil, fmt.Errorf("speakergate: output tensor: %w", err)
+	}
+	defer outT.Destroy()
+
+	if err := g.session.Run([]ort.Value{mixedT, refT}, []ort.Value{outT}); err != nil {
 		return nil, fmt.Errorf("speakergate: inference: %w", err)
 	}
 
-	sim := cosineSimilarity(embT.GetData(), ref)
-	if sim >= g.Threshold {
-		return mixed, nil
-	}
-	return make([]float32, len(mixed)), nil
+	out := make([]float32, len(mixed))
+	copy(out, outT.GetData())
+	return out, nil
 }
 
 // Close releases the ONNX session.
 func (g *SpeakerGate) Close() error {
 	return g.session.Destroy()
-}
-
-func cosineSimilarity(a, b []float32) float32 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0
-	}
-	var dot, na, nb float64
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-	denom := math.Sqrt(na) * math.Sqrt(nb)
-	if denom == 0 {
-		return 0
-	}
-	return float32(dot / denom)
 }

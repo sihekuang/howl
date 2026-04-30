@@ -15,8 +15,8 @@ if [[ ! -f "$MODELS_DIR/silero_vad.onnx" ]]; then
   curl -L -o "$MODELS_DIR/silero_vad.onnx" "$SILERO_URL"
 fi
 
-# Build tse_model.onnx if missing (requires Python 3.12 + PyTorch + asteroid)
-if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]]; then
+# Build tse_model.onnx + speaker_encoder.onnx if missing
+if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]] || [[ ! -f "$MODELS_DIR/speaker_encoder.onnx" ]]; then
   echo "Building tse_model.onnx (requires Python 3.12, PyTorch, asteroid)..."
   PYTHON312="${PYTHON312:-$(command -v python3.12 2>/dev/null)}"
   if [[ -z "$PYTHON312" ]]; then
@@ -32,7 +32,7 @@ if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]]; then
   if [[ ! -d "$VENV" ]]; then
     "$PYTHON312" -m venv "$VENV"
   fi
-  "$VENV/bin/pip" install --quiet torch resemblyzer requests onnxscript onnxruntime soundfile numpy
+  "$VENV/bin/pip" install --quiet torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
   "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
@@ -53,7 +53,7 @@ ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
 echo "Computing speaker embedding..."
 VENV="$SCRIPT_DIR/core/build/.venv-tse"
 "$VENV/bin/python" "$SCRIPT_DIR/scripts/compute_enrollment_embedding.py" \
-  --model "$MODELS_DIR/tse_model.onnx" \
+  --model "$MODELS_DIR/speaker_encoder.onnx" \
   --wav   "$PROFILE_DIR/enrollment.wav" \
   --out   "$PROFILE_DIR/enrollment.emb"
 

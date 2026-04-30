@@ -119,7 +119,7 @@ func runPipe(args []string) int {
 		if onnxLib == "" {
 			onnxLib = "/opt/homebrew/lib/libonnxruntime.dylib"
 		}
-		tse, ref, err := pipeline.LoadTSE(profileDir, modelsDir+"/tse_model.onnx", onnxLib, 0)
+		tse, ref, err := pipeline.LoadTSE(profileDir, modelsDir+"/tse_model.onnx", onnxLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
 			return 1

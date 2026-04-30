@@ -5,7 +5,7 @@ and save it as enrollment.emb (raw float32 little-endian binary, 256 values).
 
 Usage:
     python scripts/compute_enrollment_embedding.py \
-        --model  core/build/models/tse_model.onnx \
+        --model  core/build/models/speaker_encoder.onnx \
         --wav    ~/.config/voice-keyboard/enrollment.wav \
         --out    ~/.config/voice-keyboard/enrollment.emb
 """
