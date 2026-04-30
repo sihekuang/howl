@@ -168,6 +168,14 @@ final class KeyListenerView: NSView {
     var onCancel: (() -> Void)?
     var onKeySeen: ((String) -> Void)?
 
+    // Local NSEvent monitor for fn/Globe key. flagsChanged is not reliably
+    // delivered to SwiftUI-hosted NSViews through the responder chain, so
+    // we install a local monitor that fires before sendEvent dispatches.
+    private var localFlagsMonitor: Any?
+    // Debounce: suppress repeated fires while fn is held (flagsChanged fires
+    // again for every other modifier that changes while fn is held).
+    private var fnSeen = false
+
     override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
@@ -176,6 +184,11 @@ final class KeyListenerView: NSView {
             log.error("KeyListenerView: viewDidMoveToWindow but no window")
             return
         }
+        localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+            return event
+        }
+        log.info("KeyListenerView: installed local flagsChanged monitor")
         // Defer until the run loop ticks once — the SwiftUI hosting view
         // sometimes installs its own first responder right after we mount.
         DispatchQueue.main.async { [weak self] in
@@ -185,13 +198,37 @@ final class KeyListenerView: NSView {
         }
     }
 
-    override func flagsChanged(with event: NSEvent) {
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { removeLocalMonitor() }
+    }
+
+    deinit { removeLocalMonitor() }
+
+    private func removeLocalMonitor() {
+        if let m = localFlagsMonitor {
+            NSEvent.removeMonitor(m)
+            localFlagsMonitor = nil
+            fnSeen = false
+            log.info("KeyListenerView: removed local flagsChanged monitor")
+        }
+    }
+
+    // Called by both the local monitor and the responder-chain override so
+    // that whichever fires first wins and the other is a no-op.
+    private func handleFlagsChanged(_ event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard flags.contains(.function) else { return }
+        guard flags.contains(.function) else { fnSeen = false; return }
+        guard !fnSeen else { return }
+        fnSeen = true
         let desc = "fn (keyCode=\(event.keyCode))"
-        log.info("KeyListenerView.flagsChanged fn detected: \(desc, privacy: .public)")
+        log.info("KeyListenerView fn detected: \(desc, privacy: .public)")
         onKeySeen?(desc)
         onRecord?(VoiceKeyboardCore.KeyboardShortcut(keyCode: VoiceKeyboardCore.KeyboardShortcut.kVK_Function, modifiers: []))
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        handleFlagsChanged(event)
     }
 
     override func keyDown(with event: NSEvent) {
