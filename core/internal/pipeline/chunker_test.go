@@ -68,3 +68,39 @@ func TestChunker_ShortSpeech_FlushEmitsTail(t *testing.T) {
 		t.Errorf("expected reason %q, got %q", ReasonTail, got[0].Reason)
 	}
 }
+
+func TestChunker_DropsPreSpeechSilence(t *testing.T) {
+	var emitted []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		emitted = append(emitted, e)
+	})
+
+	c.Push(silence16k(1000)) // 1s pre-speech silence
+	c.Push(tone16k(800, 0.3))
+	c.Flush()
+
+	if len(emitted) != 1 {
+		t.Fatalf("want 1 chunk, got %d", len(emitted))
+	}
+	// Chunk should be ~800ms (the tone), NOT 1800ms (silence + tone).
+	durMs := len(emitted[0].Samples) * 1000 / chunkerSampleRate
+	if durMs > 900 || durMs < 700 {
+		t.Errorf("chunk duration = %dms, want ~800ms (silence dropped)", durMs)
+	}
+}
+
+func TestChunker_ShortPauseDoesNotSplit(t *testing.T) {
+	var emitted []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		emitted = append(emitted, e)
+	})
+
+	c.Push(tone16k(800, 0.3))
+	c.Push(silence16k(200)) // 200ms pause < SILENCE_HANG_MS (500ms)
+	c.Push(tone16k(800, 0.3))
+	c.Flush()
+
+	if len(emitted) != 1 {
+		t.Fatalf("want 1 chunk (pause too short to split), got %d", len(emitted))
+	}
+}
