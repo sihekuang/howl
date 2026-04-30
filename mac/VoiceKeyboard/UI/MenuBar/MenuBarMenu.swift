@@ -1,10 +1,12 @@
 import SwiftUI
+import AppKit
 import VoiceKeyboardCore
 
 struct MenuBarMenu: View {
     let appState: AppState
     let hotkey: String
     let quit: () -> Void
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -14,12 +16,9 @@ struct MenuBarMenu: View {
                 Text(warning).font(.caption).foregroundStyle(.orange)
             }
             Divider()
-            // SettingsLink is the SwiftUI-native way to open the Settings
-            // scene from inside a MenuBarExtra; using NSApp.sendAction on
-            // the private "showSettingsWindow:" selector triggers a runtime
-            // warning on macOS 14+.
-            SettingsLink {
-                Text("Settings…")
+            Button("Settings…") {
+                openWindow(id: "settings")
+                NSApp.activate(ignoringOtherApps: true)
             }
             .keyboardShortcut(",", modifiers: [.command])
             Divider()

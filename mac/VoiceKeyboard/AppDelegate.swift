@@ -23,19 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task { @MainActor in
             await self.evaluateSetup()
-            self.openPlaygroundWindow()
+            self.openSettingsWindow()
         }
     }
 
-    private func openPlaygroundWindow() {
-        // Open the standalone Playground window at launch so the user
-        // has an immediate test surface without digging through Settings.
-        // The Window scene with id "playground" is declared in
-        // VoiceKeyboardApp; SwiftUI realizes it on first reference.
-        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "playground" }) {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+    private func openSettingsWindow() {
+        // Bring the main Settings window to the front at launch and
+        // float it above other apps so the user always has a test
+        // surface visible.
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) else {
+            log.error("openSettingsWindow: window 'settings' not realized yet")
+            return
         }
+        window.level = .floating
+        window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func evaluateSetup() async {

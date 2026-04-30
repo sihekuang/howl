@@ -25,9 +25,13 @@ struct VoiceKeyboardApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
+        // Use a regular Window (not Settings { }) so we can openWindow
+        // it programmatically at launch and apply NSWindow customisations
+        // like .floating level.
+        Window("Voice Keyboard", id: "settings") {
             SettingsView(composition: appDelegate.composition)
         }
+        .keyboardShortcut(",", modifiers: [.command])
 
         Window("Welcome", id: "first-run") {
             FirstRunWindow(composition: appDelegate.composition) {
@@ -36,20 +40,6 @@ struct VoiceKeyboardApp: App {
             }
         }
         .windowResizability(.contentSize)
-
-        Window("Playground", id: "playground") {
-            PlaygroundTab(
-                appState: appDelegate.composition.appState,
-                hotkey: shortcutForLaunch(appDelegate),
-                coordinator: appDelegate.composition.coordinator
-            )
-            .frame(minWidth: 520, minHeight: 360)
-        }
-        .windowResizability(.contentSize)
     }
 
-    private func shortcutForLaunch(_ delegate: AppDelegate) -> VoiceKeyboardCore.KeyboardShortcut {
-        let s = (try? delegate.composition.settings.get()) ?? UserSettings()
-        return s.hotkey
-    }
 }
