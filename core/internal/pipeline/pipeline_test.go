@@ -30,6 +30,32 @@ func (f *fakeCleaner) Clean(ctx context.Context, _ string, _ []string) (string, 
 	return f.out, f.err
 }
 
+// fakeStreamingCleaner exposes both Clean and CleanStream so tests can
+// assert pipeline picks the streaming path when LLMDeltaCallback is set
+// and the cleaner satisfies StreamingCleaner.
+type fakeStreamingCleaner struct {
+	out         string
+	err         error
+	chunks      []string // pre-recorded deltas to emit through onDelta
+	cleanCalls  int
+	streamCalls int
+}
+
+func (f *fakeStreamingCleaner) Clean(ctx context.Context, _ string, _ []string) (string, error) {
+	f.cleanCalls++
+	return f.out, f.err
+}
+
+func (f *fakeStreamingCleaner) CleanStream(
+	ctx context.Context, _ string, _ []string, onDelta func(string),
+) (string, error) {
+	f.streamCalls++
+	for _, c := range f.chunks {
+		onDelta(c)
+	}
+	return f.out, f.err
+}
+
 // pushChan returns a closed channel pre-loaded with `samples` chunked
 // into `chunkSize`-sample frames, simulating Swift pushing frames in.
 func pushChan(samples []float32, chunkSize int) <-chan []float32 {
@@ -127,6 +153,95 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 		if l < 0.4 || l > 0.6 {
 			t.Errorf("level[%d] = %f, expected ~0.5", i, l)
 		}
+	}
+}
+
+func TestPipeline_StreamingCleanerEmitsDeltas(t *testing.T) {
+	src := make([]float32, 24000)
+	d := denoise.NewPassthrough()
+	dy := dict.NewFuzzy(nil, 1)
+	tr := &fakeTranscriber{out: "hello world"}
+	cl := &fakeStreamingCleaner{
+		out:    "Hello world.",
+		chunks: []string{"Hello", " world", "."},
+	}
+
+	p := New(d, tr, dy, cl)
+	var got []string
+	var mu sync.Mutex
+	p.LLMDeltaCallback = func(s string) {
+		mu.Lock()
+		got = append(got, s)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if cl.streamCalls != 1 {
+		t.Errorf("expected CleanStream invoked once, got %d (clean=%d)", cl.streamCalls, cl.cleanCalls)
+	}
+	if cl.cleanCalls != 0 {
+		t.Errorf("non-streaming Clean should not be called when streaming path is active, got %d", cl.cleanCalls)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 3 || got[0] != "Hello" || got[1] != " world" || got[2] != "." {
+		t.Errorf("delta sequence wrong: %v", got)
+	}
+	if res.Cleaned != "Hello world." {
+		t.Errorf("Cleaned = %q", res.Cleaned)
+	}
+}
+
+func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
+	src := make([]float32, 24000)
+	d := denoise.NewPassthrough()
+	dy := dict.NewFuzzy(nil, 1)
+	tr := &fakeTranscriber{out: "hello"}
+	cl := &fakeStreamingCleaner{
+		out:    "Hello.",
+		chunks: []string{"should", "not", "fire"},
+	}
+
+	p := New(d, tr, dy, cl)
+	// LLMDeltaCallback intentionally nil — pipeline should pick the
+	// non-streaming Clean path even though cleaner can stream.
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := p.Run(ctx, pushChan(src, denoise.FrameSize)); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if cl.streamCalls != 0 {
+		t.Errorf("CleanStream should NOT be called when LLMDeltaCallback is nil; got %d", cl.streamCalls)
+	}
+	if cl.cleanCalls != 1 {
+		t.Errorf("expected one Clean call, got %d", cl.cleanCalls)
+	}
+}
+
+func TestPipeline_NonStreamingCleanerWithCallbackStillUsesClean(t *testing.T) {
+	src := make([]float32, 24000)
+	d := denoise.NewPassthrough()
+	dy := dict.NewFuzzy(nil, 1)
+	tr := &fakeTranscriber{out: "hello"}
+	cl := &fakeCleaner{out: "Hello."} // does NOT implement StreamingCleaner
+
+	p := New(d, tr, dy, cl)
+	deltaCalls := 0
+	p.LLMDeltaCallback = func(_ string) { deltaCalls++ }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := p.Run(ctx, pushChan(src, denoise.FrameSize)); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if deltaCalls != 0 {
+		t.Errorf("non-streaming cleaner should never invoke delta callback; got %d", deltaCalls)
 	}
 }
 
