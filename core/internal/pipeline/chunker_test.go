@@ -139,6 +139,49 @@ func TestChunker_ShortPauseDoesNotSplit(t *testing.T) {
 	}
 }
 
+func TestChunker_TrailingSilenceAbsorbedIntoChunk(t *testing.T) {
+	var emitted []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		emitted = append(emitted, e)
+	})
+
+	c.Push(tone16k(800, 0.3))
+	c.Push(silence16k(400)) // < SILENCE_HANG_MS, gets absorbed
+	c.Flush()
+
+	if len(emitted) != 1 {
+		t.Fatalf("want 1 chunk, got %d", len(emitted))
+	}
+	durMs := len(emitted[0].Samples) * 1000 / chunkerSampleRate
+	// Want full 1200ms (tone + trailing silence absorbed).
+	if durMs < 1100 || durMs > 1300 {
+		t.Errorf("chunk duration = %dms, want ~1200ms (silence absorbed)", durMs)
+	}
+}
+
+func TestChunker_EmptyInput(t *testing.T) {
+	var emitted []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		emitted = append(emitted, e)
+	})
+	c.Flush()
+	if len(emitted) != 0 {
+		t.Errorf("want 0 chunks, got %d", len(emitted))
+	}
+}
+
+func TestChunker_SilenceOnly(t *testing.T) {
+	var emitted []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		emitted = append(emitted, e)
+	})
+	c.Push(silence16k(5000))
+	c.Flush()
+	if len(emitted) != 0 {
+		t.Errorf("want 0 chunks, got %d", len(emitted))
+	}
+}
+
 func TestChunker_ForceCutAtMaxChunk(t *testing.T) {
 	opts := ChunkerOpts{
 		VoiceThreshold: 0.005,
