@@ -41,18 +41,20 @@ type engine struct {
 
 // event is the JSON payload emitted via vkb_poll_event. Kind values:
 //
-//	"chunk"   — streaming LLM text delta in Text; emitted repeatedly
-//	            during cleanup so the host can type at the cursor as
-//	            tokens arrive. The full cleaned text is the
-//	            concatenation of every chunk in order.
-//	"result"  — final cleaned text in Text. When chunks were streamed,
-//	            this is just a state-transition marker (text equals
-//	            the concatenation of chunks).
-//	"warning" — non-fatal degradation (e.g. LLM failure); Msg has detail,
-//	            and a "result" event with the dict-corrected fallback
-//	            text is emitted alongside it
-//	"error"   — terminal failure for this capture cycle; Msg has detail
-//	"level"   — periodic RMS level (~30 Hz), RMS field carries the value
+//	"chunk"     — streaming LLM text delta in Text; emitted repeatedly
+//	              during cleanup so the host can type at the cursor as
+//	              tokens arrive. The full cleaned text is the
+//	              concatenation of every chunk in order.
+//	"result"    — final cleaned text in Text. When chunks were streamed,
+//	              this is just a state-transition marker (text equals
+//	              the concatenation of chunks).
+//	"warning"   — non-fatal degradation (e.g. LLM failure); Msg has detail,
+//	              and a "result" event with the dict-corrected fallback
+//	              text is emitted alongside it
+//	"error"     — terminal failure for this capture cycle; Msg has detail
+//	"cancelled" — the in-flight pipeline was cancelled by vkb_cancel_capture
+//	              before producing a result. No "result" event follows.
+//	"level"     — periodic RMS level (~30 Hz), RMS field carries the value
 type event struct {
 	Kind string  `json:"kind"`
 	RMS  float32 `json:"rms,omitempty"`

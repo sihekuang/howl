@@ -8,6 +8,7 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -192,6 +193,11 @@ func vkb_start_capture() C.int {
 		// blocking here — by the time we're stopping, level emission
 		// is over and the channel will drain quickly.
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("[vkb] capture goroutine: pipeline cancelled")
+				e.events <- event{Kind: "cancelled"}
+				return
+			}
 			log.Printf("[vkb] capture goroutine: pipe.Run error: %v", err)
 			e.events <- event{Kind: "error", Msg: err.Error()}
 			return
@@ -290,6 +296,32 @@ func vkb_stop_capture() C.int {
 	}
 	if e.cancel != nil {
 		e.cancel = nil
+	}
+	return 0
+}
+
+// vkb_cancel_capture aborts the in-flight capture, drops any buffered
+// audio, and emits a "cancelled" event instead of a "result". Idempotent:
+// safe to call when no capture is active. Returns 1 if the engine is
+// not initialized, 0 otherwise.
+//
+//export vkb_cancel_capture
+func vkb_cancel_capture() C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	e.mu.Lock()
+	cancel := e.cancel
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	e.cancel = nil
+	e.mu.Unlock()
+	if cancel != nil {
+		log.Printf("[vkb] vkb_cancel_capture: cancelling in-flight pipeline")
+		cancel()
 	}
 	return 0
 }
