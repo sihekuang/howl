@@ -27,7 +27,10 @@ public final class CompositionRoot {
         self.settings = UserDefaultsSettingsStore()
         self.secrets = KeychainSecretStore()
         self.permissions = DefaultAccessibilityPermissions()
-        self.cancelKeyMonitor = CancelKeyMonitor()
+        let eng = self.engine
+        self.cancelKeyMonitor = CancelKeyMonitor {
+            eng.cancelCapture()
+        }
     }
 
     public lazy var overlay = RecordingOverlayController(appState: appState)

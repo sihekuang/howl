@@ -1,34 +1,22 @@
-import Foundation
 import Testing
+import Foundation
 @testable import VoiceKeyboardCore
+
+private final class Counter: @unchecked Sendable { var value = 0 }
 
 @Suite("CancelKeyMonitor")
 struct CancelKeyMonitorTests {
-    @Test func stopBeforeStartIsIdempotent() {
-        let monitor = CancelKeyMonitor()
-        monitor.stop() // must not crash
-        monitor.stop()
+    @Test func callsHandlerOnEsc() {
+        let c = Counter()
+        let mon = CancelKeyMonitor(onCancel: { c.value += 1 })
+        mon.simulateEscForTest()
+        #expect(c.value == 1)
     }
 
-    @Test func startAndStopDoNotCrash() {
-        let monitor = CancelKeyMonitor()
-        monitor.start(onCancel: {})
-        monitor.stop()
-    }
-
-    @Test func multipleStopsAreIdempotent() {
-        let monitor = CancelKeyMonitor()
-        monitor.start(onCancel: {})
-        monitor.stop()
-        monitor.stop()
-        monitor.stop()
-    }
-
-    @Test func startReplacesExistingMonitor() {
-        let monitor = CancelKeyMonitor()
-        monitor.start(onCancel: {})
-        // Second start should remove the first monitor and install a new one.
-        monitor.start(onCancel: {})
-        monitor.stop()
+    @Test func ignoresOtherKeys() {
+        let c = Counter()
+        let mon = CancelKeyMonitor(onCancel: { c.value += 1 })
+        mon.simulateKeyForTest(keyCode: 0)
+        #expect(c.value == 0)
     }
 }

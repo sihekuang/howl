@@ -105,6 +105,7 @@ public final class EngineCoordinator {
     /// Go core already finished and just dropped its result event,
     /// this lets the user keep going.
     public func manualReset() async {
+        composition.cancelKeyMonitor.stop()
         composition.audioCapture.stop()
         try? await composition.engine.stopCapture()
         composition.appState.engineState = .idle
@@ -116,11 +117,9 @@ public final class EngineCoordinator {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
         composition.appState.engineState = .recording
         composition.overlay.show()
-        composition.cancelKeyMonitor.start(onCancel: { [weak self] in
-            Task { @MainActor in await self?.onCancel() }
-        })
         do {
             try await composition.engine.startCapture()
+            composition.cancelKeyMonitor.start()
             let settings = (try? composition.settings.get()) ?? UserSettings()
             // Push frames synchronously from the audio thread.
             // pushAudio is nonisolated and the underlying C ABI is
@@ -158,14 +157,6 @@ public final class EngineCoordinator {
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
-    }
-
-    private func onCancel() async {
-        log.info("onCancel: Esc pressed during recording — cancelling capture")
-        composition.cancelKeyMonitor.stop()
-        composition.audioCapture.stop()
-        composition.engine.cancelCapture()
-        composition.appState.engineState = .processing
     }
 
     private func handle(event: EngineEvent) {
