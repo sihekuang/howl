@@ -2,6 +2,8 @@ import SwiftUI
 import VoiceKeyboardCore
 
 struct ProviderTab: View {
+    @Binding var settings: UserSettings
+    let onSave: (UserSettings) -> Void
     let secrets: any SecretStore
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyStatus: String = ""
@@ -14,10 +16,22 @@ struct ProviderTab: View {
         case bad(String)       // human-readable failure
     }
 
+    // Anthropic model IDs surfaced in the picker. Keep the most capable
+    // first, fastest last. Add new ones at the top.
+    private let llmModels: [(id: String, label: String)] = [
+        ("claude-opus-4-7",    "Opus 4.7 — most capable"),
+        ("claude-sonnet-4-6",  "Sonnet 4.6 — balanced (default)"),
+        ("claude-haiku-4-5",   "Haiku 4.5 — fastest, cheapest"),
+    ]
+
     var body: some View {
         Form {
             LabeledContent("Provider") { Text("Anthropic") }
-            LabeledContent("Model") { Text("claude-sonnet-4-6").font(.system(.body, design: .monospaced)) }
+            Picker("Model", selection: $settings.llmModel) {
+                ForEach(llmModels, id: \.id) { m in
+                    Text(m.label).tag(m.id)
+                }
+            }
             SecureField("API Key", text: $apiKeyDraft, prompt: Text("sk-ant-..."))
             HStack {
                 Button("Save") {
@@ -42,6 +56,7 @@ struct ProviderTab: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onChange(of: settings) { _, new in onSave(new) }
         .task {
             apiKeyDraft = (try? secrets.getAPIKey()) ?? ""
         }

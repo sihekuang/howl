@@ -17,7 +17,7 @@ struct SettingsView: View {
                 audioCapture: composition.audioCapture
             )
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
-            ProviderTab(secrets: composition.secrets)
+            ProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
                 .tabItem { Label("Provider", systemImage: "key") }
             DictionaryTab(settings: $settings, onSave: save)
                 .tabItem { Label("Dictionary", systemImage: "books.vertical") }
