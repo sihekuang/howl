@@ -183,11 +183,23 @@ public final class EngineCoordinator {
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
         let key = (try? composition.secrets.getAPIKey()) ?? ""
-        let modelPath = ModelPaths.whisperModel(size: settings.whisperModelSize).path
+        var resolvedSize = settings.whisperModelSize
+        var modelPath = ModelPaths.whisperModel(size: resolvedSize).path
+        // If the configured size isn't downloaded but another size is,
+        // fall back to that — better than failing configure entirely.
+        if !FileManager.default.fileExists(atPath: modelPath) {
+            for fallback in ["tiny", "base", "small", "medium", "large"]
+            where FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: fallback).path) {
+                resolvedSize = fallback
+                modelPath = ModelPaths.whisperModel(size: fallback).path
+                log.info("applyConfig: configured model '\(settings.whisperModelSize, privacy: .public)' missing; falling back to '\(fallback, privacy: .public)'")
+                break
+            }
+        }
         let dfModelPath = "" // engine falls back to passthrough if empty
         let cfg = EngineConfig(
             whisperModelPath: modelPath,
-            whisperModelSize: settings.whisperModelSize,
+            whisperModelSize: resolvedSize,
             language: settings.language,
             disableNoiseSuppression: settings.disableNoiseSuppression,
             deepFilterModelPath: dfModelPath,
