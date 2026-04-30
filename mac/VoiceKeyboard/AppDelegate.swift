@@ -1,7 +1,10 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import os
 import VoiceKeyboardCore
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Setup")
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -29,10 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = (try? composition.settings.get()) ?? UserSettings()
         let modelPath = ModelPaths.whisperModel(size: settings.whisperModelSize)
         let modelOK = FileManager.default.fileExists(atPath: modelPath.path)
-        let keyOK = (try? composition.secrets.getAPIKey()) != nil
+        let storedKey = (try? composition.secrets.getAPIKey()) ?? ""
+        let keyOK = !storedKey.isEmpty
 
-        // Update the gate badge for UI surfaces (menu bar, first-run
-        // wizard) so the user knows what's still missing.
+        log.info("evaluateSetup: accessOK=\(accessOK, privacy: .public) modelOK=\(modelOK, privacy: .public) modelPath=\(modelPath.path, privacy: .public) keyOK=\(keyOK, privacy: .public) keyLen=\(storedKey.count, privacy: .public)")
+
         if !accessOK {
             composition.appState.setupGate = .needsAccessibility
         } else if !modelOK {
@@ -43,18 +47,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             composition.appState.setupGate = .ready
         }
 
-        // Always start the coordinator if the engine has what it
-        // needs to configure (model + API key). Accessibility is only
-        // required for paste injection and the (now Carbon-based)
-        // hotkey doesn't need it either, so we shouldn't gate engine
-        // initialization on it. Without this, clicking Record in the
-        // Playground throws `notInitialized` immediately because the
-        // pipeline is never configured.
-        if modelOK && keyOK {
-            await composition.coordinator.start()
-        }
+        // Always start the coordinator. coordinator.start ->
+        // applyConfig will surface a transient warning if the engine
+        // can't configure (e.g. missing API key, missing model file).
+        // Better to attempt and fail loud than to silently never
+        // configure — which leaves Record clicks throwing
+        // `notInitialized` with no UI hint.
+        log.info("evaluateSetup: calling coordinator.start()")
+        await composition.coordinator.start()
+        log.info("evaluateSetup: coordinator.start() returned")
 
-        // First-run wizard for anything still missing.
         if !accessOK || !modelOK || !keyOK {
             openFirstRunWindow()
         }

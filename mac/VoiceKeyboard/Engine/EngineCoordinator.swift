@@ -196,9 +196,12 @@ public final class EngineCoordinator {
             llmAPIKey: key,
             customDict: settings.customDict
         )
+        log.info("applyConfig: model=\(modelPath, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
+            log.info("applyConfig: engine configured cleanly")
         } catch {
+            log.error("applyConfig: configure FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("configure: \(error)")
         }
     }
