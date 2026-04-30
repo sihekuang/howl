@@ -273,7 +273,8 @@ final class KeyListenerView: NSView {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let desc = "kc=\(event.keyCode) flags=0x\(String(flags.rawValue, radix: 16))"
         log.info("KeyListenerView.keyDown \(desc, privacy: .public)")
-        onKeySeen?(desc)
+        // onKeySeen is called later, after early-return guards, so the
+        // "Last key seen" hint doesn't fire for suppressed events.
 
         // Escape cancels — ignore fn if it's held alongside.
         let nonFnFlags = flags.subtracting(.function)
@@ -284,9 +285,16 @@ final class KeyListenerView: NSView {
             return
         }
 
-        // While fn is composing, ignore regular key presses.
-        // fn+modifier combos are committed on fn-release via handleFlagsChanged.
-        if pendingFn { return }
+        // While fn is composing, regular key presses are ignored.
+        // Only fn+modifier combos (Shift, Ctrl, Opt, Cmd) are recorded;
+        // those come through flagsChanged, not keyDown. Show a hint so
+        // the user knows why their fn+letter press didn't register.
+        if pendingFn {
+            onKeySeen?("fn + modifier only (⌃⌥⇧⌘) — or release fn to record fn alone")
+            return
+        }
+
+        onKeySeen?(desc)
 
         guard !nonFnFlags.isEmpty else {
             log.debug("KeyListenerView: ignoring — no modifiers")
