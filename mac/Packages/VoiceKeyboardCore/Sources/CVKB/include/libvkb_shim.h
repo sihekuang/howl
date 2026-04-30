@@ -11,6 +11,7 @@
 int vkb_init(void);
 int vkb_configure(char* json);
 int vkb_start_capture(void);
+int vkb_push_audio(const float* samples, int count);
 int vkb_stop_capture(void);
 char* vkb_poll_event(void);
 void vkb_destroy(void);

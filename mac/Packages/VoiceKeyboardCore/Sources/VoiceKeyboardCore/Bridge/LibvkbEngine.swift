@@ -6,6 +6,7 @@ public enum LibvkbError: Error, Equatable {
     case busy            // configure during in-flight capture, etc.
     case configureFailed(String)
     case startFailed(String)
+    case pushFailed(String)
     case stopFailed(String)
 }
 
@@ -49,6 +50,21 @@ public actor LibvkbEngine: CoreEngine {
         default:
             let msg = readLastError() ?? "vkb_start_capture rc=\(rc)"
             throw LibvkbError.startFailed(msg)
+        }
+    }
+
+    public func pushAudio(_ samples: [Float]) async throws {
+        guard !samples.isEmpty else { return }
+        let rc = samples.withUnsafeBufferPointer { buf -> Int32 in
+            guard let base = buf.baseAddress else { return 0 }
+            return vkb_push_audio(base, Int32(buf.count))
+        }
+        switch rc {
+        case 0: return
+        case 1: throw LibvkbError.notInitialized
+        case 2: throw LibvkbError.pushFailed("no capture in flight")
+        default:
+            throw LibvkbError.pushFailed("vkb_push_audio rc=\(rc)")
         }
     }
 

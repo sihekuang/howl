@@ -74,43 +74,19 @@ func runPipe(args []string) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
+	p := pipeline.New(d, w, dy, cleaner)
+
 	if *persistent {
-		// Persistent mode: MalgoCapture supports re-Start after Stop
-		// (the cleanup goroutine nils all fields, so the "already started"
-		// guard in Start passes cleanly on subsequent iterations). We reuse
-		// the same *MalgoCapture, *WhisperCpp, and *Anthropic across
-		// iterations so the Whisper model stays warm — eliminating the
-		// ~1-2 s cold-load cost from every utterance.
+		// Persistent mode: reuse the same MalgoCapture across cycles so
+		// the Whisper model stays warm. MalgoCapture supports re-Start
+		// after Stop (its cleanup goroutine nils all fields).
 		cap := audio.NewMalgoCapture()
-		p := pipeline.New(cap, d, w, dy, cleaner)
-		return runPipeLoop(ctx, p)
+		return runPipeLoop(ctx, p, cap)
 	}
 
 	if *live {
 		cap := audio.NewMalgoCapture()
-		p := pipeline.New(cap, d, w, dy, cleaner)
-
-		stopCh := make(chan struct{})
-		fmt.Fprintln(os.Stderr, "Speak; press Enter to stop.")
-		go func() {
-			bufio.NewReader(os.Stdin).ReadString('\n')
-			close(stopCh)
-		}()
-
-		res, err := p.Run(ctx, stopCh)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "pipeline: %v\n", err)
-			return 1
-		}
-		if res.LLMError != nil {
-			fmt.Fprintf(os.Stderr, "[LLM warning: %v]\n", res.LLMError)
-		}
-		if res.Cleaned == "" {
-			fmt.Fprintln(os.Stderr, "(empty result)")
-			return 0
-		}
-		fmt.Println(res.Cleaned)
-		return 0
+		return runOneLive(ctx, p, cap)
 	}
 
 	// File mode.
@@ -129,18 +105,13 @@ func runPipe(args []string) int {
 		return 1
 	}
 	cap := audio.NewFakeCapture(pcm, denoise.FrameSize)
-	p := pipeline.New(cap, d, w, dy, cleaner)
-
-	stopCh := make(chan struct{})
-	// File mode: FakeCapture closes its frames channel naturally when
-	// the buffer is exhausted, which terminates the pipeline. stopCh
-	// only fires on ctx cancel.
-	go func() {
-		<-ctx.Done()
-		close(stopCh)
-	}()
-
-	res, err := p.Run(ctx, stopCh)
+	frames, err := cap.Start(ctx, 48000)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fake capture: %v\n", err)
+		return 1
+	}
+	res, err := p.Run(ctx, frames)
+	_ = cap.Stop()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pipeline: %v\n", err)
 		return 1
@@ -156,59 +127,79 @@ func runPipe(args []string) int {
 	return 0
 }
 
-// runPipeLoop implements --persistent mode: loops capture+transcribe+clean
-// cycles in a single process so the Whisper model (held by the pipeline's
-// transcriber) stays warm across utterances. Per-utterance latency drops
-// from ~2 s (cold model load) to ~200 ms (inference only).
+// runOneLive starts the mic, runs one capture+transcribe+clean cycle,
+// stops the mic on Enter or ctx cancel.
+func runOneLive(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCapture) int {
+	frames, err := cap.Start(ctx, 48000)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "capture: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(os.Stderr, "Speak; press Enter to stop.")
+	go func() {
+		bufio.NewReader(os.Stdin).ReadString('\n') //nolint:errcheck
+		_ = cap.Stop()
+	}()
+
+	res, err := p.Run(ctx, frames)
+	_ = cap.Stop() // idempotent; ensures we exit cleanly on ctx cancel too
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pipeline: %v\n", err)
+		return 1
+	}
+	if res.LLMError != nil {
+		fmt.Fprintf(os.Stderr, "[LLM warning: %v]\n", res.LLMError)
+	}
+	if res.Cleaned == "" {
+		fmt.Fprintln(os.Stderr, "(empty result)")
+		return 0
+	}
+	fmt.Println(res.Cleaned)
+	return 0
+}
+
+// runPipeLoop: --persistent mode. Reuses the same pipeline (and thus
+// the warm Whisper model) across utterances.
 //
-// The loop reads from stdin:
 //   - First Enter: start capture.
 //   - Second Enter: stop capture, run inference, print result.
-//   - EOF (Ctrl-D) at either prompt: exit cleanly with code 0.
+//   - EOF (Ctrl-D) at either prompt: exit cleanly.
 //   - Ctrl-C (ctx cancel): exits after the current pipeline.Run returns.
-func runPipeLoop(ctx context.Context, p *pipeline.Pipeline) int {
+func runPipeLoop(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCapture) int {
 	fmt.Fprintln(os.Stderr, "Persistent mode. Press Enter to start a capture; Enter again to stop. Ctrl-C or Ctrl-D to exit.")
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		// Check for context cancellation before prompting.
 		select {
 		case <-ctx.Done():
 			return 0
 		default:
 		}
 
-		// Wait for "start" Enter.
 		fmt.Fprint(os.Stderr, "[ready] press Enter to record... ")
 		if _, err := reader.ReadString('\n'); err != nil {
-			// EOF (Ctrl-D) or read error — exit cleanly.
 			fmt.Fprintln(os.Stderr, "")
 			return 0
 		}
 
+		frames, err := cap.Start(ctx, 48000)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "capture: %v\n", err)
+			continue
+		}
+
 		fmt.Fprintln(os.Stderr, "Speak; press Enter to stop.")
-		stopCh := make(chan struct{})
 		go func() {
-			reader.ReadString('\n') //nolint:errcheck // EOF also closes stopCh correctly
-			select {
-			case <-stopCh:
-			default:
-				close(stopCh)
-			}
+			reader.ReadString('\n') //nolint:errcheck
+			_ = cap.Stop()
 		}()
 
-		res, err := p.Run(ctx, stopCh)
-		// Drain stopCh if the goroutine hasn't closed it yet (e.g. pipeline
-		// ended due to ctx cancel before the user pressed Enter).
-		select {
-		case <-stopCh:
-		default:
-			close(stopCh)
-		}
+		res, err := p.Run(ctx, frames)
+		_ = cap.Stop()
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "pipeline error: %v\n", err)
 			if ctx.Err() != nil {
-				return 0 // context cancelled (Ctrl-C) — exit
+				return 0
 			}
 			continue
 		}

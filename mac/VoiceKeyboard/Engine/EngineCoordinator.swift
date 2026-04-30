@@ -100,10 +100,12 @@ public final class EngineCoordinator {
         await onRelease()
     }
 
-    /// Force-reset the UI state. Best-effort: also nudges the engine to
-    /// stop any in-flight capture. If the Go core already finished and
-    /// just dropped its result event, this lets the user keep going.
+    /// Force-reset the UI state. Best-effort: also stops mic capture
+    /// and nudges the engine to stop any in-flight capture. If the
+    /// Go core already finished and just dropped its result event,
+    /// this lets the user keep going.
     public func manualReset() async {
+        composition.audioCapture.stop()
         try? await composition.engine.stopCapture()
         composition.appState.engineState = .idle
         composition.overlay.hide()
@@ -111,24 +113,37 @@ public final class EngineCoordinator {
     }
 
     private func onPress() async {
-        log.info("onPress: setting state=recording, calling engine.startCapture()")
+        log.info("onPress: setting state=recording, starting Swift capture and engine")
         composition.appState.engineState = .recording
         composition.overlay.show()
         do {
             try await composition.engine.startCapture()
-            log.info("onPress: engine.startCapture() returned cleanly")
+            // Start AVAudioEngine and feed frames into the engine.
+            // The closure may run on the audio thread; hop to a Task
+            // so the actor-isolated engine.pushAudio call is safe.
+            let engine = composition.engine
+            try composition.audioCapture.start { samples in
+                Task.detached {
+                    try? await engine.pushAudio(samples)
+                }
+            }
+            log.info("onPress: capture + engine running")
             composition.appState.transientWarning = nil
         } catch {
-            log.error("onPress: engine.startCapture() FAILED: \(String(describing: error), privacy: .public)")
+            log.error("onPress: FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("start: \(error)")
+            composition.audioCapture.stop()
+            try? await composition.engine.stopCapture()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
     }
 
     private func onRelease() async {
-        log.info("onRelease: setting state=processing, calling engine.stopCapture()")
+        log.info("onRelease: setting state=processing, stopping Swift capture, signaling engine EOI")
         composition.appState.engineState = .processing
+        // Stop the mic FIRST so no more frames push into the engine.
+        composition.audioCapture.stop()
         do {
             try await composition.engine.stopCapture()
             log.info("onRelease: engine.stopCapture() returned cleanly; awaiting result event")

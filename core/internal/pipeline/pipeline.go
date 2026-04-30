@@ -1,9 +1,12 @@
 // Package pipeline orchestrates one PTT cycle:
 //
-//	capture → denoise → decimate → transcribe → dict → clean → Result
+//	frames (pushed) → denoise → decimate → transcribe → dict → clean → Result
 //
-// Pipeline.Run is single-shot: each PTT press calls Run once. Lifecycle
-// (start/stop) is owned by the composition root, not the pipeline.
+// Capture is no longer the pipeline's concern: callers push 48 kHz mono
+// Float32 frames in over a channel and close it when done. Pipeline.Run
+// drains, denoises in 480-sample frames, then runs the rest of the
+// stages and returns Result. Lifecycle (where audio comes from) belongs
+// to the composition root.
 package pipeline
 
 import (
@@ -31,7 +34,6 @@ type Result struct {
 }
 
 type Pipeline struct {
-	capture     audio.Capture
 	denoiser    denoise.Denoiser
 	transcriber transcribe.Transcriber
 	dict        dict.Dictionary
@@ -43,35 +45,29 @@ type Pipeline struct {
 	LevelCallback func(float32)
 }
 
-func New(c audio.Capture, d denoise.Denoiser, t transcribe.Transcriber,
+func New(d denoise.Denoiser, t transcribe.Transcriber,
 	dy dict.Dictionary, cl llm.Cleaner) *Pipeline {
 	return &Pipeline{
-		capture: c, denoiser: d, transcriber: t, dict: dy, cleaner: cl,
+		denoiser: d, transcriber: t, dict: dy, cleaner: cl,
 	}
 }
 
-// Run starts capture, accumulates audio until stopCh is closed (or ctx
-// is cancelled), then runs the full processing pipeline and returns the
-// Result. Capture is stopped on the way out.
-func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, error) {
+// Run drains `frames` (Float32 mono @ 48 kHz) until the channel closes
+// or ctx is cancelled, denoising as we go, then runs the remaining
+// stages and returns Result. The caller owns the lifetime of `frames`
+// — close the channel to signal end-of-input.
+func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, error) {
 	if p == nil {
 		return Result{}, errors.New("pipeline: nil receiver")
 	}
 
-	log.Printf("[vkb] pipeline.Run: starting capture sr=%d", inputSampleRate)
+	log.Printf("[vkb] pipeline.Run: starting; awaiting frames")
 	tStart := time.Now()
-	frames, err := p.capture.Start(ctx, inputSampleRate)
-	if err != nil {
-		log.Printf("[vkb] pipeline.Run: capture.Start FAILED: %v", err)
-		return Result{}, err
-	}
 	defer func() {
-		log.Printf("[vkb] pipeline.Run: stopping capture")
-		p.capture.Stop()
 		log.Printf("[vkb] pipeline.Run: total elapsed %v", time.Since(tStart))
 	}()
 
-	denoised := captureAndDenoise(ctx, frames, stopCh, p.denoiser, p.LevelCallback)
+	denoised := drainAndDenoise(ctx, frames, p.denoiser, p.LevelCallback)
 	log.Printf("[vkb] pipeline.Run: capture+denoise done samples=%d (%.2fs of audio)", len(denoised), float64(len(denoised))/float64(inputSampleRate))
 
 	dec := resample.NewDecimate3()
@@ -105,9 +101,7 @@ func (p *Pipeline) Run(ctx context.Context, stopCh <-chan struct{}) (Result, err
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
-// Close releases resources held by the transcriber and denoiser. It is
-// safe to call multiple times. Capture is started/stopped per Run, so
-// it is not closed here.
+// Close releases resources held by the transcriber and denoiser.
 func (p *Pipeline) Close() error {
 	if p == nil {
 		return nil
@@ -126,14 +120,12 @@ func (p *Pipeline) Close() error {
 	return firstErr
 }
 
-// captureAndDenoise drains the capture channel, denoising in 480-sample
-// (10ms) frames. Stops draining when stopCh fires, ctx is cancelled, or
-// frames closes. Any partial trailing samples are zero-padded into a
-// final frame so we don't lose the tail of an utterance.
-func captureAndDenoise(
+// drainAndDenoise reads frames from `frames` until the channel closes
+// or ctx is cancelled, denoising in 480-sample (10 ms) chunks. Any
+// trailing partial frame is zero-padded so we don't drop the tail.
+func drainAndDenoise(
 	ctx context.Context,
 	frames <-chan []float32,
-	stopCh <-chan struct{},
 	d denoise.Denoiser,
 	levelCb func(float32),
 ) []float32 {
@@ -144,7 +136,6 @@ func captureAndDenoise(
 		for len(pending) >= denoise.FrameSize {
 			frame := pending[:denoise.FrameSize]
 			out = append(out, d.Process(frame)...)
-			// Compute RMS over the post-denoise frame
 			denoisedTail := out[len(out)-denoise.FrameSize:]
 			if levelCb != nil {
 				levelCb(audio.RMS(denoisedTail))
@@ -161,8 +152,6 @@ func captureAndDenoise(
 			}
 			pending = append(pending, f...)
 			flush()
-		case <-stopCh:
-			goto finalize
 		case <-ctx.Done():
 			goto finalize
 		}

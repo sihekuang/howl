@@ -5,6 +5,7 @@ import VoiceKeyboardCore
 public final class CompositionRoot {
     public let appState: AppState
     public let engine: any CoreEngine
+    public let audioCapture: any AudioCapture
     public let hotkey: any HotkeyMonitor
     public let injector: any TextInjector
     public let settings: any SettingsStore
@@ -14,6 +15,7 @@ public final class CompositionRoot {
     public init() {
         self.appState = AppState()
         self.engine = LibvkbEngine()
+        self.audioCapture = AVAudioInputCapture()
         self.hotkey = CGEventHotkeyMonitor()
         self.injector = ClipboardPasteInjector(
             pasteboard: SystemPasteboard(),

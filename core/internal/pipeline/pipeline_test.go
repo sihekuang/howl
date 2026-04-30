@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/denoise"
 	"github.com/voice-keyboard/core/internal/dict"
 )
@@ -31,23 +30,34 @@ func (f *fakeCleaner) Clean(ctx context.Context, _ string, _ []string) (string, 
 	return f.out, f.err
 }
 
+// pushChan returns a closed channel pre-loaded with `samples` chunked
+// into `chunkSize`-sample frames, simulating Swift pushing frames in.
+func pushChan(samples []float32, chunkSize int) <-chan []float32 {
+	ch := make(chan []float32, len(samples)/chunkSize+2)
+	for i := 0; i < len(samples); i += chunkSize {
+		end := i + chunkSize
+		if end > len(samples) {
+			end = len(samples)
+		}
+		ch <- samples[i:end]
+	}
+	close(ch)
+	return ch
+}
+
 func TestPipeline_HappyPath(t *testing.T) {
 	src := make([]float32, 24000)
-	cap := audio.NewFakeCapture(src, denoise.FrameSize)
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "hello webrt world"}
 	cl := &fakeCleaner{out: "Hello, WebRTC world."}
 
-	p := New(cap, d, tr, dy, cl)
+	p := New(d, tr, dy, cl)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stop := make(chan struct{})
-	close(stop)
-
-	res, err := p.Run(ctx, stop)
+	res, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -61,19 +71,16 @@ func TestPipeline_HappyPath(t *testing.T) {
 
 func TestPipeline_LLMErrorFallsBackToDictText(t *testing.T) {
 	src := make([]float32, 24000)
-	cap := audio.NewFakeCapture(src, denoise.FrameSize)
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "use webrt please"}
 	cl := &fakeCleaner{err: errors.New("network down")}
 
-	p := New(cap, d, tr, dy, cl)
+	p := New(d, tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stop := make(chan struct{})
-	close(stop)
 
-	res, err := p.Run(ctx, stop)
+	res, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -90,13 +97,12 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 	for i := range src {
 		src[i] = 0.5
 	}
-	cap := audio.NewFakeCapture(src, denoise.FrameSize)
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hi"}
 	cl := &fakeCleaner{out: "hi"}
 
-	p := New(cap, d, tr, dy, cl)
+	p := New(d, tr, dy, cl)
 	var levels []float32
 	var levelMu sync.Mutex
 	p.LevelCallback = func(rms float32) {
@@ -107,9 +113,8 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stop := make(chan struct{})
 
-	_, err := p.Run(ctx, stop)
+	_, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -127,19 +132,16 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 
 func TestPipeline_EmptyTranscriptionYieldsEmptyResult(t *testing.T) {
 	src := make([]float32, 240) // half a frame
-	cap := audio.NewFakeCapture(src, denoise.FrameSize)
 	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: ""}
 	cl := &fakeCleaner{out: "should not be called"}
 
-	p := New(cap, d, tr, dy, cl)
+	p := New(d, tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stop := make(chan struct{})
-	close(stop)
 
-	res, err := p.Run(ctx, stop)
+	res, err := p.Run(ctx, pushChan(src, denoise.FrameSize))
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

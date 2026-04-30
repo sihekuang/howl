@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/denoise"
 	"github.com/voice-keyboard/core/internal/dict"
@@ -13,12 +12,25 @@ import (
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
+// pushBufferFrames bounds the audio push channel. At 48kHz/480-sample
+// frames that's ~10ms per frame, so 200 frames = ~2s of audio. If the
+// pipeline ever falls behind, vkb_push_audio drops with a warning event
+// rather than blocking the audio thread.
+const pushBufferFrames = 200
+
 type engine struct {
 	mu       sync.Mutex
 	cfg      config.Config
 	pipeline *pipeline.Pipeline
 
-	stopCh chan struct{}
+	// pushCh is the audio frame channel for the current capture cycle.
+	// vkb_push_audio sends into it; the pipeline goroutine drains it;
+	// vkb_stop_capture closes it to signal end-of-input. Nil between
+	// cycles. dropCount counts vkb_push_audio invocations that found a
+	// full channel (used to issue at most one warning event per cycle).
+	pushCh    chan []float32
+	dropCount int
+
 	cancel context.CancelFunc
 
 	events chan event
@@ -93,6 +105,8 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		d = denoise.NewPassthrough()
 	}
 
-	cap := audio.NewMalgoCapture()
-	return pipeline.New(cap, d, tr, dy, cleaner), nil
+	// Audio capture is no longer the core's responsibility: the host
+	// (Swift app via vkb_push_audio, or vkb-cli via direct Go API)
+	// pushes frames in.
+	return pipeline.New(d, tr, dy, cleaner), nil
 }

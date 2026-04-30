@@ -13,6 +13,14 @@ let package = Package(
             path: "Sources/CVKB",
             publicHeadersPath: "include"
         ),
+        // Stubs for vkb_* C ABI symbols, used ONLY by `swift test`.
+        // The Xcode app build does NOT depend on this target, so the
+        // app's link picks up the real symbols from libvkb.dylib
+        // (-lvkb) instead of being shadowed by zero-returning stubs.
+        .target(
+            name: "CVKBStubs",
+            path: "Sources/CVKBStubs"
+        ),
         .target(
             name: "VoiceKeyboardCore",
             dependencies: ["CVKB"],
@@ -20,7 +28,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VoiceKeyboardCoreTests",
-            dependencies: ["VoiceKeyboardCore"],
+            dependencies: ["VoiceKeyboardCore", "CVKBStubs"],
             path: "Tests/VoiceKeyboardCoreTests"
         ),
     ]

@@ -7,6 +7,7 @@ import Testing
 final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     var configureCalls: [EngineConfig] = []
     var startCalls = 0
+    var pushSampleCount = 0
     var stopCalls = 0
     var nextEvent: EngineEvent?
 
@@ -14,6 +15,9 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
         configureCalls.append(config)
     }
     func startCapture() async throws { startCalls += 1 }
+    func pushAudio(_ samples: [Float]) async throws {
+        pushSampleCount += samples.count
+    }
     func stopCapture() async throws { stopCalls += 1 }
     func pollEvent() -> EngineEvent? { defer { nextEvent = nil }; return nextEvent }
     func lastError() -> String? { nil }

@@ -69,7 +69,7 @@ func vkb_configure(jsonC *C.char) C.int {
 	config.WithDefaults(&cfg)
 
 	e.mu.Lock()
-	if e.stopCh != nil {
+	if e.pushCh != nil {
 		e.mu.Unlock()
 		e.setLastError("vkb_configure: cannot reconfigure while a capture is in flight")
 		return 4
@@ -93,10 +93,13 @@ func vkb_configure(jsonC *C.char) C.int {
 	return 0
 }
 
-// vkb_start_capture begins a single-utterance capture cycle. Returns 0
-// on successful start, 1 if the engine is not initialized or has no
-// pipeline configured, and 2 if a capture is already in flight. Result
-// or error events are delivered asynchronously via vkb_poll_event.
+// vkb_start_capture begins a single-utterance push-driven capture
+// cycle. Returns 0 on successful start, 1 if the engine is not
+// initialized or has no pipeline configured, and 2 if a capture is
+// already in flight. The host (Swift app or vkb-cli) is then expected
+// to feed Float32 mono 48 kHz frames via vkb_push_audio and call
+// vkb_stop_capture to signal end-of-input. Result/error events are
+// delivered asynchronously via vkb_poll_event.
 //
 //export vkb_start_capture
 func vkb_start_capture() C.int {
@@ -111,16 +114,17 @@ func vkb_start_capture() C.int {
 		log.Printf("[vkb] vkb_start_capture: REJECTED — pipeline is nil")
 		return 1
 	}
-	if e.stopCh != nil {
+	if e.pushCh != nil {
 		e.mu.Unlock()
 		log.Printf("[vkb] vkb_start_capture: REJECTED — capture already in flight")
 		return 2
 	}
-	stopCh := make(chan struct{})
+	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancel := context.WithCancel(context.Background())
 	pipe := e.pipeline
-	e.stopCh = stopCh
+	e.pushCh = pushCh
 	e.cancel = cancel
+	e.dropCount = 0
 	e.mu.Unlock()
 
 	// Throttle level events to ~30Hz, taking max RMS in each window.
@@ -160,16 +164,18 @@ func vkb_start_capture() C.int {
 				e.events <- event{Kind: "error", Msg: msg}
 			}
 			e.mu.Lock()
-			e.stopCh = nil
+			e.pushCh = nil
 			e.cancel = nil
+			drops := e.dropCount
+			e.dropCount = 0
 			e.mu.Unlock()
-			log.Printf("[vkb] capture goroutine: exited")
+			log.Printf("[vkb] capture goroutine: exited (drops=%d)", drops)
 		}()
-		res, err := pipe.Run(ctx, stopCh)
-		// Terminal events (error/warning/result) MUST NOT be dropped: if
-		// they are, Swift sits forever in `processing`. We accept blocking
-		// here — by the time we're stopping, level emission is over and
-		// the channel will drain quickly.
+		res, err := pipe.Run(ctx, pushCh)
+		// Terminal events (error/warning/result) MUST NOT be dropped:
+		// if they are, Swift sits forever in `processing`. We accept
+		// blocking here — by the time we're stopping, level emission
+		// is over and the channel will drain quickly.
 		if err != nil {
 			log.Printf("[vkb] capture goroutine: pipe.Run error: %v", err)
 			e.events <- event{Kind: "error", Msg: err.Error()}
@@ -186,9 +192,65 @@ func vkb_start_capture() C.int {
 	return 0
 }
 
-// vkb_stop_capture ends an in-flight capture. Idempotent: safe to call
-// when no capture is active. Always returns 0 unless the engine is not
-// initialized (in which case it returns 1).
+// vkb_push_audio enqueues a chunk of Float32 mono 48 kHz audio for the
+// in-flight capture. Non-blocking: if the internal buffer is full the
+// frame is dropped and a single "audio buffer full, dropping frames"
+// warning is emitted per cycle (audio threads must not block).
+//
+// Returns:
+//
+//	0 = enqueued (or dropped, but see warning event)
+//	1 = engine not initialized
+//	2 = no capture in flight (must call vkb_start_capture first)
+//
+//export vkb_push_audio
+func vkb_push_audio(samples *C.float, count C.int) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if count <= 0 {
+		return 0
+	}
+	e.mu.Lock()
+	pushCh := e.pushCh
+	e.mu.Unlock()
+	if pushCh == nil {
+		return 2
+	}
+
+	// Copy out of the C buffer into Go memory before sending — the
+	// caller may reuse their buffer immediately on return.
+	n := int(count)
+	cSlice := unsafe.Slice(samples, n)
+	frame := make([]float32, n)
+	for i := 0; i < n; i++ {
+		frame[i] = float32(cSlice[i])
+	}
+
+	select {
+	case pushCh <- frame:
+	default:
+		// Channel full — drop, but issue at most one warning per cycle.
+		e.mu.Lock()
+		e.dropCount++
+		first := e.dropCount == 1
+		e.mu.Unlock()
+		if first {
+			select {
+			case e.events <- event{Kind: "warning", Msg: "audio buffer full, dropping frames"}:
+			default:
+			}
+		}
+	}
+	return 0
+}
+
+// vkb_stop_capture signals end-of-input for the in-flight capture by
+// closing the audio push channel. The pipeline goroutine drains
+// remaining frames, runs transcribe/clean, and emits a result event.
+// Idempotent: safe to call when no capture is active. Returns 1 if
+// the engine is not initialized.
 //
 //export vkb_stop_capture
 func vkb_stop_capture() C.int {
@@ -198,13 +260,12 @@ func vkb_stop_capture() C.int {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	log.Printf("[vkb] vkb_stop_capture: closing stopCh+cancel")
-	if e.stopCh != nil {
-		close(e.stopCh)
-		e.stopCh = nil
+	log.Printf("[vkb] vkb_stop_capture: closing push channel")
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
 	}
 	if e.cancel != nil {
-		e.cancel()
 		e.cancel = nil
 	}
 	return 0
