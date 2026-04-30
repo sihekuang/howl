@@ -89,6 +89,37 @@ func TestChunker_DropsPreSpeechSilence(t *testing.T) {
 	}
 }
 
+func TestChunker_ForceCutPrefersLowEnergyPoint(t *testing.T) {
+	opts := ChunkerOpts{
+		VoiceThreshold: 0.005,
+		SilenceHangMs:  500,
+		MaxChunkMs:     2000,
+		ForceCutScanMs: 800,
+	}
+	var emitted []ChunkEmission
+	c := NewChunker(opts, func(e ChunkEmission) { emitted = append(emitted, e) })
+
+	// 1500ms loud + 200ms quiet dip + 600ms loud = 2300ms total.
+	// Force-cut fires at chunk duration >= 2000ms. The dip is at
+	// [1500..1700], i.e. 800..600ms before the cut point — well
+	// inside the 800ms scan window. Cut should happen mid-dip,
+	// NOT at the 2000ms mark.
+	c.Push(tone16k(1500, 0.3))
+	c.Push(silence16k(200))   // dip — RMS is 0, lowest energy
+	c.Push(tone16k(600, 0.3))
+	c.Flush()
+
+	if len(emitted) < 2 {
+		t.Fatalf("want at least 2 chunks (force-cut + tail), got %d", len(emitted))
+	}
+	// First chunk should end inside or near the dip (1500-1700ms),
+	// NOT at 2000ms. Allow 100ms tolerance for window alignment.
+	cutMs := len(emitted[0].Samples) * 1000 / chunkerSampleRate
+	if cutMs < 1400 || cutMs > 1800 {
+		t.Errorf("force-cut at %dms, want 1500-1700 (in dip)", cutMs)
+	}
+}
+
 func TestChunker_ShortPauseDoesNotSplit(t *testing.T) {
 	var emitted []ChunkEmission
 	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {

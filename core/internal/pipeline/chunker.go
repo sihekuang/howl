@@ -108,10 +108,41 @@ func (c *Chunker) chunkDurationMs() int {
 	return len(c.chunkBuf) * 1000 / chunkerSampleRate
 }
 
-// forceCut emits chunkBuf as a "force-cut" chunk; state stays voiced so the
-// next window continues into a new chunk. Task 5 will refine the cut point.
+// forceCut emits a chunk ending at the lowest-energy 100ms window
+// within the last ForceCutScanMs of chunkBuf. The remainder becomes
+// the head of the next chunk; state stays voiced.
 func (c *Chunker) forceCut() {
-	c.emitChunk(ReasonForceCut)
+	scanWindows := c.opts.ForceCutScanMs / chunkerWindowMs
+	totalWindows := len(c.chunkBuf) / chunkerWindowSize
+	if scanWindows > totalWindows {
+		scanWindows = totalWindows
+	}
+	if scanWindows < 1 {
+		c.emitChunk(ReasonForceCut)
+		return
+	}
+
+	startWindow := totalWindows - scanWindows
+	bestWindow := startWindow
+	bestRMS := float32(1.0)
+	for w := startWindow; w < totalWindows; w++ {
+		s := w * chunkerWindowSize
+		e := s + chunkerWindowSize
+		rms := audio.RMS(c.chunkBuf[s:e])
+		if rms < bestRMS {
+			bestRMS = rms
+			bestWindow = w
+		}
+	}
+
+	cutSample := bestWindow * chunkerWindowSize
+	head := c.chunkBuf[:cutSample]
+	tail := c.chunkBuf[cutSample:]
+
+	out := make([]float32, len(head))
+	copy(out, head)
+	c.emit(ChunkEmission{Samples: out, Reason: ReasonForceCut})
+	c.chunkBuf = append(c.chunkBuf[:0], tail...)
 	c.silenceMs = 0
 }
 
