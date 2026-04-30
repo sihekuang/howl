@@ -56,6 +56,12 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private var targetFormat: AVAudioFormat?
     private var isRunning = false
 
+    // Throttled tap-callback diagnostics: every ~30 callbacks, log
+    // frame count + peak amplitude so we can tell at a glance whether
+    // audio is reaching us and whether it's all zeros or has energy.
+    private var diagCounter: Int = 0
+    private var diagPeak: Float = 0
+
     // No lock: start/stop are driven serially from the
     // MainActor-isolated EngineCoordinator, so concurrent calls don't
     // happen. The audio-thread callback only reads `converter` and
@@ -151,8 +157,10 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
 
         // Install a tap on the input node. Tap buffer size (4096) is a
         // hint; the system may give us fewer samples per call.
+        log.info("AVAudioInputCapture.start: installing tap")
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            self.diagnose(buffer: buffer)
             self.deliver(buffer: buffer, onFrame: onFrame)
         }
 
@@ -172,6 +180,29 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         engine.stop()
         isRunning = false
         log.info("AVAudioInputCapture.stop: engine stopped")
+    }
+
+    /// Throttled diagnostic: log every ~30 tap callbacks (~1s at typical
+    /// macOS hardware buffer sizes) with frame count + peak amplitude.
+    /// Lets us tell at a glance whether the tap is firing and whether
+    /// the audio actually has energy or is all zeros.
+    private func diagnose(buffer: AVAudioPCMBuffer) {
+        guard let ch = buffer.floatChannelData?[0] else {
+            log.error("diagnose: no floatChannelData")
+            return
+        }
+        let n = Int(buffer.frameLength)
+        var peak: Float = 0
+        for i in 0..<n {
+            let v = abs(ch[i])
+            if v > peak { peak = v }
+        }
+        if peak > diagPeak { diagPeak = peak }
+        diagCounter += 1
+        if diagCounter % 30 == 0 {
+            log.info("tap callback: frames=\(n, privacy: .public) sr=\(buffer.format.sampleRate, privacy: .public) ch=\(buffer.format.channelCount, privacy: .public) peak=\(self.diagPeak, privacy: .public)")
+            diagPeak = 0
+        }
     }
 
     private func deliver(buffer: AVAudioPCMBuffer, onFrame: @Sendable ([Float]) -> Void) {
