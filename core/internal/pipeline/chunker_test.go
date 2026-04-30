@@ -7,17 +7,17 @@ import (
 
 // tone16k generates `ms` milliseconds of a 440Hz sine wave at 16kHz, peak amplitude `peak`.
 func tone16k(ms int, peak float32) []float32 {
-	n := 16 * ms
+	n := chunkerSampleRate / 1000 * ms
 	out := make([]float32, n)
 	for i := 0; i < n; i++ {
-		out[i] = peak * float32(math.Sin(2*math.Pi*440*float64(i)/16000))
+		out[i] = peak * float32(math.Sin(2*math.Pi*440*float64(i)/chunkerSampleRate))
 	}
 	return out
 }
 
 // silence16k generates `ms` milliseconds of zero samples at 16kHz.
 func silence16k(ms int) []float32 {
-	return make([]float32, 16*ms)
+	return make([]float32, chunkerSampleRate/1000*ms)
 }
 
 func TestChunker_EmitsOnVADSilence(t *testing.T) {
@@ -34,10 +34,37 @@ func TestChunker_EmitsOnVADSilence(t *testing.T) {
 	if len(emitted) != 2 {
 		t.Fatalf("want 2 chunks, got %d", len(emitted))
 	}
-	if emitted[0].Reason != "vad-cut" {
-		t.Errorf("chunk[0].Reason = %q, want vad-cut", emitted[0].Reason)
+	if emitted[0].Reason != ReasonVADCut {
+		t.Errorf("chunk[0].Reason = %q, want %q", emitted[0].Reason, ReasonVADCut)
 	}
-	if emitted[1].Reason != "tail" {
-		t.Errorf("chunk[1].Reason = %q, want tail", emitted[1].Reason)
+	if emitted[1].Reason != ReasonTail {
+		t.Errorf("chunk[1].Reason = %q, want %q", emitted[1].Reason, ReasonTail)
+	}
+}
+
+func TestChunker_SilenceOnly_FlushEmitsNothing(t *testing.T) {
+	var got []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		got = append(got, e)
+	})
+	c.Push(silence16k(2000))
+	c.Flush()
+	if len(got) != 0 {
+		t.Fatalf("expected no emissions, got %d", len(got))
+	}
+}
+
+func TestChunker_ShortSpeech_FlushEmitsTail(t *testing.T) {
+	var got []ChunkEmission
+	c := NewChunker(DefaultChunkerOpts(), func(e ChunkEmission) {
+		got = append(got, e)
+	})
+	c.Push(tone16k(200, 0.3)) // 200ms of speech, shorter than silence hang
+	c.Flush()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 tail emission, got %d", len(got))
+	}
+	if got[0].Reason != ReasonTail {
+		t.Errorf("expected reason %q, got %q", ReasonTail, got[0].Reason)
 	}
 }

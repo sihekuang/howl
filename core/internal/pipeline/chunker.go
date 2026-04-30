@@ -1,5 +1,5 @@
-// Package pipeline — Chunker splits a stream of 16kHz mono samples into
-// utterance-aligned chunks suitable for one-shot whisper.cpp inference.
+// Chunker splits a stream of 16kHz mono samples into utterance-aligned chunks
+// suitable for one-shot whisper.cpp inference.
 //
 // State machine: idle → voiced (on first above-threshold 100ms window),
 // voiced → idle (on SILENCE_HANG_MS of below-threshold). Pre-speech
@@ -20,10 +20,10 @@ const (
 // ChunkerOpts holds the tunable thresholds. DefaultChunkerOpts returns
 // a sensible production set; tests pass smaller values.
 type ChunkerOpts struct {
-	VoiceThreshold   float32
-	SilenceHangMs    int
-	MaxChunkMs       int
-	ForceCutScanMs   int
+	VoiceThreshold float32
+	SilenceHangMs  int
+	MaxChunkMs     int
+	ForceCutScanMs int
 }
 
 func DefaultChunkerOpts() ChunkerOpts {
@@ -35,10 +35,19 @@ func DefaultChunkerOpts() ChunkerOpts {
 	}
 }
 
+// ChunkReason identifies why a chunk was emitted.
+type ChunkReason string
+
+const (
+	ReasonVADCut   ChunkReason = "vad-cut"
+	ReasonForceCut ChunkReason = "force-cut"
+	ReasonTail     ChunkReason = "tail"
+)
+
 // ChunkEmission is one chunk handed off to the transcribe worker.
 type ChunkEmission struct {
-	Samples []float32 // 16kHz mono, defensively-copied
-	Reason  string    // "vad-cut" | "force-cut" | "tail"
+	Samples []float32   // 16kHz mono, defensively-copied
+	Reason  ChunkReason // ReasonVADCut | ReasonForceCut | ReasonTail
 }
 
 type chunkerState int
@@ -50,8 +59,8 @@ const (
 
 // Chunker is NOT safe for concurrent calls. One instance per Pipeline.Run.
 type Chunker struct {
-	opts   ChunkerOpts
-	emit   func(ChunkEmission)
+	opts ChunkerOpts
+	emit func(ChunkEmission)
 
 	state     chunkerState
 	chunkBuf  []float32
@@ -62,7 +71,11 @@ type Chunker struct {
 }
 
 func NewChunker(opts ChunkerOpts, emit func(ChunkEmission)) *Chunker {
-	return &Chunker{opts: opts, emit: emit}
+	return &Chunker{
+		opts:     opts,
+		emit:     emit,
+		chunkBuf: make([]float32, 0, chunkerSampleRate*opts.MaxChunkMs/1000),
+	}
 }
 
 // Push feeds a slice of 16kHz mono samples. May synchronously call emit
@@ -84,7 +97,7 @@ func (c *Chunker) Flush() {
 			c.chunkBuf = append(c.chunkBuf, c.pending...)
 			c.pending = nil
 		}
-		c.emitChunk("tail")
+		c.emitChunk(ReasonTail)
 	}
 	c.state = stateIdle
 	c.silenceMs = 0
@@ -109,7 +122,7 @@ func (c *Chunker) processWindow(w []float32) {
 		} else {
 			c.silenceMs += chunkerWindowMs
 			if c.silenceMs >= c.opts.SilenceHangMs {
-				c.emitChunk("vad-cut")
+				c.emitChunk(ReasonVADCut)
 				c.state = stateIdle
 				c.silenceMs = 0
 			}
@@ -117,12 +130,12 @@ func (c *Chunker) processWindow(w []float32) {
 	}
 }
 
-func (c *Chunker) emitChunk(reason string) {
+func (c *Chunker) emitChunk(reason ChunkReason) {
 	if len(c.chunkBuf) == 0 {
 		return
 	}
 	out := make([]float32, len(c.chunkBuf))
 	copy(out, c.chunkBuf)
-	c.chunkBuf = nil
+	c.chunkBuf = c.chunkBuf[:0]
 	c.emit(ChunkEmission{Samples: out, Reason: reason})
 }
