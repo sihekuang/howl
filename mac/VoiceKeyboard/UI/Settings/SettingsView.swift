@@ -7,7 +7,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralTab(settings: $settings, onSave: save)
+            GeneralTab(settings: $settings, onSave: save, audioCapture: composition.audioCapture)
                 .tabItem { Label("General", systemImage: "gearshape") }
             HotkeyTab(
                 settings: $settings,

@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import AVFoundation
+import CoreAudio
 import AppKit
 import os
 
@@ -8,14 +9,23 @@ private let log = Logger(subsystem: "com.voicekeyboard.app", category: "AudioCap
 /// Captures Float32 mono 48 kHz audio from the default system input
 /// device and pushes frames to a callback. Lifetime: one start/stop
 /// cycle per capture session.
+public struct AudioInputDevice: Identifiable, Hashable, Sendable {
+    public let id: String      // AVCaptureDevice.uniqueID == CoreAudio UID
+    public let name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 public protocol AudioCapture: Sendable {
-    /// Begin capturing. The callback is invoked with each frame of
-    /// Float32 mono 48 kHz samples until `stop()` is called. The
-    /// callback may be invoked on any thread; the implementation is
-    /// expected to run it on the audio thread, so it must NOT block.
-    /// Throws if the user denied microphone access (or hasn't granted
-    /// it and the prompt was dismissed).
-    func start(onFrame: @escaping @Sendable ([Float]) -> Void) async throws
+    /// Begin capturing from the device whose UID is `deviceUID`, or
+    /// the system default if nil. The callback is invoked with each
+    /// frame of Float32 mono 48 kHz samples until `stop()` is called.
+    /// The callback may run on the audio thread — must NOT block.
+    /// Throws if the user denied microphone access.
+    func start(deviceUID: String?, onFrame: @escaping @Sendable ([Float]) -> Void) async throws
 
     /// End capturing. Idempotent; safe to call when not started.
     func stop()
@@ -25,6 +35,10 @@ public protocol AudioCapture: Sendable {
 
     /// Open the System Settings → Privacy → Microphone pane.
     func openSystemSettings()
+
+    /// Available input devices (in addition to the system default,
+    /// which the caller can represent with a nil UID).
+    func availableInputDevices() -> [AudioInputDevice]
 }
 
 public enum AudioCaptureError: Error, Equatable {
@@ -60,7 +74,16 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         }
     }
 
-    public func start(onFrame: @escaping @Sendable ([Float]) -> Void) async throws {
+    public func availableInputDevices() -> [AudioInputDevice] {
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone, .external],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        return session.devices.map { AudioInputDevice(id: $0.uniqueID, name: $0.localizedName) }
+    }
+
+    public func start(deviceUID: String?, onFrame: @escaping @Sendable ([Float]) -> Void) async throws {
         // 1. Resolve mic authorization. AVAudioEngine on macOS does NOT
         //    reliably trigger the system prompt — we must call
         //    requestAccess explicitly the first time.
@@ -89,6 +112,26 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         if isRunning { return }
 
         let inputNode = engine.inputNode
+
+        // Optional explicit device. Resolve the AVCaptureDevice UID
+        // to a CoreAudio AudioDeviceID and tell the input AU to use
+        // it. With `nil` we don't touch deviceID — the AU follows
+        // whatever the system default is.
+        if let uid = deviceUID, !uid.isEmpty {
+            if let devID = audioDeviceID(forUID: uid) {
+                do {
+                    try inputNode.auAudioUnit.setDeviceID(devID)
+                    log.info("AVAudioInputCapture.start: using device uid=\(uid, privacy: .public) id=\(devID, privacy: .public)")
+                } catch {
+                    log.error("AVAudioInputCapture.start: setDeviceID failed: \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                log.error("AVAudioInputCapture.start: no AudioDeviceID for UID=\(uid, privacy: .public); falling back to default")
+            }
+        } else {
+            log.info("AVAudioInputCapture.start: using system default input device")
+        }
+
         let inputFormat = inputNode.inputFormat(forBus: 0)
         log.info("AVAudioInputCapture.start: input format sr=\(inputFormat.sampleRate, privacy: .public) ch=\(inputFormat.channelCount, privacy: .public)")
 
@@ -167,5 +210,30 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         if count == 0 { return }
         let samples = Array(UnsafeBufferPointer(start: channelData, count: count))
         onFrame(samples)
+    }
+
+    /// Resolve an AVCaptureDevice / CoreAudio UID string to its
+    /// AudioDeviceID. Returns nil if no device with that UID exists.
+    private func audioDeviceID(forUID uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var devID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let cf = uid as CFString
+        let status = withUnsafePointer(to: cf) { uidPtr -> OSStatus in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                uidPtr,
+                &size,
+                &devID
+            )
+        }
+        guard status == noErr, devID != 0 else { return nil }
+        return devID
     }
 }

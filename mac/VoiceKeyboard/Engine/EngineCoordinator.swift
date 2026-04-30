@@ -118,11 +118,12 @@ public final class EngineCoordinator {
         composition.overlay.show()
         do {
             try await composition.engine.startCapture()
+            let settings = (try? composition.settings.get()) ?? UserSettings()
             // Start AVAudioEngine and feed frames into the engine.
             // The closure may run on the audio thread; hop to a Task
             // so the actor-isolated engine.pushAudio call is safe.
             let engine = composition.engine
-            try await composition.audioCapture.start { samples in
+            try await composition.audioCapture.start(deviceUID: settings.inputDeviceUID) { samples in
                 Task.detached {
                     try? await engine.pushAudio(samples)
                 }

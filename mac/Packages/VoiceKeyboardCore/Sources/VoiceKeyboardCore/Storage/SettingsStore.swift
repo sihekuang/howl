@@ -8,6 +8,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
     public var llmModel: String
     public var customDict: [String]
     public var hotkey: KeyboardShortcut
+    /// CoreAudio/AVCaptureDevice unique ID for the input device.
+    /// `nil` (the default) means "follow the system default".
+    public var inputDeviceUID: String?
 
     public init(
         whisperModelSize: String = "small",
@@ -16,7 +19,8 @@ public struct UserSettings: Codable, Equatable, Sendable {
         llmProvider: String = "anthropic",
         llmModel: String = "claude-sonnet-4-6",
         customDict: [String] = [],
-        hotkey: KeyboardShortcut = .defaultPTT
+        hotkey: KeyboardShortcut = .defaultPTT,
+        inputDeviceUID: String? = nil
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
@@ -25,6 +29,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.llmModel = llmModel
         self.customDict = customDict
         self.hotkey = hotkey
+        self.inputDeviceUID = inputDeviceUID
     }
 }
 
