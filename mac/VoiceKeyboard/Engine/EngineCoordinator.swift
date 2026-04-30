@@ -159,15 +159,26 @@ public final class EngineCoordinator {
         switch event {
         case .level(let rms):
             composition.appState.liveRMS = rms
+        case .chunk(let text):
+            // Streaming LLM delta — type at the cursor and accumulate
+            // for the final paste-fallback comparison. We DON'T set
+            // engineState here; .result will flip back to idle.
+            streamedSoFar += text
+            Task { @MainActor in
+                try? await composition.streamTyper.injectChunk(text)
+            }
         case .result(let text):
             Task { @MainActor in
-                if !text.isEmpty {
+                // If streaming already typed everything, skip clipboard
+                // paste; otherwise (non-streaming path) fall back to it.
+                if streamedSoFar.isEmpty, !text.isEmpty {
                     do {
                         try await composition.injector.inject(text)
                     } catch {
                         setTransientWarning("paste: \(error)")
                     }
                 }
+                streamedSoFar = ""
                 composition.appState.engineState = .idle
                 composition.overlay.hide()
             }
@@ -175,10 +186,16 @@ public final class EngineCoordinator {
             setTransientWarning(msg)
         case .error(let msg):
             setTransientWarning(msg)
+            streamedSoFar = ""
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
     }
+
+    /// Concatenation of every `chunk` event received during the
+    /// current capture cycle. Reset on result/error. Used to decide
+    /// whether the result event should fall back to clipboard paste.
+    private var streamedSoFar: String = ""
 
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()

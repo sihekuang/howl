@@ -40,9 +40,15 @@ type Pipeline struct {
 	cleaner     llm.Cleaner
 
 	// LevelCallback, if non-nil, is invoked with the post-denoise RMS
-	// (in [0, 1]) of each 480-sample frame. Set this on the Pipeline
-	// before calling Run. Safe to omit; nil means no level publication.
+	// (in [0, 1]) of each 480-sample frame.
 	LevelCallback func(float32)
+
+	// LLMDeltaCallback, if non-nil AND the configured cleaner satisfies
+	// llm.StreamingCleaner, is invoked with each cleaned-text delta as
+	// the LLM streams. Lets the host (Swift) type tokens at the cursor
+	// before the full response lands. Safe to omit — pipeline falls
+	// back to non-streaming Clean.
+	LLMDeltaCallback func(string)
 }
 
 func New(d denoise.Denoiser, t transcribe.Transcriber,
@@ -91,8 +97,15 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	log.Printf("[vkb] pipeline.Run: dict matched %d terms", len(terms))
 
 	tLLM := time.Now()
-	log.Printf("[vkb] pipeline.Run: cleaning via LLM…")
-	cleaned, llmErr := p.cleaner.Clean(ctx, corrected, terms)
+	var cleaned string
+	var llmErr error
+	if streamer, ok := p.cleaner.(llm.StreamingCleaner); ok && p.LLMDeltaCallback != nil {
+		log.Printf("[vkb] pipeline.Run: cleaning via LLM (streaming)…")
+		cleaned, llmErr = streamer.CleanStream(ctx, corrected, terms, p.LLMDeltaCallback)
+	} else {
+		log.Printf("[vkb] pipeline.Run: cleaning via LLM…")
+		cleaned, llmErr = p.cleaner.Clean(ctx, corrected, terms)
+	}
 	if llmErr != nil {
 		log.Printf("[vkb] pipeline.Run: LLM FAILED after %v: %v (using dict-corrected fallback)", time.Since(tLLM), llmErr)
 		return Result{Raw: raw, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil

@@ -3,6 +3,7 @@ import Foundation
 /// Events polled from the Go core via vkb_poll_event.
 public enum EngineEvent: Sendable, Decodable, Equatable {
     case level(rms: Float)
+    case chunk(text: String)
     case result(text: String)
     case warning(msg: String)
     case error(msg: String)
@@ -17,6 +18,8 @@ public enum EngineEvent: Sendable, Decodable, Equatable {
         switch kind {
         case "level":
             self = .level(rms: try c.decode(Float.self, forKey: .rms))
+        case "chunk":
+            self = .chunk(text: try c.decodeIfPresent(String.self, forKey: .text) ?? "")
         case "result":
             self = .result(text: try c.decodeIfPresent(String.self, forKey: .text) ?? "")
         case "warning":

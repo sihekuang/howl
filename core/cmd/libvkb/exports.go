@@ -155,6 +155,19 @@ func vkb_start_capture() C.int {
 		levelLastAt = now
 	}
 
+	// Stream LLM cleaned-text deltas to Swift as they arrive. Each
+	// chunk becomes an event{Kind: "chunk", Text: "..."}; Swift types
+	// them at the cursor incrementally. Terminal `result` event is
+	// still emitted at the end with the full cleaned text (Swift can
+	// ignore the text since it's already typed, but the event signals
+	// state transition idle ← processing).
+	pipe.LLMDeltaCallback = func(delta string) {
+		if delta == "" {
+			return
+		}
+		e.events <- event{Kind: "chunk", Text: delta}
+	}
+
 	go func() {
 		log.Printf("[vkb] capture goroutine: started")
 		defer func() {

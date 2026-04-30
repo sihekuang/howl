@@ -41,7 +41,13 @@ type engine struct {
 
 // event is the JSON payload emitted via vkb_poll_event. Kind values:
 //
-//	"result"  — final cleaned text in Text
+//	"chunk"   — streaming LLM text delta in Text; emitted repeatedly
+//	            during cleanup so the host can type at the cursor as
+//	            tokens arrive. The full cleaned text is the
+//	            concatenation of every chunk in order.
+//	"result"  — final cleaned text in Text. When chunks were streamed,
+//	            this is just a state-transition marker (text equals
+//	            the concatenation of chunks).
 //	"warning" — non-fatal degradation (e.g. LLM failure); Msg has detail,
 //	            and a "result" event with the dict-corrected fallback
 //	            text is emitted alongside it

@@ -55,6 +55,62 @@ func NewAnthropic(opts AnthropicOptions) (*Anthropic, error) {
 	return &Anthropic{client: &c, model: opts.Model}, nil
 }
 
+// CleanStream is the streaming counterpart of Clean. As the Anthropic
+// API emits each text delta, onDelta is called with the new chunk; the
+// accumulated cleaned text is also returned at the end so the pipeline
+// can record the final value. Errors from the SDK are returned with
+// whatever text was accumulated up to that point — the host can decide
+// whether to keep what it has or fall back to the dict-corrected raw.
+func (a *Anthropic) CleanStream(
+	ctx context.Context,
+	raw string,
+	preserveTerms []string,
+	onDelta func(string),
+) (string, error) {
+	if a == nil || a.client == nil {
+		return "", errors.New("anthropic: not initialized")
+	}
+	prompt := renderPrompt(raw, preserveTerms)
+
+	t0 := time.Now()
+	log.Printf("[vkb] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
+
+	stream := a.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(a.model),
+		MaxTokens: 1024,
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+		},
+	})
+
+	var b strings.Builder
+	firstDeltaAt := time.Time{}
+	for stream.Next() {
+		ev := stream.Current()
+		if ev.Type == "content_block_delta" && ev.Delta.Type == "text_delta" {
+			chunk := ev.Delta.Text
+			if firstDeltaAt.IsZero() {
+				firstDeltaAt = time.Now()
+				log.Printf("[vkb] anthropic.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
+			}
+			if chunk != "" {
+				b.WriteString(chunk)
+				onDelta(chunk)
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		log.Printf("[vkb] anthropic.CleanStream: stream FAILED after %v: %v", time.Since(t0), err)
+		return strings.TrimSpace(b.String()), fmt.Errorf("anthropic: %w", err)
+	}
+	final := strings.TrimSpace(b.String())
+	log.Printf("[vkb] anthropic.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
+	if final == "" {
+		return "", errors.New("anthropic: empty stream")
+	}
+	return final, nil
+}
+
 // Clean sends the raw transcription to Anthropic and returns the cleaned text.
 // Returns an error on missing API key, network/auth failures, or empty
 // responses — callers must fall back to the raw transcription on error.

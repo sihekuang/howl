@@ -8,6 +8,7 @@ public final class CompositionRoot {
     public let audioCapture: any AudioCapture
     public let hotkey: any HotkeyMonitor
     public let injector: any TextInjector
+    public let streamTyper: any StreamingTextInjector
     public let settings: any SettingsStore
     public let secrets: any SecretStore
     public let permissions: any AccessibilityPermissions
@@ -21,6 +22,7 @@ public final class CompositionRoot {
             pasteboard: SystemPasteboard(),
             keystroke: CGEventKeystrokeSender()
         )
+        self.streamTyper = CGEventTextTyper()
         self.settings = UserDefaultsSettingsStore()
         self.secrets = KeychainSecretStore()
         self.permissions = DefaultAccessibilityPermissions()
