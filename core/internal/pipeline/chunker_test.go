@@ -103,4 +103,7 @@ func TestChunker_ShortPauseDoesNotSplit(t *testing.T) {
 	if len(emitted) != 1 {
 		t.Fatalf("want 1 chunk (pause too short to split), got %d", len(emitted))
 	}
+	if emitted[0].Reason != ReasonTail {
+		t.Errorf("chunk[0].Reason = %q, want %q", emitted[0].Reason, ReasonTail)
+	}
 }
