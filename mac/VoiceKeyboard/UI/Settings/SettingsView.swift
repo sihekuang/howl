@@ -13,7 +13,8 @@ struct SettingsView: View {
                 settings: $settings,
                 onSave: save,
                 conflictChecker: composition.conflictChecker,
-                permissions: composition.permissions
+                permissions: composition.permissions,
+                audioCapture: composition.audioCapture
             )
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
             ProviderTab(secrets: composition.secrets)

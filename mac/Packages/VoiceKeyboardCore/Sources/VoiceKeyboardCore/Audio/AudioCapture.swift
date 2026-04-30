@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import AVFoundation
+import AppKit
 import os
 
 private let log = Logger(subsystem: "com.voicekeyboard.app", category: "AudioCapture")
@@ -12,15 +13,24 @@ public protocol AudioCapture: Sendable {
     /// Float32 mono 48 kHz samples until `stop()` is called. The
     /// callback may be invoked on any thread; the implementation is
     /// expected to run it on the audio thread, so it must NOT block.
-    func start(onFrame: @escaping @Sendable ([Float]) -> Void) throws
+    /// Throws if the user denied microphone access (or hasn't granted
+    /// it and the prompt was dismissed).
+    func start(onFrame: @escaping @Sendable ([Float]) -> Void) async throws
 
     /// End capturing. Idempotent; safe to call when not started.
     func stop()
+
+    /// Whether the user has granted microphone access.
+    func isAuthorized() -> Bool
+
+    /// Open the System Settings → Privacy → Microphone pane.
+    func openSystemSettings()
 }
 
-public enum AudioCaptureError: Error {
+public enum AudioCaptureError: Error, Equatable {
     case engineStartFailed(String)
     case formatUnavailable
+    case permissionDenied
 }
 
 /// AVAudioEngine-backed capture. Installs a tap on the input node and
@@ -31,13 +41,51 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
     private var isRunning = false
-    private let lock = NSLock()
+
+    // No lock: start/stop are driven serially from the
+    // MainActor-isolated EngineCoordinator, so concurrent calls don't
+    // happen. The audio-thread callback only reads `converter` and
+    // `targetFormat` after start has completed; they're set once and
+    // never reassigned during a session.
 
     public init() {}
 
-    public func start(onFrame: @escaping @Sendable ([Float]) -> Void) throws {
-        lock.lock()
-        defer { lock.unlock() }
+    public func isAuthorized() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    public func openSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    public func start(onFrame: @escaping @Sendable ([Float]) -> Void) async throws {
+        // 1. Resolve mic authorization. AVAudioEngine on macOS does NOT
+        //    reliably trigger the system prompt — we must call
+        //    requestAccess explicitly the first time.
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        log.info("AVAudioInputCapture.start: auth status=\(status.rawValue, privacy: .public)")
+        switch status {
+        case .authorized:
+            break
+        case .notDetermined:
+            let granted = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    cont.resume(returning: granted)
+                }
+            }
+            log.info("AVAudioInputCapture.start: requestAccess granted=\(granted, privacy: .public)")
+            if !granted {
+                throw AudioCaptureError.permissionDenied
+            }
+        case .denied, .restricted:
+            log.error("AVAudioInputCapture.start: mic permission denied or restricted")
+            throw AudioCaptureError.permissionDenied
+        @unknown default:
+            throw AudioCaptureError.permissionDenied
+        }
+
         if isRunning { return }
 
         let inputNode = engine.inputNode
@@ -76,8 +124,6 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     }
 
     public func stop() {
-        lock.lock()
-        defer { lock.unlock() }
         guard isRunning else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()

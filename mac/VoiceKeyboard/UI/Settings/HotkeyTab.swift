@@ -11,11 +11,13 @@ struct HotkeyTab: View {
     let onSave: (UserSettings) -> Void
     let conflictChecker: any SymbolicHotkeyChecker
     let permissions: any AccessibilityPermissions
+    let audioCapture: any AudioCapture
 
     @State private var isRecording = false
     @State private var conflicts: [SymbolicHotkeyConflict] = []
     @State private var lastSeen: String? = nil
     @State private var isTrusted = false
+    @State private var micGranted = false
 
     var body: some View {
         Form {
@@ -37,6 +39,16 @@ struct HotkeyTab: View {
                         .font(.caption)
                     Spacer()
                     Button("Open…") { permissions.openInputMonitoringSettings() }
+                }
+            }
+            LabeledContent("Microphone") {
+                HStack(spacing: 8) {
+                    Image(systemName: micGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(micGranted ? .green : .orange)
+                    Text(micGranted ? "Granted" : "Required to record audio")
+                        .font(.caption)
+                    Spacer()
+                    Button("Open…") { audioCapture.openSystemSettings() }
                 }
             }
             Section {
@@ -115,9 +127,11 @@ struct HotkeyTab: View {
         .task {
             refreshConflicts()
             isTrusted = permissions.isTrusted()
+            micGranted = audioCapture.isAuthorized()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isTrusted = permissions.isTrusted()
+            micGranted = audioCapture.isAuthorized()
         }
     }
 

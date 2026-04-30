@@ -122,7 +122,7 @@ public final class EngineCoordinator {
             // The closure may run on the audio thread; hop to a Task
             // so the actor-isolated engine.pushAudio call is safe.
             let engine = composition.engine
-            try composition.audioCapture.start { samples in
+            try await composition.audioCapture.start { samples in
                 Task.detached {
                     try? await engine.pushAudio(samples)
                 }
