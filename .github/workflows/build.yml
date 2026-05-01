@@ -1,8 +1,13 @@
 name: Build .app
 
 # Triggered by:
-#   - Tag pushes matching v*  (e.g. v0.1.0)        — for releases
-#   - Manual dispatch from the Actions tab          — for ad-hoc verification
+#   - Tag pushes matching mac-v*  (e.g. mac-v0.1.0)  — for mac releases
+#   - Manual dispatch from the Actions tab            — for ad-hoc verification
+#
+# Platform-scoped tags so each wrapper (mac/windows/linux) releases on
+# its own cadence — see "Releases" in the root README. Windows + Linux
+# get their own workflows + tag prefixes (win-v*, linux-v*) when those
+# wrappers land.
 #
 # Produces an ad-hoc-signed .app uploaded as a workflow artifact. NOT
 # notarized; users will see a Gatekeeper prompt on first launch ("can't
@@ -11,7 +16,7 @@ name: Build .app
 
 on:
   push:
-    tags: ['v*']
+    tags: ['mac-v*']
   workflow_dispatch:
 
 jobs:
