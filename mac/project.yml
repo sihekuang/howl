@@ -177,8 +177,44 @@ targets:
           # Also rewrite libvkb.dylib's own /opt/homebrew refs.
           chmod u+w "$DST/libvkb.dylib"
           rewrite_deps "$DST/libvkb.dylib"
+
+          # Third pass: replicate Homebrew's short-name → long-name symlinks
+          # alongside each bundled dylib. Some packages (e.g. ggml) embed
+          # @rpath/<short>.dylib refs at build time; my rewrite step only
+          # matches /opt/homebrew/... refs and so leaves those untouched.
+          # Without the short-name symlink, dyld fails with "Library not
+          # loaded: @rpath/libggml-base.0.dylib" at runtime.
+          while IFS= read -r src; do
+            src_dir="$(dirname "$src")"
+            src_base="$(basename "$src")"
+            for link in "$src_dir"/*.dylib; do
+              [ -L "$link" ] || continue
+              target_base="$(basename "$(readlink "$link")")"
+              link_base="$(basename "$link")"
+              if [ "$target_base" = "$src_base" ] && [ "$link_base" != "$src_base" ]; then
+                (cd "$DST" && ln -sf "$src_base" "$link_base")
+              fi
+            done
+          done < "$SEEN"
+
+          # Fourth pass: re-codesign every dylib we modified.
+          # install_name_tool invalidates the original ad-hoc signatures,
+          # and Xcode's automatic codesign at the end of the build does
+          # NOT re-sign Frameworks/*.dylib (only the .app bundle and main
+          # executable). Without re-signing, macOS SIGKILLs the process
+          # at launch with "code or signature have been modified".
+          # Use $EXPANDED_CODE_SIGN_IDENTITY when available, else ad-hoc.
+          IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+          while IFS= read -r src; do
+            codesign --force --sign "$IDENTITY" "$DST/$(basename "$src")"
+          done < "$SEEN"
+          codesign --force --sign "$IDENTITY" "$DST/libvkb.dylib"
+          codesign --force --sign "$IDENTITY" "$DST/libdf.dylib"
         inputFiles:
           - "/opt/homebrew/lib/libonnxruntime.dylib"
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libonnxruntime.1.25.1.dylib"
 schemes:
   VoiceKeyboard:
     build:
