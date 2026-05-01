@@ -42,9 +42,12 @@ func runPipe(args []string) int {
 	persistent := fs.Bool("persistent", false, "stay running; loop capture+transcribe+clean cycles (implies --live; incompatible with FILE.wav)")
 	dictTerms := fs.String("dict", "", "comma-separated custom terms")
 	latencyReport := fs.Bool("latency-report", false, "print per-chunk timing + post-stop latency summary on stderr")
-	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no ANTHROPIC_API_KEY needed)")
+	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no API key needed)")
 	speakerMode := fs.Bool("speaker", false, "enable speaker gating; requires a prior ./enroll.sh run")
 	tseBackend := fs.String("tse-backend", "", "TSE backend name (default: ecapa)")
+	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `vkb-cli providers`)")
+	llmModel := fs.String("llm-model", "", "LLM model id (overrides ANTHROPIC_MODEL env; required for ollama)")
+	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -53,11 +56,6 @@ func runPipe(args []string) int {
 		return 2
 	}
 
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if !*noLLM && apiKey == "" {
-		fmt.Fprintln(os.Stderr, "ANTHROPIC_API_KEY required")
-		return 1
-	}
 	modelPath := os.Getenv("VKB_MODEL_PATH")
 	if modelPath == "" {
 		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
@@ -78,18 +76,34 @@ func runPipe(args []string) int {
 	if *noLLM {
 		cleaner = passthroughCleaner{}
 	} else {
-		llmModel := os.Getenv("ANTHROPIC_MODEL")
-		if llmModel == "" {
-			llmModel = "claude-sonnet-4-6"
+		provider, perr := llm.ProviderByName(*llmProvider)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "llm: %v\n", perr)
+			return 2
 		}
-		cleaner, err = llm.NewAnthropic(llm.AnthropicOptions{
-			APIKey: apiKey,
-			Model:  llmModel,
-		})
+		// Model precedence: --llm-model flag > ANTHROPIC_MODEL env (legacy) >
+		// provider's DefaultModel (filled in by provider.New if still empty).
+		model := *llmModel
+		if model == "" {
+			model = os.Getenv("ANTHROPIC_MODEL")
+		}
+		opts := llm.Options{
+			Model:   model,
+			BaseURL: *llmBaseURL,
+		}
+		if provider.NeedsAPIKey {
+			opts.APIKey = os.Getenv("ANTHROPIC_API_KEY")
+			if opts.APIKey == "" {
+				fmt.Fprintf(os.Stderr, "ANTHROPIC_API_KEY required for provider %q\n", provider.Name)
+				return 1
+			}
+		}
+		cleaner, err = provider.New(opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "anthropic: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %v\n", provider.Name, err)
 			return 1
 		}
+		fmt.Fprintf(os.Stderr, "[vkb] LLM provider=%s model=%s\n", provider.Name, opts.Model)
 	}
 
 	var terms []string

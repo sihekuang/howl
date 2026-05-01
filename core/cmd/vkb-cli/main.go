@@ -21,6 +21,8 @@ func main() {
 		os.Exit(runPipe(os.Args[2:]))
 	case "backends":
 		os.Exit(runBackends(os.Args[2:]))
+	case "providers":
+		os.Exit(runProviders(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -43,9 +45,10 @@ Usage:
   vkb-cli backends                       list registered TSE backends
                                          (--models-dir DIR also checks
                                          that each backend's files exist)
+  vkb-cli providers                      list registered LLM providers
 
 Environment:
-  ANTHROPIC_API_KEY   required for cleanup
+  ANTHROPIC_API_KEY   required for cleanup (anthropic provider only)
   VKB_MODEL_PATH      path to Whisper ggml-*.bin file
   VKB_LANGUAGE        defaults to "en"
 `)

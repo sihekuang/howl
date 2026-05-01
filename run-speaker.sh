@@ -14,6 +14,18 @@ ONNX_LIB="${ONNXRUNTIME_LIB_PATH:-/opt/homebrew/lib/libonnxruntime.dylib}"
 #   TSE_BACKEND=ecapa ./run-speaker.sh
 TSE_BACKEND="${TSE_BACKEND:-${1:-ecapa}}"
 
+# LLM provider + model selection (env vars only — keep flag space simple).
+# LLM_PROVIDER empty → vkb-cli default ("anthropic").
+# LLM_MODEL    empty → provider's default (anthropic: claude-sonnet-4-6;
+#                                          ollama: must specify).
+# LLM_BASE_URL empty → provider's default (e.g. http://localhost:11434 for ollama).
+# Examples:
+#   LLM_PROVIDER=ollama LLM_MODEL=llama3.2 ./run-speaker.sh
+#   LLM_PROVIDER=ollama LLM_MODEL=qwen2.5 LLM_BASE_URL=http://10.0.0.5:11434 ./run-speaker.sh
+LLM_PROVIDER="${LLM_PROVIDER:-}"
+LLM_MODEL="${LLM_MODEL:-}"
+LLM_BASE_URL="${LLM_BASE_URL:-}"
+
 if [ -f "$SCRIPT_DIR/.env" ]; then
   set -a; . "$SCRIPT_DIR/.env"; set +a
 fi
@@ -42,12 +54,15 @@ VKB_MODELS_DIR="$MODELS_DIR" \
   --latency-report \
   --speaker \
   --tse-backend "$TSE_BACKEND" \
+  ${LLM_PROVIDER:+--llm-provider "$LLM_PROVIDER"} \
+  ${LLM_MODEL:+--llm-model "$LLM_MODEL"} \
+  ${LLM_BASE_URL:+--llm-base-url "$LLM_BASE_URL"} \
   < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 
 echo ""
-echo "🎙  Recording (TSE active: backend=$TSE_BACKEND) — press any key to stop, 'q' to cancel."
+echo "🎙  Recording (TSE backend=$TSE_BACKEND, LLM provider=${LLM_PROVIDER:-default}, model=${LLM_MODEL:-default}) — press any key to stop, 'q' to cancel."
 echo ""
 
 while IFS= read -rsn1 key; do
