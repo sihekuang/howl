@@ -14,6 +14,7 @@
 		23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D191FF4976526AAF109C19EB /* AppDelegate.swift */; };
 		4102BD8E2579447BA75C2865 /* EnrollmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */; };
 		4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */; };
+		516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */; };
 		57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */; };
 		5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */; };
 		60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6533D8DC82E66396D8BA7557 /* Assets.xcassets */; };
@@ -32,6 +33,7 @@
 		B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */; };
 		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
 		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
+		CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59636EC6C578038A015432EA /* OllamaSection.swift */; };
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
 		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
@@ -43,6 +45,7 @@
 		02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
 		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
+		1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
@@ -50,6 +53,7 @@
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
 		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
 		4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
+		59636EC6C578038A015432EA /* OllamaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaSection.swift; sourceTree = "<group>"; };
 		6533D8DC82E66396D8BA7557 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		67B5C020D95C44A45E9A2DCA /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWindow.swift; sourceTree = "<group>"; };
@@ -99,11 +103,13 @@
 		227B92BFEB8D385423847AF8 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */,
 				8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */,
 				B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */,
 				9D5234E365C4BA6093A5C613 /* GeneralTab.swift */,
 				3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */,
 				DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */,
+				59636EC6C578038A015432EA /* OllamaSection.swift */,
 				0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */,
 				7398A10FF69BCB846098786E /* ProviderTab.swift */,
 				FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */,
@@ -399,6 +405,7 @@
 			files = (
 				6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */,
 				57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */,
+				516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */,
 				23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
@@ -415,6 +422,7 @@
 				64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */,
 				8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */,
 				A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */,
+				CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */,
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
 				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
