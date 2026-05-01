@@ -70,6 +70,14 @@ struct GeneralTab: View {
         .onChange(of: settings) { _, new in onSave(new) }
         .task {
             devices = audioCapture.availableInputDevices()
+            // Auto-select a real device when the user hasn't picked one
+            // and any are available. Without this the picker sticks on
+            // "System Default" indefinitely, which is opaque about which
+            // mic the engine actually grabs. nil means "never picked";
+            // an explicit "" (System Default) is preserved.
+            if settings.inputDeviceUID == nil, let first = devices.first {
+                settings.inputDeviceUID = first.id
+            }
             modelStatusTick += 1
             launchAtLoginEnabled = LaunchAtLogin.isEnabled
         }
@@ -131,7 +139,13 @@ struct GeneralTab: View {
     private var micBinding: Binding<String> {
         Binding(
             get: { settings.inputDeviceUID ?? "" },
-            set: { settings.inputDeviceUID = $0.isEmpty ? nil : $0 }
+            // Picking "System Default" (tag "") writes "" — distinct
+            // from nil ("never picked"). Auto-default in .task only
+            // fires when nil, so an explicit System Default sticks.
+            // The engine treats non-nil-empty the same as nil
+            // (AudioCapture: `if let uid, !uid.isEmpty`), so this is
+            // purely about preserving user intent in the picker.
+            set: { settings.inputDeviceUID = $0 }
         )
     }
 

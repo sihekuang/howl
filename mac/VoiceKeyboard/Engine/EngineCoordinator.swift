@@ -184,6 +184,15 @@ public final class EngineCoordinator {
 
     private func onPress() async {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
+        // Preflight: AVAudioEngine throws an opaque error when no input
+        // device is available (mic disconnected, all devices in use by
+        // another app, TCC denial). Surface a useful message instead so
+        // the user knows what to do.
+        if composition.audioCapture.availableInputDevices().isEmpty {
+            log.error("onPress: no input devices available — aborting")
+            setTransientWarning("No microphone available — connect one and try again.")
+            return
+        }
         cueSound.playListening()
         composition.appState.engineState = .recording
         composition.overlay.show()
