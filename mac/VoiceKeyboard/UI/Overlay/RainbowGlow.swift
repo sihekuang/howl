@@ -42,7 +42,9 @@ struct RainbowGlow: View {
     }
 
     private func haloLayer(blur: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius + 6, style: .continuous)
+        // Capsule (fully rounded ends) — the halo silhouette reads as
+        // softer than the inner pill, which has a smaller corner radius.
+        Capsule(style: .continuous)
             .fill(
                 AngularGradient(
                     gradient: Gradient(colors: [
