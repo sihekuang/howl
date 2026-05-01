@@ -1,6 +1,8 @@
 import SwiftUI
 
 /// Circular buffer of recent RMS samples → bar graph rendered with Canvas.
+/// Each bar's hue is derived from its position in the strip, so the row
+/// reads as a continuous ROYGBIV rainbow that the level animates through.
 struct WaveformView: View {
     let samples: [Float]   // newest at end
     let barCount = 32
@@ -22,9 +24,12 @@ struct WaveformView: View {
                     width: barWidth * 0.6,
                     height: h
                 )
+                // Hue spans ~0–0.85 so the strip reads ROYGBIV without
+                // wrapping past pink back into red on the right edge.
+                let hue = Double(i) / Double(barCount) * 0.85
                 context.fill(
                     Path(roundedRect: rect, cornerRadius: barWidth * 0.3),
-                    with: .color(.white.opacity(0.85))
+                    with: .color(Color(hue: hue, saturation: 0.85, brightness: 1.0))
                 )
             }
         }
