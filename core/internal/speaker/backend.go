@@ -3,6 +3,7 @@ package speaker
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 )
 
 // Backend describes a TSE backend: the on-disk model layout and the shape
@@ -63,4 +64,14 @@ func BackendByName(name string) (*Backend, error) {
 		return nil, fmt.Errorf("speaker: unknown backend %q", name)
 	}
 	return b, nil
+}
+
+// BackendNames returns all registered backend names in sorted order.
+func BackendNames() []string {
+	names := make([]string, 0, len(backends))
+	for n := range backends {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }

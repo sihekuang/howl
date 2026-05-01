@@ -38,6 +38,29 @@ func TestBackendByName_UnknownReturnsError(t *testing.T) {
 	}
 }
 
+func TestBackendNames_IncludesECAPASorted(t *testing.T) {
+	names := BackendNames()
+	if len(names) == 0 {
+		t.Fatalf("BackendNames returned empty")
+	}
+	found := false
+	for _, n := range names {
+		if n == "ecapa" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("BackendNames %v missing 'ecapa'", names)
+	}
+	for i := 1; i < len(names); i++ {
+		if names[i-1] > names[i] {
+			t.Errorf("BackendNames not sorted: %v", names)
+			break
+		}
+	}
+}
+
 func TestBackend_PathHelpers(t *testing.T) {
 	enc := ECAPA.EncoderPath("/tmp/models")
 	want := "/tmp/models/speaker_encoder.onnx"
