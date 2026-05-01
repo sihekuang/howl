@@ -2,15 +2,39 @@ import Foundation
 import Testing
 @testable import VoiceKeyboardCore
 
-/// URLProtocol subclass that returns canned responses keyed by URL path.
+/// URLProtocol subclass that returns canned responses. Handlers are
+/// registered per host so multiple test suites (Ollama at localhost,
+/// Anthropic at api.anthropic.com, OpenAI at api.openai.com) can run
+/// concurrently without their static state clobbering each other.
 final class MockURLProtocol: URLProtocol {
-    nonisolated(unsafe) static var handler: ((URLRequest) -> (HTTPURLResponse, Data?, Error?))?
+    nonisolated(unsafe) private static var handlers: [String: (URLRequest) -> (HTTPURLResponse, Data?, Error?)] = [:]
+    nonisolated(unsafe) private static let lock = NSLock()
+
+    /// Register a handler for requests whose URL.host equals `host`.
+    /// Pass nil to unregister; safe to call from any test.
+    static func setHandler(
+        for host: String,
+        _ handler: ((URLRequest) -> (HTTPURLResponse, Data?, Error?))?
+    ) {
+        lock.lock(); defer { lock.unlock() }
+        if let handler = handler {
+            handlers[host] = handler
+        } else {
+            handlers.removeValue(forKey: host)
+        }
+    }
+
+    private static func handler(for host: String) -> ((URLRequest) -> (HTTPURLResponse, Data?, Error?))? {
+        lock.lock(); defer { lock.unlock() }
+        return handlers[host]
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let handler = MockURLProtocol.handler else {
+        let host = request.url?.host ?? ""
+        guard let handler = MockURLProtocol.handler(for: host) else {
             client?.urlProtocol(self, didFailWithError: URLError(.unknown))
             return
         }
@@ -32,7 +56,7 @@ struct OllamaClientTests {
     private func makeClient(handler: @escaping (URLRequest) -> (HTTPURLResponse, Data?, Error?)) -> OllamaClient {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [MockURLProtocol.self]
-        MockURLProtocol.handler = handler
+        MockURLProtocol.setHandler(for: "localhost", handler)
         let session = URLSession(configuration: cfg)
         return OllamaClient(baseURL: URL(string: "http://localhost:11434")!, session: session)
     }
