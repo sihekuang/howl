@@ -59,7 +59,7 @@ work from a truly empty state (e.g., before tagging a release):
 
 ```bash
 rm -f core/build/libvkb.dylib core/build/libvkb.h
-rm -rf /tmp/vkb-archive-derived /tmp/VoiceKeyboard-*.xcarchive
+rm -rf /tmp/vkb-archive-derived
 ```
 
 Don't `rm -rf core/build/` — that wipes the TSE models (~30+ min
@@ -70,9 +70,19 @@ you need a Make-driven version.
 
 Run from `mac/`. The flags mirror what `.github/workflows/build.yml`
 uses for CI, so a successful local archive predicts a successful CI
-build for the same commit:
+build for the same commit. Archive path matches what Xcode itself
+would use (`~/Library/Developer/Xcode/Archives/<YYYY-MM-DD>/`) so
+the result shows up in Window → Organizer alongside any other
+archives — but with a version-stamped filename instead of
+`VoiceKeyboard 5-1-26, 4.40 PM.xcarchive`:
 
 ```bash
+VERSION=<X.Y.Z>
+DATE=$(date +%Y-%m-%d)
+ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$DATE"
+mkdir -p "$ARCHIVE_DIR"
+ARCHIVE_PATH="$ARCHIVE_DIR/VoiceKeyboard-$VERSION.xcarchive"
+
 cd mac
 xcodebuild \
   -project VoiceKeyboard.xcodeproj \
@@ -80,7 +90,7 @@ xcodebuild \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath /tmp/vkb-archive-derived \
-  -archivePath /tmp/VoiceKeyboard-<X.Y.Z>.xcarchive \
+  -archivePath "$ARCHIVE_PATH" \
   CODE_SIGN_IDENTITY=- \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM= \
@@ -89,8 +99,13 @@ xcodebuild \
 
 Why these flags:
 
+- `-archivePath ~/Library/Developer/Xcode/Archives/<date>/...`
+  is what Xcode itself uses, so Organizer's archive list picks it
+  up. Sub-folder must be `<YYYY-MM-DD>` for Organizer's grouping;
+  the filename can be anything (we use the version stamp for
+  scripting and visual scanability).
 - `-derivedDataPath /tmp/...` keeps the user's normal Xcode caches
-  untouched — no spurious incremental rebuilds afterwards
+  untouched — no spurious incremental rebuilds afterwards.
 - `CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=`
   forces ad-hoc signing regardless of any `DeveloperSettings.xcconfig`
   override. Matches CI; required for reproducibility.
@@ -109,7 +124,7 @@ The archive can succeed structurally but still ship a broken .app
 Always run all four checks:
 
 ```bash
-APP="/tmp/VoiceKeyboard-<X.Y.Z>.xcarchive/Products/Applications/VoiceKeyboard.app"
+APP="$ARCHIVE_PATH/Products/Applications/VoiceKeyboard.app"
 
 # A. Versions match what you bumped
 /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist"
@@ -142,11 +157,13 @@ libvkb + ~70 MB Homebrew dylib closure + ~70 MB TSE models).
 ### 5. Produce the distributable zip
 
 `ditto` is the right tool — `zip -r` corrupts macOS bundles
-(strips xattrs, breaks symlinks, breaks codesign):
+(strips xattrs, breaks symlinks, breaks codesign). Drop the zip in
+`/tmp/` for easy scripting; the archive itself stays in
+`~/Library/Developer/Xcode/Archives/` so Organizer can see it:
 
 ```bash
-ditto -c -k --keepParent "$APP" /tmp/VoiceKeyboard-<X.Y.Z>.app.zip
-ls -lh /tmp/VoiceKeyboard-<X.Y.Z>.app.zip
+ditto -c -k --keepParent "$APP" "/tmp/VoiceKeyboard-$VERSION.app.zip"
+ls -lh "/tmp/VoiceKeyboard-$VERSION.app.zip"
 ```
 
 Expected size: ~80 MB compressed (the 130 MB .app compresses well
