@@ -70,18 +70,10 @@ jobs:
             torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
           "$VENV/bin/python" scripts/export_tse_model.py --out core/build/models/tse_model.onnx
 
-      - name: Override Local.xcconfig for ad-hoc signing
-        # The committed Local.xcconfig.sample sets CODE_SIGN_IDENTITY to
-        # "Apple Development", which fails in CI (no cert in keychain).
-        # Manual signing with identity "-" produces an ad-hoc-signed .app
-        # that Gatekeeper will gate-prompt but otherwise works.
-        working-directory: mac
-        run: |
-          cat > Local.xcconfig <<'EOF'
-          DEVELOPMENT_TEAM =
-          CODE_SIGN_STYLE = Manual
-          CODE_SIGN_IDENTITY = -
-          EOF
+      # No xcconfig override needed any more: SharedSettings.xcconfig
+      # ships ad-hoc signing as the default. CI doesn't have a
+      # DeveloperSettings.xcconfig at the runner, so the default
+      # values are used as-is.
 
       - name: Generate Xcode project
         working-directory: mac

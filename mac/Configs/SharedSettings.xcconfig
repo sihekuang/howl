@@ -1,0 +1,23 @@
+// SharedSettings.xcconfig
+//
+// Tracked baseline build configuration. Default values here let any
+// contributor (including those without an Apple Developer account)
+// clone the repo and build immediately with ad-hoc signing.
+//
+// Maintainers who want to use their own Apple Developer team for
+// personal builds can override these values by creating
+//
+//     mac/DeveloperSettings.xcconfig    (gitignored)
+//
+// Use mac/DeveloperSettings.xcconfig.sample as a template. xcconfig's
+// `#include?` is optional — if the file isn't present the build still
+// succeeds with the ad-hoc defaults below.
+
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+
+// Optional per-developer override. Must be the LAST line so its
+// values win over the defaults above (xcconfig: later definitions
+// override earlier ones).
+#include? "DeveloperSettings.xcconfig"

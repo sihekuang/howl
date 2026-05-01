@@ -5,8 +5,8 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
 configFiles:
-  Debug: Local.xcconfig
-  Release: Local.xcconfig
+  Debug: Configs/SharedSettings.xcconfig
+  Release: Configs/SharedSettings.xcconfig
 settings:
   base:
     SWIFT_VERSION: "6.0"

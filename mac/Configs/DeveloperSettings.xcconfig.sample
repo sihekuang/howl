@@ -1,0 +1,21 @@
+// DeveloperSettings.xcconfig.sample
+//
+// Optional per-developer override. Pulled in by SharedSettings.xcconfig
+// via `#include?` only if the real file (DeveloperSettings.xcconfig,
+// gitignored) exists alongside this one.
+//
+// You only need this if you have an Apple Developer account and want
+// Xcode to sign with your "Apple Development" identity for personal
+// builds. The default — no override — is ad-hoc signing, which works
+// for any contributor and matches what CI ships.
+//
+// To use:
+//   cp DeveloperSettings.xcconfig.sample DeveloperSettings.xcconfig
+//   # then edit DeveloperSettings.xcconfig with your team ID
+//
+// Find your team ID at https://developer.apple.com/account
+// (Membership Details) or run:  security find-identity -v -p codesigning
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
