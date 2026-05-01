@@ -11,6 +11,10 @@ struct GeneralTab: View {
     /// Bumps every time we want SwiftUI to re-evaluate isDownloaded
     /// (after a download completes / after launch / after switching).
     @State private var modelStatusTick = 0
+    /// Live read of SMAppService.mainApp.status. macOS can change this
+    /// externally (e.g. user untoggles in System Settings), so re-read
+    /// on `.task` rather than caching forever.
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
 
     private let modelSizes: [(size: String, label: String, mb: String)] = [
         ("tiny", "Tiny", "75 MB"),
@@ -39,12 +43,23 @@ struct GeneralTab: View {
                 ForEach(languages, id: \.self) { Text($0).tag($0) }
             }
             Toggle("Disable noise suppression", isOn: $settings.disableNoiseSuppression)
+
+            Toggle("Open at login", isOn: Binding(
+                get: { launchAtLoginEnabled },
+                set: { newValue in
+                    LaunchAtLogin.setEnabled(newValue)
+                    // Re-read so the toggle reflects whether macOS
+                    // actually accepted the change (it can decline).
+                    launchAtLoginEnabled = LaunchAtLogin.isEnabled
+                }
+            ))
         }
         .formStyle(.grouped)
         .onChange(of: settings) { _, new in onSave(new) }
         .task {
             devices = audioCapture.availableInputDevices()
             modelStatusTick += 1
+            launchAtLoginEnabled = LaunchAtLogin.isEnabled
         }
         .padding()
     }
