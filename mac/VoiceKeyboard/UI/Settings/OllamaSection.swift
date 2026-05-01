@@ -39,6 +39,14 @@ struct OllamaSection: View {
             let new = baseURLDraft
             settings.llmBaseURL = new == Self.defaultBaseURL ? "" : new
         }
+        .task(id: settings.llmModel) {
+            // Pre-warm Ollama whenever the user picks a model. This kicks
+            // off a /api/generate load request in the background so by
+            // the time the user closes Settings and dictates, the model
+            // is already resident. Best-effort; failures are silent
+            // (the next real Clean call will surface them).
+            await prewarmIfNeeded()
+        }
         .onAppear {
             if baseURLDraft.isEmpty { baseURLDraft = settings.llmBaseURL }
         }
@@ -150,6 +158,19 @@ struct OllamaSection: View {
         } catch {
             loadState = .failed(message: error.localizedDescription)
         }
+    }
+
+    /// Best-effort preload — fires whenever `settings.llmModel` changes
+    /// (including the initial value on tab appear). No-op when model is
+    /// empty. Errors are swallowed because a) this is a hint, not a
+    /// contract, and b) the same failure will surface on the next real
+    /// Clean call with a clearer message.
+    private func prewarmIfNeeded() async {
+        let model = settings.llmModel
+        guard !model.isEmpty,
+              let url = URL(string: effectiveBaseURL) else { return }
+        let client = OllamaClient(baseURL: url)
+        try? await client.preloadModel(model)
     }
 
     private func copyToPasteboard(_ s: String) {
