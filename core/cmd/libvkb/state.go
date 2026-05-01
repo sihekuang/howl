@@ -102,9 +102,15 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	if err != nil {
 		return nil, err
 	}
-	cleaner, err := llm.NewAnthropic(llm.AnthropicOptions{
-		APIKey: e.cfg.LLMAPIKey,
-		Model:  e.cfg.LLMModel,
+	provider, err := llm.ProviderByName(e.cfg.LLMProvider)
+	if err != nil {
+		_ = tr.Close()
+		return nil, err
+	}
+	cleaner, err := provider.New(llm.Options{
+		Model:   e.cfg.LLMModel,
+		APIKey:  e.cfg.LLMAPIKey,
+		BaseURL: e.cfg.LLMBaseURL,
 	})
 	if err != nil {
 		_ = tr.Close()
