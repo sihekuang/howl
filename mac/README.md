@@ -1,60 +1,94 @@
 # VoiceKeyboard — Mac App
 
 The macOS client for VoiceKeyboard. The Xcode project is generated from
-`project.yml` by [xcodegen](https://github.com/yonaskolb/XcodeGen).
+`project.yml` by [xcodegen](https://github.com/yonaskolb/XcodeGen) and
+committed alongside it for fresh-clone-friendliness.
 
 ## Prerequisites
 
+The fastest way: run `./scripts/setup-dev.sh` from the repo root once.
+It installs everything below via Homebrew and bootstraps the Go dylib.
+
+If you'd rather install manually:
+
 - **Xcode 15+** with macOS 14 SDK
 - **xcodegen** — `brew install xcodegen`
-- **Go** — `brew install go` (the app links against a Go-built `libvkb.dylib`)
-
-## First-time setup
-
-Signing settings are kept out of the committed project so each contributor
-can use their own Apple Developer Team ID. The first `make project` will
-create `Local.xcconfig` from the sample and ask you to fill it in:
-
-```sh
-cd mac
-make project        # creates Local.xcconfig from sample, then exits
-$EDITOR Local.xcconfig   # set DEVELOPMENT_TEAM
-make project        # regenerates VoiceKeyboard.xcodeproj
-```
-
-### `Local.xcconfig`
-
-This file is gitignored. It holds your personal signing identity so the
-generated `project.pbxproj` doesn't carry your team ID. Example:
-
-```xcconfig
-// mac/Local.xcconfig
-DEVELOPMENT_TEAM = ABC123XYZ
-CODE_SIGN_STYLE = Automatic
-CODE_SIGN_IDENTITY = Apple Development
-```
-
-Find your **Team ID** at
-[developer.apple.com/account → Membership Details](https://developer.apple.com/account),
-or by running:
-
-```sh
-security find-identity -v -p codesigning
-```
-
-For **ad-hoc signing** (no Apple ID required, but TCC permissions reset on
-every rebuild — see below), set `CODE_SIGN_IDENTITY = -` and leave
-`DEVELOPMENT_TEAM` blank.
-
-The full template lives at `Local.xcconfig.sample`.
+- **Go** — `brew install go`
+- **Go cgo runtime deps** — `brew install whisper-cpp ggml onnxruntime`
+  (libvkb.dylib links against these)
 
 ## Build & run
 
+From this directory (`mac/`):
+
 ```sh
-make build   # build the .app
-make run     # build and launch
-make test    # run Swift package tests
-make clean   # remove build artifacts
+make build       # regenerates project if needed, then xcodebuild Debug
+make run         # build + open the .app
+make test        # SwiftPM tests for VoiceKeyboardCore
+make project     # regenerate VoiceKeyboard.xcodeproj from project.yml
+make clean       # nuke ~/Library DerivedData + libvkb.dylib + SwiftPM cache
+make clean-all   # the above + Go binaries (preserves TSE models)
+```
+
+`make build` is incremental and cheap when nothing changed (~1.5 s warm,
+~2 s after touching a Swift file).
+
+## Architecture: Apple Silicon only
+
+The app is **arm64-only** — `mac/project.yml` pins `ARCHS: arm64`. Xcode
+will sometimes prompt:
+
+> "VoiceKeyboard.app" uses custom architectures. Would you like to update
+> to build with standard architectures?
+
+**Choose "Build" (keep current configuration).** Don't pick "Update and
+Build" — it would either:
+
+1. Fail to link, because the Homebrew cgo dylibs we depend on
+   (`whisper-cpp`, `ggml`, `onnxruntime`) ship arm64-only on Apple
+   Silicon installs — there's no x86_64 slice to link against.
+2. Even if it linked, the IDE-only change would get wiped on the next
+   `make project` (xcodegen regenerates from `project.yml`).
+
+Intel macOS support would mean either Rosetta-translated cgo deps or a
+separate x86_64 build pipeline — worth doing only if there's actual
+demand. Apple stopped selling Intel Macs in 2023.
+
+## Signing — OSS-ready defaults
+
+`Configs/SharedSettings.xcconfig` ships ad-hoc signing as the committed
+default:
+
+```xcconfig
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+```
+
+Anyone — including someone without an Apple Developer account — can
+clone, open the project, and hit Run. CI builds use these defaults too.
+
+### Personal signing (optional)
+
+If you have an Apple Developer Team ID and want personal Xcode builds to
+use Apple Development signing (so TCC permissions like the mic stay
+granted across rebuilds), drop in your override once:
+
+```sh
+cp Configs/DeveloperSettings.xcconfig.sample Configs/DeveloperSettings.xcconfig
+$EDITOR Configs/DeveloperSettings.xcconfig   # set DEVELOPMENT_TEAM
+```
+
+`DeveloperSettings.xcconfig` is gitignored — it never gets committed.
+`SharedSettings.xcconfig` pulls it in via `#include?`, so settings layer
+correctly with no template changes needed.
+
+Find your **Team ID** at
+[developer.apple.com/account → Membership Details](https://developer.apple.com/account),
+or:
+
+```sh
+security find-identity -v -p codesigning
 ```
 
 ## Why signing matters here
@@ -71,13 +105,17 @@ permissions stop working until you toggle them off and on again in
 
 Signing with a stable identity (free Apple ID "Personal Team" or paid
 Developer Program) keeps the cdhash chain stable across rebuilds, so
-permissions persist.
+permissions persist. That's why most contributors will want a
+`DeveloperSettings.xcconfig` override.
 
 ## Project layout
 
 - `VoiceKeyboard/` — Swift app sources (UI, AppDelegate, state machine)
 - `Packages/VoiceKeyboardCore/` — Swift package wrapping the Go core via C ABI
 - `project.yml` — xcodegen project definition (committed, source of truth)
-- `Local.xcconfig` — per-machine signing (gitignored)
-- `Local.xcconfig.sample` — template for `Local.xcconfig`
-- `VoiceKeyboard.xcodeproj/` — generated by `make project`
+- `Configs/SharedSettings.xcconfig` — committed signing defaults
+- `Configs/DeveloperSettings.xcconfig.sample` — template for personal override
+- `Configs/DeveloperSettings.xcconfig` — your personal override (gitignored)
+- `VoiceKeyboard.xcodeproj/` — tracked, regenerated by `make project`
+
+For build phases, gotchas, and deeper internals, see `mac/CLAUDE.md`.
