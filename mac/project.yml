@@ -70,6 +70,26 @@ targets:
           - "$(SRCROOT)/../core/build/libvkb.dylib"
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+      - name: Copy TSE models into Resources
+        script: |
+          set -e
+          SRC="$SRCROOT/../core/build/models"
+          DST="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          for f in tse_model.onnx speaker_encoder.onnx; do
+            if [ ! -f "$SRC/$f" ]; then
+              echo "error: $SRC/$f missing — run ./enroll.sh once from the repo root to build the TSE models" >&2
+              exit 1
+            fi
+          done
+          mkdir -p "$DST"
+          cp -f "$SRC/tse_model.onnx"       "$DST/"
+          cp -f "$SRC/speaker_encoder.onnx" "$DST/"
+        inputFiles:
+          - "$(SRCROOT)/../core/build/models/tse_model.onnx"
+          - "$(SRCROOT)/../core/build/models/speaker_encoder.onnx"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tse_model.onnx"
+          - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/speaker_encoder.onnx"
 schemes:
   VoiceKeyboard:
     build:

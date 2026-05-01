@@ -121,11 +121,25 @@ enum ModelPaths {
     static func whisperModel(size: String) -> URL {
         modelsDir.appendingPathComponent("ggml-\(size).en.bin")
     }
+    /// TSE separation model. Bundled with the .app at build time (see the
+    /// "Copy TSE models into Resources" build phase). Falls back to
+    /// modelsDir so a developer can drop a custom-trained model into
+    /// ~/Library/Application Support/VoiceKeyboard/models/ without rebuilding.
     static var tseModel: URL {
-        modelsDir.appendingPathComponent("tse_model.onnx")
+        if let bundled = Bundle.main.url(forResource: "tse_model", withExtension: "onnx"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return modelsDir.appendingPathComponent("tse_model.onnx")
     }
+    /// Speaker encoder used by enrollment to produce the 256-dim reference embedding.
+    /// See `tseModel` for bundling rationale.
     static var speakerEncoder: URL {
-        modelsDir.appendingPathComponent("speaker_encoder.onnx")
+        if let bundled = Bundle.main.url(forResource: "speaker_encoder", withExtension: "onnx"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return modelsDir.appendingPathComponent("speaker_encoder.onnx")
     }
     /// Where enrollment artefacts live (enrollment.wav, enrollment.emb, speaker.json).
     static var voiceProfileDir: URL {
