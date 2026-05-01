@@ -83,9 +83,18 @@ targets:
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libdf.dylib"
-      - name: Copy TSE models into Resources
+      - name: Copy TSE models into Resources (Release only)
         script: |
           set -e
+          # Debug builds skip the model copy: ModelPaths.tseModel falls
+          # back to ~/Library/Application Support/VoiceKeyboard/models/,
+          # which the dev should have populated once via enroll.sh. Saves
+          # ~32MB of cp work and keeps fresh-clone Debug builds from
+          # erroring on missing models.
+          if [ "$CONFIGURATION" != "Release" ]; then
+            echo "Skipping TSE model copy (Debug — using ~/Library/Application Support fallback)."
+            exit 0
+          fi
           SRC="$SRCROOT/../core/build/models"
           DST="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
           for f in tse_model.onnx speaker_encoder.onnx; do
@@ -103,10 +112,21 @@ targets:
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tse_model.onnx"
           - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/speaker_encoder.onnx"
-      - name: Bundle Homebrew dylibs (ONNX + Whisper)
+      - name: Bundle Homebrew dylibs (Release only)
         shell: /bin/bash
         script: |
           set -e
+          # Debug builds skip the dylib bundle entirely: libvkb.dylib's
+          # cgo link table holds absolute /opt/homebrew paths to whisper /
+          # ggml that dyld will resolve at runtime, and ModelPaths.onnxLib
+          # falls back to /opt/homebrew/lib/libonnxruntime.dylib when the
+          # bundled copy isn't present. The dev runs against Homebrew in
+          # place — much faster cold builds and the .app stays tiny.
+          # Release does the full bundle so the artifact is self-contained.
+          if [ "$CONFIGURATION" != "Release" ]; then
+            echo "Skipping Homebrew dylib bundle (Debug — using /opt/homebrew at runtime)."
+            exit 0
+          fi
           # Locate Homebrew prefix. Apple Silicon vs Intel.
           BREW_PREFIX=""
           for prefix in /opt/homebrew /usr/local; do
