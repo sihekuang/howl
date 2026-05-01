@@ -32,7 +32,11 @@ struct VoiceKeyboardApp: App {
                     }
                 )
         }
-        .menuBarExtraStyle(.window)
+        // Standard NSMenu rendering — MenuBarMenu's Buttons + Dividers
+        // become real menu items / separators with native styling. The
+        // previous `.window` style produced a custom padded popup that
+        // didn't match other macOS menu bar apps.
+        .menuBarExtraStyle(.menu)
 
         // Use a regular Window (not Settings { }) so we can openWindow
         // it programmatically at launch and apply NSWindow customisations

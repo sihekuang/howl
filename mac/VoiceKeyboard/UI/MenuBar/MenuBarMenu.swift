@@ -2,6 +2,12 @@ import SwiftUI
 import AppKit
 import VoiceKeyboardCore
 
+/// Contents of the menu that drops down from the status item.
+/// Rendered in standard macOS NSMenu style by MenuBarExtra's `.menu`
+/// styling — top-level Buttons become menu items, Dividers become
+/// system separators. Avoid VStack / padding / custom backgrounds:
+/// they don't translate to menu items and revert to the old custom
+/// popup look.
 struct MenuBarMenu: View {
     let appState: AppState
     let hotkey: String
@@ -9,48 +15,43 @@ struct MenuBarMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading) {
-            statusRow
-            if let warning = appState.transientWarning {
-                Divider()
-                Text(warning).font(.caption).foregroundStyle(.orange)
-            }
-            Divider()
-            Button("Settings…") {
-                openWindow(id: "settings")
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .keyboardShortcut(",", modifiers: [.command])
-            Divider()
-            Button("Quit VoiceKeyboard") { quit() }
-                .keyboardShortcut("q", modifiers: [.command])
+        // Status as a disabled Button — renders as a greyed informational
+        // header. Plain Text in `.menu` style would still be tappable; an
+        // explicitly-disabled Button is the conventional way to expose a
+        // non-interactive label.
+        Button(statusText) { }
+            .disabled(true)
+
+        if let warning = appState.transientWarning {
+            Button(warning) { }
+                .disabled(true)
         }
-        .padding(8)
+
+        Divider()
+
+        Button("Settings…") {
+            openWindow(id: "settings")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut(",", modifiers: [.command])
+
+        Divider()
+
+        Button("Quit VoiceKeyboard") { quit() }
+            .keyboardShortcut("q", modifiers: [.command])
     }
 
-    @ViewBuilder
-    private var statusRow: some View {
+    private var statusText: String {
         switch appState.setupGate {
         case .ready:
             switch appState.engineState {
-            case .idle:
-                Label("Ready — hold \(hotkey) to dictate", systemImage: "mic")
-            case .recording:
-                Label("Listening…", systemImage: "waveform.circle.fill")
-                    .foregroundStyle(.red)
-            case .processing:
-                Label("Processing…", systemImage: "ellipsis.circle.fill")
-                    .foregroundStyle(.orange)
+            case .idle:       return "Ready — hold \(hotkey) to dictate"
+            case .recording:  return "Listening…"
+            case .processing: return "Processing…"
             }
-        case .needsAccessibility:
-            Label("Grant Accessibility permission", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
-        case .needsModel:
-            Label("Download a Whisper model", systemImage: "arrow.down.circle")
-                .foregroundStyle(.orange)
-        case .needsAPIKey:
-            Label("Set Anthropic API key", systemImage: "key")
-                .foregroundStyle(.orange)
+        case .needsAccessibility: return "Grant Accessibility permission"
+        case .needsModel:         return "Download a Whisper model"
+        case .needsAPIKey:        return "Set Anthropic API key"
         }
     }
 }
