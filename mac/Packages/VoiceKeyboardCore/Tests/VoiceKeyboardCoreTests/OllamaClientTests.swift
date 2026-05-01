@@ -69,7 +69,7 @@ struct OllamaClientTests {
         do {
             _ = try await client.listModels()
             Issue.record("expected error to be thrown")
-        } catch let OllamaClient.Error.http(status, _) {
+        } catch let OllamaClientError.http(status, _) {
             #expect(status == 503)
         } catch {
             Issue.record("wrong error type: \(error)")
@@ -84,7 +84,7 @@ struct OllamaClientTests {
         do {
             _ = try await client.listModels()
             Issue.record("expected error to be thrown")
-        } catch OllamaClient.Error.unreachable {
+        } catch OllamaClientError.unreachable {
             // expected
         } catch {
             Issue.record("wrong error type: \(error)")
@@ -99,7 +99,7 @@ struct OllamaClientTests {
         do {
             _ = try await client.listModels()
             Issue.record("expected error to be thrown")
-        } catch OllamaClient.Error.decode {
+        } catch OllamaClientError.decode {
             // expected
         } catch {
             Issue.record("wrong error type: \(error)")
