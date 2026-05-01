@@ -37,6 +37,46 @@ struct EngineConfigTests {
         #expect(json.contains("\"custom_dict\""))
     }
 
+    @Test func testEngineConfig_LLMBaseURL_EncodesUnderSnakeCaseKey() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "",
+            whisperModelSize: "small",
+            language: "en",
+            disableNoiseSuppression: false,
+            deepFilterModelPath: "",
+            llmProvider: "ollama",
+            llmModel: "llama3.2",
+            llmAPIKey: "",
+            customDict: [],
+            llmBaseURL: "http://10.0.0.5:11434"
+        )
+        let data = try JSONEncoder().encode(cfg)
+        let json = try #require(String(data: data, encoding: .utf8))
+        // JSONEncoder escapes "/" as "\/" — check the key exists and round-trips correctly.
+        #expect(json.contains("\"llm_base_url\""),
+                "expected llm_base_url key in JSON, got: \(json)")
+        let decoded = try JSONDecoder().decode(EngineConfig.self, from: data)
+        #expect(decoded.llmBaseURL == "http://10.0.0.5:11434")
+    }
+
+    @Test func testEngineConfig_LLMBaseURL_RoundTrip() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/tmp/m.bin",
+            whisperModelSize: "small",
+            language: "en",
+            disableNoiseSuppression: false,
+            deepFilterModelPath: "",
+            llmProvider: "ollama",
+            llmModel: "qwen2.5:14b",
+            llmAPIKey: "",
+            customDict: [],
+            llmBaseURL: ""
+        )
+        let data = try JSONEncoder().encode(cfg)
+        let decoded = try JSONDecoder().decode(EngineConfig.self, from: data)
+        #expect(decoded.llmBaseURL == "")
+    }
+
     @Test func testEngineConfig_TSEFieldsRoundTrip() throws {
         let cfg = EngineConfig(
             whisperModelPath: "/m.bin",

@@ -11,6 +11,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var llmProvider: String
     public var llmModel: String
     public var llmAPIKey: String
+    public var llmBaseURL: String   // empty = provider's default endpoint
     public var customDict: [String]
 
     // TSE (Target Speaker Extraction) fields. Defaults are off/empty so
@@ -31,6 +32,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         llmModel: String,
         llmAPIKey: String,
         customDict: [String],
+        llmBaseURL: String = "",
         tseEnabled: Bool = false,
         tseProfileDir: String = "",
         tseModelPath: String = "",
@@ -45,6 +47,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.llmProvider = llmProvider
         self.llmModel = llmModel
         self.llmAPIKey = llmAPIKey
+        self.llmBaseURL = llmBaseURL
         self.customDict = customDict
         self.tseEnabled = tseEnabled
         self.tseProfileDir = tseProfileDir
@@ -62,6 +65,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case llmProvider = "llm_provider"
         case llmModel = "llm_model"
         case llmAPIKey = "llm_api_key"
+        case llmBaseURL = "llm_base_url"
         case customDict = "custom_dict"
         case tseEnabled = "tse_enabled"
         case tseProfileDir = "tse_profile_dir"
