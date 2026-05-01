@@ -107,11 +107,21 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		_ = tr.Close()
 		return nil, err
 	}
-	cleaner, err := provider.New(llm.Options{
+	// Mirror vkb-cli/pipe.go's gating: only forward the configured API
+	// key to providers that declare they need one. Defense-in-depth —
+	// today's only NeedsAPIKey=false provider (Ollama) ignores the
+	// field anyway, but a future "self-hosted gateway with optional
+	// bearer token" provider could otherwise silently leak the user's
+	// Anthropic key. The Swift layer also empties LLMAPIKey when the
+	// active provider isn't Anthropic, so this is belt-and-braces.
+	opts := llm.Options{
 		Model:   e.cfg.LLMModel,
-		APIKey:  e.cfg.LLMAPIKey,
 		BaseURL: e.cfg.LLMBaseURL,
-	})
+	}
+	if provider.NeedsAPIKey {
+		opts.APIKey = e.cfg.LLMAPIKey
+	}
+	cleaner, err := provider.New(opts)
 	if err != nil {
 		_ = tr.Close()
 		return nil, err
