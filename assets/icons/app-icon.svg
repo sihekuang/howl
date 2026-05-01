@@ -1,80 +1,28 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="80" fill="#f5f7fb"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VoiceKeyboard app icon — master.
+  Canvas: 1024×1024.
 
-  <!-- Ears -->
-  <path d="M145 210 L105 95 L205 165 Z" fill="#4b5563"/>
-  <path d="M367 210 L407 95 L307 165 Z" fill="#4b5563"/>
-  <path d="M147 185 L124 122 L185 164 Z" fill="#f59e0b" opacity="0.75"/>
-  <path d="M365 185 L388 122 L327 164 Z" fill="#f59e0b" opacity="0.75"/>
+  Concept: user-supplied howling-husky logo, centred on a cream-white
+  squircle. Husky reads as a stylised silhouette (head tilted up
+  mid-howl, eye closed, mouth open) — the "voice" association comes
+  through without needing a microphone.
 
-  <!-- Head -->
-  <circle cx="256" cy="250" r="145" fill="#6b7280"/>
+  The PNG is embedded via <image>; rsvg-convert downscales it to
+  every required size when the icon is rasterised.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Cream-white squircle background. Slight off-white so the husky's
+       own near-white internal areas (which the source PNG fills with
+       solid white, no alpha) blend into the icon's background. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="#fafafa"/>
 
-  <!-- Face mask -->
-  <path d="M145 236
-           C155 170, 205 135, 256 158
-           C307 135, 357 170, 367 236
-           C377 316, 320 392, 256 392
-           C192 392, 135 316, 145 236 Z"
-        fill="#ffffff"/>
-
-  <!-- Dark forehead mask -->
-  <path d="M175 178
-           C205 130, 236 130, 256 166
-           C276 130, 307 130, 337 178
-           C304 165, 280 177, 256 214
-           C232 177, 208 165, 175 178 Z"
-        fill="#374151"/>
-
-  <!-- Cheeks -->
-  <circle cx="195" cy="292" r="42" fill="#f3f4f6"/>
-  <circle cx="317" cy="292" r="42" fill="#f3f4f6"/>
-
-  <!-- Eyes -->
-  <circle cx="205" cy="240" r="24" fill="#111827"/>
-  <circle cx="307" cy="240" r="24" fill="#111827"/>
-  <circle cx="213" cy="232" r="8" fill="#ffffff"/>
-  <circle cx="315" cy="232" r="8" fill="#ffffff"/>
-
-  <!-- Blue eye highlights -->
-  <circle cx="205" cy="240" r="12" fill="#60a5fa" opacity="0.85"/>
-  <circle cx="307" cy="240" r="12" fill="#60a5fa" opacity="0.85"/>
-  <circle cx="210" cy="235" r="4" fill="#ffffff"/>
-  <circle cx="312" cy="235" r="4" fill="#ffffff"/>
-
-  <!-- Muzzle -->
-  <ellipse cx="256" cy="305" rx="58" ry="48" fill="#ffffff"/>
-
-  <!-- Nose -->
-  <path d="M228 286
-           C235 270, 277 270, 284 286
-           C288 302, 271 313, 256 313
-           C241 313, 224 302, 228 286 Z"
-        fill="#111827"/>
-
-  <!-- Nose shine -->
-  <ellipse cx="243" cy="284" rx="7" ry="4" fill="#ffffff" opacity="0.55"/>
-
-  <!-- Mouth -->
-  <path d="M256 312 C256 330, 238 335, 228 326"
-        fill="none" stroke="#111827" stroke-width="7" stroke-linecap="round"/>
-  <path d="M256 312 C256 330, 274 335, 284 326"
-        fill="none" stroke="#111827" stroke-width="7" stroke-linecap="round"/>
-
-  <!-- Tongue -->
-  <path d="M241 337
-           C246 356, 266 356, 271 337
-           C263 343, 249 343, 241 337 Z"
-        fill="#fb7185"/>
-
-  <!-- Eyebrows -->
-  <path d="M177 207 C195 194, 215 195, 229 208"
-        fill="none" stroke="#111827" stroke-width="8" stroke-linecap="round"/>
-  <path d="M283 208 C297 195, 317 194, 335 207"
-        fill="none" stroke="#111827" stroke-width="8" stroke-linecap="round"/>
-
-  <!-- Fur accents -->
-  <path d="M256 157 L244 201 L256 190 L268 201 Z" fill="#ffffff"/>
-  <path d="M150 260 C125 275, 122 315, 148 340" fill="none" stroke="#4b5563" stroke-width="8" stroke-linecap="round"/>
-  <path d="M362 260 C387 275, 390 315, 364 340" fill="none" stroke="#4b5563" stroke-width="8" stroke-linecap="round"/>
+  <!-- Howling husky. Sized to ~84% of the canvas and centred so there's
+       a comfortable margin around the silhouette. Slight upward shift
+       balances the visual weight of the figure (head/upper body is
+       heavier than the chest/lower portion). -->
+  <image href="howling-husky.png"
+         x="80" y="60"
+         width="864" height="864"
+         preserveAspectRatio="xMidYMid meet"/>
 </svg>
