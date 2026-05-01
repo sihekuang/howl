@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Regenerate the Xcode project after a merge if any input changed
-# (project.yml, Local.xcconfig, or any Swift source under mac/).
-#
-# This is the IDE-workflow companion to mac/Makefile's smart `project`
-# target: anyone running `make build` already gets auto-regen via Make's
-# dependency tracking, but Xcode IDE doesn't go through the Makefile.
-# Without this hook, a `git pull` that adds Swift files leaves the
-# .pbxproj stale and Xcode greets you with "cannot find FooBar in scope"
-# until you remember to run `make project`.
+# Post-merge hook: keep generated artifacts in sync with the merged
+# source tree. Two things can need refreshing after a `git pull`:
+#   1. mac/VoiceKeyboard.xcodeproj — if any Swift source / Info.plist /
+#      project.yml / xcconfig changed.
+#   2. core/build/libvkb.dylib — if any Go source under core/ changed.
+#      Xcode's preBuild phase will rebuild this on the next `make build`,
+#      but rebuilding here too means the user finds out NOW if cgo deps
+#      are missing instead of mid-build, AND keeps `swift test` /
+#      direct `xcodebuild` invocations working without manual catch-up.
 set -euo pipefail
 
 # When invoked from a fresh clone where there's no previous HEAD, skip.
@@ -18,11 +18,23 @@ fi
 
 CHANGED=$(git diff --name-only "$PREV" HEAD || true)
 
-# Only regen when an input that xcodegen actually consumes has changed.
-# Spurious regens are cheap (the Make target no-ops if up to date) but
-# checking here keeps merge output quiet.
-if echo "$CHANGED" | grep -qE '^mac/(project\.yml|Local\.xcconfig|VoiceKeyboard(Core)?/.*\.swift|VoiceKeyboard/.*\.(xcassets|plist|entitlements))'; then
-  echo "[hook] mac/ inputs changed in merge — refreshing Xcode project"
+# Xcode project regen — only when an input that xcodegen actually
+# consumes has changed. Spurious regens are cheap (the Make target
+# no-ops if up to date) but checking here keeps merge output quiet.
+if echo "$CHANGED" | grep -qE '^mac/(project\.yml|Configs/.*\.xcconfig|VoiceKeyboard(Core)?/.*\.swift|VoiceKeyboard/.*\.(xcassets|plist|entitlements))'; then
+  echo "[hook] mac/ inputs changed in merge - refreshing Xcode project"
   ( cd mac && make project >/dev/null 2>&1 && echo "[hook] xcodeproj up to date" ) \
     || echo "[hook] make project failed; run 'cd mac && make project' manually"
+fi
+
+# libvkb.dylib rebuild — only when Go source changed. Build is ~5s warm,
+# ~30s cold; piping output to /dev/null keeps the merge log readable but
+# we surface the full error path on failure so the user can debug.
+if echo "$CHANGED" | grep -qE '^core/.*\.(go|mod|sum)$'; then
+  echo "[hook] core/ Go sources changed in merge - rebuilding libvkb.dylib"
+  if ( cd core && make build-dylib >/dev/null 2>&1 ); then
+    echo "[hook] libvkb.dylib up to date"
+  else
+    echo "[hook] libvkb.dylib build failed; run 'cd core && make build-dylib' to see the error" >&2
+  fi
 fi

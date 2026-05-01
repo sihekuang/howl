@@ -26,20 +26,33 @@ docs/superpowers/     specs/ and plans/ for previous feature work
 ./scripts/setup-dev.sh
 ```
 
-That installs `xcodegen` (via Homebrew if missing), wires the tracked
-git hooks under `scripts/git-hooks/` into this clone, and runs an
-initial `make project` so the Xcode project exists.
+That:
 
-The hooks regenerate `mac/VoiceKeyboard.xcodeproj` automatically on
-`git pull` / `git switch <branch>` whenever an input changes
-(`project.yml`, `Local.xcconfig`, or any tracked Swift / xcassets /
-Info.plist file). Without them you'd have to remember to run
-`make project` after every merge that adds a file — and Xcode IDE
-silently breaks until you do.
+- Installs Homebrew deps required for the Mac dev workflow:
+  `xcodegen`, `go`, `whisper-cpp`, `ggml`, `onnxruntime`. The last
+  three are the cgo runtime deps libvkb.dylib links against — without
+  them the Xcode build fails with opaque linker errors.
+- Wires the tracked git hooks under `scripts/git-hooks/` into this
+  clone (`git config core.hooksPath`).
+- Runs an initial `make project` to materialise the Xcode project.
+- Runs an initial `make build-dylib` in `core/` so libvkb.dylib
+  exists before the first Mac build — surfacing toolchain problems
+  up front instead of mid-`xcodebuild`.
+
+The hooks keep `mac/VoiceKeyboard.xcodeproj` and
+`core/build/libvkb.dylib` in sync on `git pull` / `git switch
+<branch>`:
+
+- xcodeproj regenerates whenever `project.yml`, an xcconfig, or any
+  tracked Swift / xcassets / Info.plist file changes.
+- libvkb.dylib rebuilds whenever any `core/*.go` / `go.mod` / `go.sum`
+  changes. Build is ~5 s warm, ~30 s cold; failures print a hint to
+  run `cd core && make build-dylib` for the full error.
 
 If you don't want the hooks (e.g. you only ever use `make build`
-from the CLI, which already runs `make project` as a dependency),
-you can opt out with `git config --unset core.hooksPath`.
+from the CLI, which already runs `make project` as a dependency
+and which Xcode's preBuild phase already rebuilds the dylib for),
+opt out with `git config --unset core.hooksPath`.
 
 ## Building
 

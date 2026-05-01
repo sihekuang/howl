@@ -136,6 +136,14 @@ do the full bundle for self-contained `.app`s.
 - **TSE models** (`core/build/models/*.onnx`) aren't in git. Run
   `./enroll.sh` once from the repo root to generate them; Debug builds
   don't need them, Release builds do.
+- **libvkb.dylib not built / cgo errors during `make build`.** The
+  Xcode preBuild phase rebuilds `core/build/libvkb.dylib` on every
+  build, but it can fail with opaque linker errors if Homebrew cgo
+  deps are missing (`whisper-cpp`, `ggml`, `onnxruntime`). Run
+  `./scripts/setup-dev.sh` from the repo root — it installs the deps
+  and bootstraps the dylib so the first Xcode build is clean. The
+  post-merge / post-checkout git hooks also rebuild the dylib when
+  `core/*.go` changes, so a `git pull` keeps it in sync.
 - **Signing certs aren't bundled with the app.** A Developer ID +
   notarization workflow for actual distribution is a separate effort
   — see `docs/distribution.md` (TBD) and the Build .app workflow's

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Regenerate the Xcode project after a branch checkout if relevant
-# inputs changed. Same logic as post-merge but for `git checkout
-# <branch>` / `git switch <branch>`.
+# Post-checkout hook: same purpose as post-merge — keep generated
+# artifacts (mac/VoiceKeyboard.xcodeproj, core/build/libvkb.dylib) in
+# sync after a branch switch.
 #
 # Args from git: $1 = previous HEAD, $2 = new HEAD, $3 = branch flag
-# ($3 == 1 → branch checkout, $3 == 0 → individual file checkout).
+# ($3 == 1 -> branch checkout, $3 == 0 -> individual file checkout).
 # We only run on branch checkouts; per-file checkouts don't change
 # the source tree in any way that matters here.
 set -euo pipefail
@@ -19,8 +19,17 @@ fi
 
 CHANGED=$(git diff --name-only "$PREV" "$NEW" || true)
 
-if echo "$CHANGED" | grep -qE '^mac/(project\.yml|Local\.xcconfig|VoiceKeyboard(Core)?/.*\.swift|VoiceKeyboard/.*\.(xcassets|plist|entitlements))'; then
-  echo "[hook] mac/ inputs changed in checkout — refreshing Xcode project"
+if echo "$CHANGED" | grep -qE '^mac/(project\.yml|Configs/.*\.xcconfig|VoiceKeyboard(Core)?/.*\.swift|VoiceKeyboard/.*\.(xcassets|plist|entitlements))'; then
+  echo "[hook] mac/ inputs changed in checkout - refreshing Xcode project"
   ( cd mac && make project >/dev/null 2>&1 && echo "[hook] xcodeproj up to date" ) \
     || echo "[hook] make project failed; run 'cd mac && make project' manually"
+fi
+
+if echo "$CHANGED" | grep -qE '^core/.*\.(go|mod|sum)$'; then
+  echo "[hook] core/ Go sources changed in checkout - rebuilding libvkb.dylib"
+  if ( cd core && make build-dylib >/dev/null 2>&1 ); then
+    echo "[hook] libvkb.dylib up to date"
+  else
+    echo "[hook] libvkb.dylib build failed; run 'cd core && make build-dylib' to see the error" >&2
+  fi
 fi
