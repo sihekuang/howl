@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Regenerate the Xcode project after a merge if any input changed
+# (project.yml, Local.xcconfig, or any Swift source under mac/).
+#
+# This is the IDE-workflow companion to mac/Makefile's smart `project`
+# target: anyone running `make build` already gets auto-regen via Make's
+# dependency tracking, but Xcode IDE doesn't go through the Makefile.
+# Without this hook, a `git pull` that adds Swift files leaves the
+# .pbxproj stale and Xcode greets you with "cannot find FooBar in scope"
+# until you remember to run `make project`.
+set -euo pipefail
+
+# When invoked from a fresh clone where there's no previous HEAD, skip.
+PREV=$(git rev-parse HEAD@{1} 2>/dev/null || echo "")
+if [ -z "$PREV" ]; then
+  exit 0
+fi
+
+CHANGED=$(git diff --name-only "$PREV" HEAD || true)
+
+# Only regen when an input that xcodegen actually consumes has changed.
+# Spurious regens are cheap (the Make target no-ops if up to date) but
+# checking here keeps merge output quiet.
+if echo "$CHANGED" | grep -qE '^mac/(project\.yml|Local\.xcconfig|VoiceKeyboard(Core)?/.*\.swift|VoiceKeyboard/.*\.(xcassets|plist|entitlements))'; then
+  echo "[hook] mac/ inputs changed in merge — refreshing Xcode project"
+  ( cd mac && make project >/dev/null 2>&1 && echo "[hook] xcodeproj up to date" ) \
+    || echo "[hook] make project failed; run 'cd mac && make project' manually"
+fi
