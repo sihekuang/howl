@@ -17,7 +17,7 @@ TSE_BACKEND="${TSE_BACKEND:-${1:-ecapa}}"
 # LLM provider + model selection (env vars only — keep flag space simple).
 # LLM_PROVIDER empty → vkb-cli default ("anthropic").
 # LLM_MODEL    empty → provider's default (anthropic: claude-sonnet-4-6;
-#                                          ollama: must specify).
+#                                          ollama: auto-detected from /api/tags).
 # LLM_BASE_URL empty → provider's default (e.g. http://localhost:11434 for ollama).
 # Examples:
 #   LLM_PROVIDER=ollama LLM_MODEL=llama3.2 ./run-speaker.sh
@@ -26,13 +26,18 @@ LLM_PROVIDER="${LLM_PROVIDER:-}"
 LLM_MODEL="${LLM_MODEL:-}"
 LLM_BASE_URL="${LLM_BASE_URL:-}"
 
+# TSE on/off. Default 1 (TSE active). Set SPEAKER=0 to skip the speaker
+# gate, e.g. when isolating an LLM-side test or when the on-disk TSE
+# models / enrollment aren't aligned with the active backend.
+SPEAKER="${SPEAKER:-1}"
+
 if [ -f "$SCRIPT_DIR/.env" ]; then
   set -a; . "$SCRIPT_DIR/.env"; set +a
 fi
 
-# Check enrollment
-if [[ ! -f "$PROFILE_DIR/speaker.json" ]]; then
-  echo "No voice enrollment found. Run ./enroll.sh first."
+# Check enrollment (only relevant when TSE is on)
+if [[ "$SPEAKER" == "1" && ! -f "$PROFILE_DIR/speaker.json" ]]; then
+  echo "No voice enrollment found. Run ./enroll.sh first (or set SPEAKER=0 to skip TSE)."
   exit 1
 fi
 
@@ -45,6 +50,13 @@ rm -f "$FIFO"
 mkfifo "$FIFO"
 trap 'rm -f "$FIFO"' EXIT
 
+# Build the speaker-related args only when SPEAKER=1 so users can opt
+# out of TSE without editing the script.
+SPEAKER_ARGS=()
+if [[ "$SPEAKER" == "1" ]]; then
+  SPEAKER_ARGS+=(--speaker --tse-backend "$TSE_BACKEND")
+fi
+
 ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
 VKB_PROFILE_DIR="$PROFILE_DIR" \
 VKB_MODELS_DIR="$MODELS_DIR" \
@@ -52,8 +64,7 @@ VKB_MODELS_DIR="$MODELS_DIR" \
   ${DICT:+--dict "$DICT"} \
   --live \
   --latency-report \
-  --speaker \
-  --tse-backend "$TSE_BACKEND" \
+  ${SPEAKER_ARGS[@]+"${SPEAKER_ARGS[@]}"} \
   ${LLM_PROVIDER:+--llm-provider "$LLM_PROVIDER"} \
   ${LLM_MODEL:+--llm-model "$LLM_MODEL"} \
   ${LLM_BASE_URL:+--llm-base-url "$LLM_BASE_URL"} \
@@ -61,8 +72,13 @@ VKB_MODELS_DIR="$MODELS_DIR" \
 PID=$!
 exec 3>"$FIFO"
 
+if [[ "$SPEAKER" == "1" ]]; then
+  TSE_LINE="TSE backend=$TSE_BACKEND"
+else
+  TSE_LINE="TSE off"
+fi
 echo ""
-echo "🎙  Recording (TSE backend=$TSE_BACKEND, LLM provider=${LLM_PROVIDER:-default}, model=${LLM_MODEL:-default}) — press any key to stop, 'q' to cancel."
+echo "🎙  Recording ($TSE_LINE, LLM provider=${LLM_PROVIDER:-default}, model=${LLM_MODEL:-default}) — press any key to stop, 'q' to cancel."
 echo ""
 
 while IFS= read -rsn1 key; do
