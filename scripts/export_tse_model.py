@@ -271,7 +271,13 @@ def build_models():
             sim = torch.stack([sim0, sim1], dim=1)         # [1, 2]
             best = sim.max(dim=1, keepdim=True).values     # [1, 1]
             w = (sim >= best).float()                      # [1, 2]
-            return w[:, 0:1] * src0 + w[:, 1:2] * src1     # [1, T]
+            picked = w[:, 0:1] * src0 + w[:, 1:2] * src1   # [1, T]
+            # JorisCos ConvTasNet was trained with SI-SDR loss → output is
+            # scale-invariant (any amplitude). Recover absolute scale by
+            # projecting onto the input mixture: alpha minimises ‖mixed − α·picked‖².
+            num = (picked * mixed).sum(dim=-1, keepdim=True)
+            den = (picked * picked).sum(dim=-1, keepdim=True) + 1e-9
+            return (num / den) * picked                     # [1, T]
 
     print("Loading ConvTasNet separator (Libri2Mix sep_noisy 16k)...")
     separator = ConvTasNet.from_pretrained("JorisCos/ConvTasNet_Libri2Mix_sepnoisy_16k")
