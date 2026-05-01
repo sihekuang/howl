@@ -27,8 +27,8 @@ struct RainbowGlow: View {
         let intensity = max(0.20, min(1.0, Double(level) * 5.0))
 
         ZStack {
-            haloLayer(blur: 26).opacity(0.55 * intensity)
-            haloLayer(blur: 12).opacity(0.85 * intensity)
+            haloLayer(blur: 40, scale: 1.25).opacity(0.50 * intensity)
+            haloLayer(blur: 22, scale: 1.10).opacity(0.75 * intensity)
         }
         .padding(-halo)
         .scaleEffect(1.0 + CGFloat(intensity - 0.2) * 0.06)
@@ -41,10 +41,13 @@ struct RainbowGlow: View {
         .animation(.easeOut(duration: 0.12), value: level)
     }
 
-    private func haloLayer(blur: CGFloat) -> some View {
-        // Capsule (fully rounded ends) — the halo silhouette reads as
-        // softer than the inner pill, which has a smaller corner radius.
-        Capsule(style: .continuous)
+    private func haloLayer(blur: CGFloat, scale: CGFloat) -> some View {
+        // Ellipse (fully curved on every axis) — Capsule still had flat
+        // top/bottom edges between its rounded ends, which read as a
+        // blocky lozenge after blur. An ellipse blurs into a soft blob.
+        // Each layer is also scaled outward so the silhouette extends
+        // organically past the inner pill rather than tracking it.
+        Ellipse()
             .fill(
                 AngularGradient(
                     gradient: Gradient(colors: [
@@ -55,6 +58,7 @@ struct RainbowGlow: View {
                     angle: .degrees(phase)
                 )
             )
+            .scaleEffect(scale)
             .blur(radius: blur)
     }
 }
