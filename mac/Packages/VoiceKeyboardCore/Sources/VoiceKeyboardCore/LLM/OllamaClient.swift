@@ -13,10 +13,12 @@ public enum OllamaClientError: Error, Equatable {
 /// Currently only enumerates installed models; constructed per-request
 /// because the typical lifetime is a single Settings-tab interaction.
 public actor OllamaClient {
+    public static let defaultBaseURL: URL = URL(string: "http://localhost:11434")!
+
     private let baseURL: URL
     private let session: URLSession
 
-    public init(baseURL: URL = URL(string: "http://localhost:11434")!,
+    public init(baseURL: URL = OllamaClient.defaultBaseURL,
                 session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session

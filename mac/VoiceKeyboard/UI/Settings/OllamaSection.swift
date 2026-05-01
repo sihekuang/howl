@@ -18,9 +18,8 @@ struct OllamaSection: View {
 
     @State private var loadState: LoadState = .idle
     @State private var baseURLDraft: String = ""
-    @State private var debounceTask: Task<Void, Never>?
 
-    private static let defaultBaseURL = "http://localhost:11434"
+    private static let defaultBaseURL: String = OllamaClient.defaultBaseURL.absoluteString
 
     var body: some View {
         Group {
@@ -30,6 +29,15 @@ struct OllamaSection: View {
         .task(id: effectiveBaseURL) {
             // Re-fires whenever effectiveBaseURL changes (incl. first appear).
             await refresh()
+        }
+        .task(id: baseURLDraft) {
+            // Debounce: write to settings.llmBaseURL 500ms after the user
+            // stops typing. SwiftUI auto-cancels on view exit and on each
+            // baseURLDraft change, so we don't need a manual cancel handle.
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if Task.isCancelled { return }
+            let new = baseURLDraft
+            settings.llmBaseURL = new == Self.defaultBaseURL ? "" : new
         }
         .onAppear {
             if baseURLDraft.isEmpty { baseURLDraft = settings.llmBaseURL }
@@ -103,15 +111,6 @@ struct OllamaSection: View {
                 TextField("Base URL", text: $baseURLDraft,
                           prompt: Text(Self.defaultBaseURL))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: baseURLDraft) { _, new in
-                        // Debounce 500ms so we don't fire on every keystroke.
-                        debounceTask?.cancel()
-                        debounceTask = Task {
-                            try? await Task.sleep(nanoseconds: 500_000_000)
-                            if Task.isCancelled { return }
-                            settings.llmBaseURL = new == Self.defaultBaseURL ? "" : new
-                        }
-                    }
                 Button("Reset to default") {
                     baseURLDraft = ""
                     settings.llmBaseURL = ""
