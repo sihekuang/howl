@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VoiceKeyboard app icon — master.
+  Canvas: 1024×1024.
+
+  Concept: user-supplied howling-husky logo, centred on a cream-white
+  squircle. Husky reads as a stylised silhouette (head tilted up
+  mid-howl, eye closed, mouth open) — the "voice" association comes
+  through without needing a microphone.
+
+  The PNG is embedded via <image>; rsvg-convert downscales it to
+  every required size when the icon is rasterised.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Cream-white squircle background. Slight off-white so the husky's
+       own near-white internal areas (which the source PNG fills with
+       solid white, no alpha) blend into the icon's background. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="#fafafa"/>
+
+  <!-- Howling husky. Sized to ~84% of the canvas and centred so there's
+       a comfortable margin around the silhouette. Slight upward shift
+       balances the visual weight of the figure (head/upper body is
+       heavier than the chest/lower portion). -->
+  <image href="howling-husky.png"
+         x="80" y="60"
+         width="864" height="864"
+         preserveAspectRatio="xMidYMid meet"/>
+</svg>
