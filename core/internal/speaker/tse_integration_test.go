@@ -34,9 +34,9 @@ func TestTSE_ReducesInterfererRMS(t *testing.T) {
 		t.Fatalf("InitONNXRuntime: %v", err)
 	}
 
-	tse, err := NewSpeakerBeamSS(modelPath)
+	tse, err := NewSpeakerGate(modelPath)
 	if err != nil {
-		t.Fatalf("NewSpeakerBeamSS: %v", err)
+		t.Fatalf("NewSpeakerGate: %v", err)
 	}
 	defer tse.Close()
 
