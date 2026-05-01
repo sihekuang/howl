@@ -3,13 +3,18 @@
   VoiceKeyboard app icon — master.
   Canvas: 1024×1024.
 
-  Concept: stylised husky head, front-facing, on a cool dark squircle.
-  Markings match the classic black-masked Siberian: black ears + face
-  mask, white inverted-Y blaze running up the forehead between the
-  ears, white muzzle and chin. Icy blue eyes are the only chromatic
-  accent so the silhouette stays clean at 16×16. Mouth is open with
-  a small pink tongue — that's the implied bark which carries the
-  "voice" association without needing a microphone.
+  Ollama-style husky: a single-color silhouette on a dark squircle.
+  No facial details, no gradients on the figure — recognition comes
+  from posture and outline. Traits we lean on so the silhouette
+  reads as a Siberian husky rather than a generic dog:
+    - tall pointy ears, slightly tipped outward
+    - distinct pointed muzzle
+    - thick neck/ruff (huskies have heavy fur around the shoulders)
+    - sturdy compact body in a sitting pose
+    - the iconic curled tail flicked over the back
+
+  Body posture: sitting, head tilted slightly upward — same
+  "looking up at you" vibe as Ollama's mascot.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
@@ -24,16 +29,10 @@
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
 
-    <radialGradient id="eye" cx="0.5" cy="0.4" r="0.6">
-      <stop offset="0%"  stop-color="#bdf0ff"/>
-      <stop offset="55%" stop-color="#5bc8ee"/>
-      <stop offset="100%" stop-color="#1a73a0"/>
-    </radialGradient>
-
     <filter id="dropShadow" x="-15%" y="-10%" width="130%" height="130%">
       <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
-      <feOffset dx="0" dy="16"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+      <feOffset dx="0" dy="20"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
       <feMerge>
         <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
@@ -41,114 +40,52 @@
     </filter>
   </defs>
 
-  <!-- Squircle background. -->
+  <!-- Dark squircle background. -->
   <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bg)"/>
   <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bgGlow)"/>
 
-  <g filter="url(#dropShadow)">
+  <!-- Single-colour husky silhouette. White on the dark squircle.
+       Drawn as ONE continuous contour — head, body, ears all part
+       of the same outline so there are no internal seams or stacked
+       shapes visible. Walk-through:
 
-    <!-- ===== EARS (pointy black triangles at the top of the head) ===== -->
-    <!-- Left ear -->
-    <path d="M 280 360
-             L 320 100
-             L 460 320 Z"
-          fill="#0c0c10"/>
-    <!-- Subtle pink inner detail. -->
-    <path d="M 320 320
-             L 340 180
-             L 420 310 Z"
-          fill="#a45d6b" opacity="0.7"/>
+         left ear apex ↓ inner left ear ↓ top-of-skull V ↑ right ear
+         apex ↓ outer right ear ↓ right cheek ↓ right shoulder ↓
+         right haunch / paw ↓ bottom (across paws) ↓ left paw / haunch
+         ↑ left shoulder ↑ left cheek ↑ outer left ear ↑ back to
+         starting apex.
 
-    <!-- Right ear -->
-    <path d="M 744 360
-             L 704 100
-             L 564 320 Z"
-          fill="#0c0c10"/>
-    <path d="M 704 320
-             L 684 180
-             L 604 310 Z"
-          fill="#a45d6b" opacity="0.7"/>
+       The tail is a separate filled path that overlays the body. -->
+  <g fill="#f5f5f7" filter="url(#dropShadow)">
 
-    <!-- ===== HEAD: BLACK BASE ===== -->
-    <!-- Whole head silhouette in black. The white markings are layered
-         on top. Slightly squarer than my previous pear shape — closer
-         to the reference photo's broader skull. -->
-    <path d="M 200 470
-             C 200 320, 350 260, 512 260
-             C 674 260, 824 320, 824 470
-             C 824 590, 798 712, 720 800
-             C 658 866, 588 884, 512 884
-             C 436 884, 366 866, 304 800
-             C 226 712, 200 590, 200 470 Z"
-          fill="#0c0c10"/>
+    <path d="M 372 96
+             L 444 296
+             Q 478 286, 512 286
+             Q 546 286, 580 296
+             L 652 96
+             Q 704 220, 716 304
+             Q 768 332, 800 400
+             Q 856 488, 856 624
+             Q 856 800, 824 868
+             Q 808 884, 776 884
+             L 248 884
+             Q 216 884, 200 868
+             Q 168 800, 168 624
+             Q 168 488, 224 400
+             Q 256 332, 308 304
+             Q 320 220, 372 96 Z"/>
 
-    <!-- ===== WHITE MARKINGS ===== -->
-    <!-- Single continuous shape: narrow blaze coming to a point between
-         the ears, descending the forehead, pinching at eye level (so
-         the eyes sit in black mask to either side), then sweeping
-         outward into the cheeks and rounding under for the chin. The
-         ref photo's white pattern is one connected region; rendering
-         it as one path avoids the disconnected-boxes look the previous
-         draft had. -->
-    <path d="M 512 232
-             Q 484 264, 478 340
-             L 478 540
-             Q 478 580, 432 596
-             Q 332 612, 296 696
-             Q 280 800, 360 856
-             Q 432 884, 512 888
-             Q 592 884, 664 856
-             Q 744 800, 728 696
-             Q 692 612, 592 596
-             Q 546 580, 546 540
-             L 546 340
-             Q 540 264, 512 232 Z"
-          fill="#f5f5f7"/>
-
-    <!-- ===== EYES ===== -->
-    <!-- Eye sockets — almond-shaped, sitting in the black mask just to
-         either side of the blaze. -->
-    <ellipse cx="384" cy="510" rx="60" ry="50" fill="#0a0d12"/>
-    <ellipse cx="640" cy="510" rx="60" ry="50" fill="#0a0d12"/>
-
-    <!-- Iris (icy blue). -->
-    <ellipse cx="384" cy="510" rx="44" ry="38" fill="url(#eye)"/>
-    <ellipse cx="640" cy="510" rx="44" ry="38" fill="url(#eye)"/>
-
-    <!-- Pupil — slightly oval to give the husky a focused expression. -->
-    <ellipse cx="384" cy="514" rx="13" ry="20" fill="#0a0d12"/>
-    <ellipse cx="640" cy="514" rx="13" ry="20" fill="#0a0d12"/>
-
-    <!-- Eye highlights. -->
-    <circle cx="396" cy="498" r="9" fill="#ffffff"/>
-    <circle cx="652" cy="498" r="9" fill="#ffffff"/>
-
-    <!-- ===== NOSE ===== -->
-    <path d="M 462 668
-             C 462 644, 484 628, 512 628
-             C 540 628, 562 644, 562 668
-             C 562 696, 540 716, 512 716
-             C 484 716, 462 696, 462 668 Z"
-          fill="#0a0d12"/>
-    <ellipse cx="498" cy="654" rx="9" ry="6" fill="#ffffff" opacity="0.55"/>
-
-    <!-- ===== OPEN MOUTH + TONGUE ===== -->
-    <!-- Mouth opening (dark), then pink tongue draped out. -->
-    <path d="M 442 740
-             Q 512 770, 582 740
-             Q 582 820, 512 824
-             Q 442 820, 442 740 Z"
-          fill="#0a0d12"/>
-
-    <!-- Tongue (drooping out of the open mouth). -->
-    <path d="M 470 766
-             Q 512 802, 554 766
-             Q 552 824, 512 836
-             Q 472 824, 470 766 Z"
-          fill="#ff7d92"/>
-    <!-- Subtle centre line on the tongue. -->
-    <path d="M 512 786 V 826"
-          stroke="#d65a72" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <!-- Curled tail, drawn as a comma-shaped patch over the right
+         haunch. fill-rule:evenodd lets us cut a hole inside the
+         curl so it reads as a tail rather than a flat lobe. -->
+    <path fill-rule="evenodd"
+          d="M 720 520
+             Q 884 488, 920 612
+             Q 940 752, 836 808
+             Q 744 836, 720 776
+             Q 800 776, 836 712
+             Q 868 632, 800 596
+             Q 744 572, 720 580 Z"/>
 
   </g>
 </svg>
