@@ -20,7 +20,7 @@ func TestRenderPrompt_BasicSubstitution(t *testing.T) {
 
 func TestRenderPrompt_NoTerms(t *testing.T) {
 	got := renderPrompt("hello", nil)
-	if !strings.Contains(got, "Preserve technical terms exactly as listed:") {
+	if !strings.Contains(got, "Preserve technical terms verbatim:") {
 		t.Errorf("prompt missing terms section even when empty:\n%s", got)
 	}
 	// when terms list is empty, render with the literal "(none)"

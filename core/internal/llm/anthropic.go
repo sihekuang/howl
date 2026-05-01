@@ -15,6 +15,28 @@ import (
 
 const defaultTimeout = 3 * time.Second
 
+// AnthropicProvider is the registry entry for Anthropic and is also the
+// package's default provider. The factory adapts our generic Options
+// shape to Anthropic-specific construction.
+var AnthropicProvider = &Provider{
+	Name:         "anthropic",
+	DefaultModel: "claude-sonnet-4-6",
+	NeedsAPIKey:  true,
+	factory: func(opts Options) (Cleaner, error) {
+		return NewAnthropic(AnthropicOptions{
+			APIKey:  opts.APIKey,
+			Model:   opts.Model,
+			BaseURL: opts.BaseURL,
+			Timeout: opts.Timeout,
+		})
+	},
+}
+
+func init() {
+	register(AnthropicProvider)
+	Default = AnthropicProvider
+}
+
 // AnthropicOptions configures the Anthropic Cleaner.
 type AnthropicOptions struct {
 	APIKey  string

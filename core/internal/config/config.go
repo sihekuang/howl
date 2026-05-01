@@ -11,6 +11,10 @@ type Config struct {
 	LLMProvider             string   `json:"llm_provider"`
 	LLMModel                string   `json:"llm_model"`
 	LLMAPIKey               string   `json:"llm_api_key"`
+	// LLMBaseURL is an optional override for providers that talk to a
+	// configurable endpoint (Ollama on a non-default host, a test
+	// harness pointing at a fake server). Empty = provider's default.
+	LLMBaseURL              string   `json:"llm_base_url"`
 	CustomDict              []string `json:"custom_dict"`
 
 	// TSE (Target Speaker Extraction) fields. All optional; when
