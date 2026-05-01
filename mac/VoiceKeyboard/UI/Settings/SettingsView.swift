@@ -1,47 +1,94 @@
 import SwiftUI
 import VoiceKeyboardCore
 
+/// Settings window: sidebar on the left listing each pane, detail
+/// panel on the right showing the selected pane. Mirrors the design
+/// of the sister oled-saver-macos project so the two apps feel like
+/// one product family. The previous TabView layout is gone.
+
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case general
+    case voice
+    case hotkey
+    case provider
+    case dictionary
+    case playground
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general:    return "General"
+        case .voice:      return "Voice"
+        case .hotkey:     return "Hotkey"
+        case .provider:   return "Provider"
+        case .dictionary: return "Dictionary"
+        case .playground: return "Playground"
+        }
+    }
+
+    /// SF Symbol name for the sidebar row + page header. Matches the
+    /// previous TabView's `tabItem` icons so the visual identity of
+    /// each pane carries over.
+    var icon: String {
+        switch self {
+        case .general:    return "gearshape"
+        case .voice:      return "person.wave.2"
+        case .hotkey:     return "keyboard"
+        case .provider:   return "key"
+        case .dictionary: return "books.vertical"
+        case .playground: return "waveform"
+        }
+    }
+
+    /// Background colour for the rounded-square icon tile. Apple-style
+    /// preference panes use distinct colours per page so the sidebar
+    /// reads at a glance.
+    var iconColor: Color {
+        switch self {
+        case .general:    return .gray
+        case .voice:      return .purple
+        case .hotkey:     return .blue
+        case .provider:   return .orange
+        case .dictionary: return .green
+        case .playground: return .pink
+        }
+    }
+}
+
 struct SettingsView: View {
     let composition: CompositionRoot
     @State private var settings: UserSettings = UserSettings()
+    @State private var selectedPage: SettingsPage = .general
 
     var body: some View {
-        TabView {
-            GeneralTab(settings: $settings, onSave: save, audioCapture: composition.audioCapture)
-                .tabItem { Label("General", systemImage: "gearshape") }
-            VoiceTab(
+        HStack(spacing: 0) {
+            // Sidebar — Apple-style colored icon rows.
+            List(selection: $selectedPage) {
+                Section("Voice Keyboard") {
+                    ForEach(SettingsPage.allCases) { page in
+                        SidebarRow(page: page).tag(page)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .frame(width: 200)
+
+            // Detail panel — page header + content. Translucent
+            // sidebar material matches macOS-native preference windows.
+            DetailView(
+                page: selectedPage,
+                composition: composition,
                 settings: $settings,
-                onSave: save,
-                audioCapture: composition.audioCapture,
-                engine: composition.engine
+                save: save
             )
-                .tabItem { Label("Voice", systemImage: "person.wave.2") }
-            HotkeyTab(
-                settings: $settings,
-                onSave: save,
-                onRecordingStart: {
-                    composition.coordinator.pauseHotkeyForRecording()
-                },
-                onRecordingEnd: {
-                    Task { @MainActor in await composition.coordinator.resumeHotkeyAfterRecording() }
-                },
-                conflictChecker: composition.conflictChecker,
-                permissions: composition.permissions,
-                audioCapture: composition.audioCapture
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                    .ignoresSafeArea()
             )
-                .tabItem { Label("Hotkey", systemImage: "keyboard") }
-            ProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
-                .tabItem { Label("Provider", systemImage: "key") }
-            DictionaryTab(settings: $settings, onSave: save)
-                .tabItem { Label("Dictionary", systemImage: "books.vertical") }
-            PlaygroundTab(
-                appState: composition.appState,
-                hotkey: settings.hotkey,
-                coordinator: composition.coordinator
-            )
-                .tabItem { Label("Playground", systemImage: "waveform") }
         }
-        .frame(width: 560, height: 460)
+        .frame(minWidth: 720, minHeight: 520)
         .task {
             settings = (try? composition.settings.get()) ?? UserSettings()
         }
@@ -50,9 +97,118 @@ struct SettingsView: View {
     private func save(_ s: UserSettings) {
         try? composition.settings.set(s)
         Task { @MainActor in
-            // Clear the recording pause before reapplyConfig so it restarts the hotkey.
+            // Clear the recording pause before reapplyConfig so the
+            // hotkey monitor restarts with the new shortcut.
             composition.coordinator.clearHotkeyPause()
             await composition.coordinator.reapplyConfig()
+        }
+    }
+}
+
+// MARK: - Sidebar Row
+
+private struct SidebarRow: View {
+    let page: SettingsPage
+
+    var body: some View {
+        Label {
+            Text(page.title)
+        } icon: {
+            Image(systemName: page.icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(page.iconColor.gradient)
+                )
+        }
+    }
+}
+
+// MARK: - Detail Panel
+
+/// Renders the page header and dispatches into the existing tab body
+/// for each page. We keep the existing tab Views (GeneralTab, VoiceTab,
+/// etc.) as-is so this redesign is a pure shell change — refactoring
+/// each page's internals to use SettingsSection cards is a separate
+/// effort.
+private struct DetailView: View {
+    let page: SettingsPage
+    let composition: CompositionRoot
+    @Binding var settings: UserSettings
+    let save: (UserSettings) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                pageBody
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: page.icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(page.iconColor.gradient)
+                )
+            Text(page.title)
+                .font(.title2)
+                .fontWeight(.semibold)
+        }
+    }
+
+    @ViewBuilder
+    private var pageBody: some View {
+        switch page {
+        case .general:
+            GeneralTab(
+                settings: $settings,
+                onSave: save,
+                audioCapture: composition.audioCapture
+            )
+        case .voice:
+            VoiceTab(
+                settings: $settings,
+                onSave: save,
+                audioCapture: composition.audioCapture,
+                engine: composition.engine
+            )
+        case .hotkey:
+            HotkeyTab(
+                settings: $settings,
+                onSave: save,
+                onRecordingStart: {
+                    composition.coordinator.pauseHotkeyForRecording()
+                },
+                onRecordingEnd: {
+                    Task { @MainActor in
+                        await composition.coordinator.resumeHotkeyAfterRecording()
+                    }
+                },
+                conflictChecker: composition.conflictChecker,
+                permissions: composition.permissions,
+                audioCapture: composition.audioCapture
+            )
+        case .provider:
+            ProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
+        case .dictionary:
+            DictionaryTab(settings: $settings, onSave: save)
+        case .playground:
+            PlaygroundTab(
+                appState: composition.appState,
+                hotkey: settings.hotkey,
+                coordinator: composition.coordinator
+            )
         }
     }
 }
