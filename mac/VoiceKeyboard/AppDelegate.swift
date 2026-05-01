@@ -41,12 +41,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log.error("openSettingsWindow: no bridge and window not realized")
             return
         }
-        // Apply NSWindow customizations after SwiftUI has had a chance to
-        // realize the window from the openWindow call above.
+        // Bring the window to the front when invoked, but don't pin it
+        // above other apps. (Previously we used `.level = .floating` so
+        // it stayed on top forever — annoying when the user switches
+        // away to look something up.)
         Task { @MainActor in
             guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) else { return }
-            window.level = .floating
+            window.level = .normal
             window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
     }

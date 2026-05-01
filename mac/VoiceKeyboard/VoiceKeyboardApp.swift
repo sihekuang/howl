@@ -40,7 +40,9 @@ struct VoiceKeyboardApp: App {
 
         // Use a regular Window (not Settings { }) so we can openWindow
         // it programmatically at launch and apply NSWindow customisations
-        // like .floating level.
+        // (collection behaviour, focus on invoke). The window is at
+        // .normal level — brought forward when invoked, not pinned
+        // above other apps.
         Window("Voice Keyboard", id: "settings") {
             SettingsView(composition: appDelegate.composition)
         }
