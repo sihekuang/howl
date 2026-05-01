@@ -9,6 +9,7 @@ struct AnthropicSection: View {
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyStatus: String = ""
     @State private var loadState: LoadState = .noKey
+    @State private var testStatus: TestStatus = .idle
 
     /// Same shape OllamaSection uses, with an extra `noKey` state for
     /// the cloud providers that can't fetch their model list without
@@ -18,6 +19,16 @@ struct AnthropicSection: View {
         case loading
         case loaded(models: [AnthropicModel])
         case failed(message: String)
+    }
+
+    /// State for the "Test Key" button — separate from loadState so
+    /// users can test a draft key before committing it via Save without
+    /// disturbing the picker's view of the saved key.
+    enum TestStatus: Equatable {
+        case idle
+        case testing
+        case ok(String)
+        case bad(String)
     }
 
     var body: some View {
@@ -35,8 +46,14 @@ struct AnthropicSection: View {
                     }
                 }
                 .disabled(!keyLooksValid)
+
+                Button(testStatus == .testing ? "Testing…" : "Test Key") {
+                    Task { await runTest() }
+                }
+                .disabled(!keyLooksValid || testStatus == .testing)
             }
             Text(apiKeyStatus).foregroundStyle(.secondary)
+            testResultRow
             Link("Get one from console.anthropic.com",
                  destination: URL(string: "https://console.anthropic.com/")!)
         }
@@ -98,9 +115,42 @@ struct AnthropicSection: View {
         }
     }
 
+    @ViewBuilder
+    private var testResultRow: some View {
+        switch testStatus {
+        case .idle:
+            EmptyView()
+        case .testing:
+            Label("Reaching api.anthropic.com…", systemImage: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        case .ok(let detail):
+            Label("Key works — \(detail)", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .bad(let detail):
+            Label(detail, systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
     // MARK: – Behaviour
 
     private var keyLooksValid: Bool { apiKeyDraft.hasPrefix("sk-ant-") }
+
+    /// Test the *draft* key (not the saved one) so users can verify a
+    /// key before committing it. Hits /v1/models the same way
+    /// refreshModels does — listing models is itself the auth check.
+    private func runTest() async {
+        testStatus = .testing
+        let client = AnthropicClient(apiKey: apiKeyDraft)
+        do {
+            let models = try await client.listModels()
+            testStatus = .ok("\(models.count) models available")
+        } catch let e as AnthropicClientError {
+            testStatus = .bad(humanize(e))
+        } catch {
+            testStatus = .bad("Network error: \(error.localizedDescription)")
+        }
+    }
 
     private func refreshModels() async {
         // Use the saved key, not the draft — the draft might be a

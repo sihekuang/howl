@@ -9,12 +9,23 @@ struct OpenAISection: View {
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyStatus: String = ""
     @State private var loadState: LoadState = .noKey
+    @State private var testStatus: TestStatus = .idle
 
     enum LoadState: Equatable {
         case noKey
         case loading
         case loaded(models: [OpenAIModel])
         case failed(message: String)
+    }
+
+    /// State for the "Test Key" button — separate from loadState so
+    /// users can test a draft key before committing it via Save without
+    /// disturbing the picker's view of the saved key.
+    enum TestStatus: Equatable {
+        case idle
+        case testing
+        case ok(String)
+        case bad(String)
     }
 
     // Both legacy ("sk-...") and project-scoped ("sk-proj-...") OpenAI
@@ -36,8 +47,14 @@ struct OpenAISection: View {
                     }
                 }
                 .disabled(!keyLooksValid)
+
+                Button(testStatus == .testing ? "Testing…" : "Test Key") {
+                    Task { await runTest() }
+                }
+                .disabled(!keyLooksValid || testStatus == .testing)
             }
             Text(apiKeyStatus).foregroundStyle(.secondary)
+            testResultRow
             Link("Get one from platform.openai.com",
                  destination: URL(string: "https://platform.openai.com/api-keys")!)
         }
@@ -95,7 +112,40 @@ struct OpenAISection: View {
         }
     }
 
+    @ViewBuilder
+    private var testResultRow: some View {
+        switch testStatus {
+        case .idle:
+            EmptyView()
+        case .testing:
+            Label("Reaching api.openai.com…", systemImage: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        case .ok(let detail):
+            Label("Key works — \(detail)", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .bad(let detail):
+            Label(detail, systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
     // MARK: – Behaviour
+
+    /// Test the *draft* key (not the saved one) so users can verify a
+    /// key before committing it. Hits /v1/models the same way
+    /// refreshModels does — listing models is itself the auth check.
+    private func runTest() async {
+        testStatus = .testing
+        let client = OpenAIClient(apiKey: apiKeyDraft)
+        do {
+            let models = try await client.listModels()
+            testStatus = .ok("\(models.count) chat-streaming models available")
+        } catch let e as OpenAIClientError {
+            testStatus = .bad(humanize(e))
+        } catch {
+            testStatus = .bad("Network error: \(error.localizedDescription)")
+        }
+    }
 
     private func refreshModels() async {
         let savedKey = (try? secrets.getAPIKey(forProvider: "openai")) ?? ""
