@@ -12,6 +12,12 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_HARDENED_RUNTIME: NO
+    # Apple-Silicon-only: libvkb.dylib (Go cgo) and the bundled Homebrew
+    # dylibs are arm64-only. A universal build would need a parallel
+    # x86_64 toolchain we don't have. Set ARCHS explicitly so Release
+    # builds (which default to ONLY_ACTIVE_ARCH=NO → both archs) don't
+    # try to link x86_64.
+    ARCHS: arm64
 packages:
   VoiceKeyboardCore:
     path: Packages/VoiceKeyboardCore

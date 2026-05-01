@@ -210,7 +210,12 @@ final class KeyListenerView: NSView {
         if newWindow == nil { removeLocalMonitor() }
     }
 
-    deinit { removeLocalMonitor() }
+    // No deinit cleanup: NSView is @MainActor in Swift 6 and deinit is
+    // implicitly nonisolated, so calling removeLocalMonitor() from here
+    // is a strict-concurrency error. AppKit reliably calls
+    // viewWillMove(toWindow: nil) before the view is deallocated, so
+    // the monitor is removed there. Worst case if a teardown path skips
+    // that hook, the unremoved monitor leaks a closure (~tens of bytes).
 
     private func removeLocalMonitor() {
         if let m = localFlagsMonitor {
