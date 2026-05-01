@@ -1,4 +1,4 @@
-.PHONY: project build test clean run
+.PHONY: project build test clean clean-all run
 
 # All Swift sources xcodegen scans — regenerate the project when this set
 # changes (file added or removed, e.g. after a merge), or when project.yml
@@ -24,10 +24,21 @@ build: project
 test:
 	cd Packages/VoiceKeyboardCore && swift test
 
-# Clean build artifacts
+# Clean Mac-side build artefacts. Xcode keeps DerivedData under
+# ~/Library/Developer/Xcode/DerivedData (NOT a local mac/DerivedData
+# dir, despite the name in older docs), so we glob for our project's
+# hashed dirs there. `swift package clean` resets the SwiftPM build
+# dir used by `make test`.
 clean:
-	rm -rf DerivedData build
+	rm -rf $(HOME)/Library/Developer/Xcode/DerivedData/VoiceKeyboard-*
+	rm -f ../core/build/libvkb.dylib ../core/build/libvkb.h
 	cd Packages/VoiceKeyboardCore && swift package clean
+
+# Same as `clean` plus the cheap Go binaries (vkb-cli, vkb-enroll).
+# Still preserves TSE models + Python venv — call `make distclean`
+# in core/ if you actually want those gone.
+clean-all: clean
+	cd ../core && $(MAKE) clean
 
 # Build and launch the .app
 run: build

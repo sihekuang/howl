@@ -7,7 +7,7 @@ DEEPFILTER_DIR := third_party/deepfilter
 # Per-package #cgo directives in whisper_cpp.go and deepfilter_cgo.go
 # carry their own CFLAGS/LDFLAGS. Nothing needs to be set globally here.
 
-.PHONY: bootstrap build build-cli build-dylib test test-unit test-integration clean rebuild-denoise
+.PHONY: bootstrap build build-cli build-dylib test test-unit test-integration clean clean-models clean-venv distclean rebuild-denoise
 
 bootstrap:
 	@command -v go >/dev/null || (echo "Go not installed. Run: brew install go" && exit 1)
@@ -36,7 +36,29 @@ test-unit:
 test-integration:
 	$(GO) test -tags=integration ./test/integration/...
 
+# Default `clean`: just the cheap-to-rebuild artefacts (Go binaries +
+# generated C header). Preserves the expensive bits — TSE models
+# (re-traced via PyTorch in ./enroll.sh, ~30+ min) and the Python venv
+# (~2GB pip install). Reach for `clean-models` / `clean-venv` /
+# `distclean` when you actually want to nuke those.
 clean:
+	rm -f $(BUILD_DIR)/libvkb.dylib $(BUILD_DIR)/libvkb.h
+	rm -f $(BUILD_DIR)/vkb-cli $(BUILD_DIR)/vkb-enroll
+
+# Drop the TSE ONNX models. Forces the next Release build (or anything
+# that touches TSE) to retrace from PyTorch via ./enroll.sh — ~30+ min.
+clean-models:
+	rm -rf $(BUILD_DIR)/models
+
+# Drop the PyTorch/asteroid venv. Re-pip-install runs ~5 min the next
+# time enroll.sh / scripts/export_tse_model.py runs.
+clean-venv:
+	rm -rf $(BUILD_DIR)/.venv-tse
+
+# Nuclear: everything under build/. Same as the old `clean`. Useful
+# when you suspect cache corruption or want to verify a true cold
+# build path.
+distclean:
 	rm -rf $(BUILD_DIR)
 
 rebuild-denoise:
