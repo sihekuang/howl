@@ -58,18 +58,26 @@ targets:
           - "$(SRCROOT)/../core/build/libvkb.dylib"
           - "$(SRCROOT)/../core/build/libvkb.h"
     postCompileScripts:
-      - name: Copy libvkb.dylib into Frameworks
+      - name: Copy libvkb.dylib + libdf.dylib into Frameworks
         script: |
           set -e
-          mkdir -p "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
-          cp -f "$SRCROOT/../core/build/libvkb.dylib" \
-                "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/"
-          install_name_tool -id "@rpath/libvkb.dylib" \
-                "$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH/libvkb.dylib"
+          DST="$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
+          mkdir -p "$DST"
+          cp -f "$SRCROOT/../core/build/libvkb.dylib" "$DST/"
+          install_name_tool -id "@rpath/libvkb.dylib" "$DST/libvkb.dylib"
+          # libdf.dylib is the vendored DeepFilterNet binary that libvkb
+          # link-time references at @rpath/libdf.dylib (see core/Makefile
+          # build-dylib target). It's not pulled by the Go build, so we
+          # ship it from third_party.
+          cp -f "$SRCROOT/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib" "$DST/"
+          chmod u+w "$DST/libdf.dylib"
+          install_name_tool -id "@rpath/libdf.dylib" "$DST/libdf.dylib"
         inputFiles:
           - "$(SRCROOT)/../core/build/libvkb.dylib"
+          - "$(SRCROOT)/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib"
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libdf.dylib"
       - name: Copy TSE models into Resources
         script: |
           set -e
@@ -90,6 +98,87 @@ targets:
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tse_model.onnx"
           - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/speaker_encoder.onnx"
+      - name: Bundle Homebrew dylibs (ONNX + Whisper)
+        shell: /bin/bash
+        script: |
+          set -e
+          # Locate Homebrew prefix. Apple Silicon vs Intel.
+          BREW_PREFIX=""
+          for prefix in /opt/homebrew /usr/local; do
+            if [ -e "$prefix/lib/libonnxruntime.dylib" ]; then
+              BREW_PREFIX="$prefix"
+              break
+            fi
+          done
+          if [ -z "$BREW_PREFIX" ]; then
+            echo "error: libonnxruntime.dylib not found — install via 'brew install onnxruntime'" >&2
+            exit 1
+          fi
+
+          DST="$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
+          mkdir -p "$DST"
+
+          # Walk the transitive Homebrew dep closure starting from:
+          # 1. The just-bundled libvkb.dylib (covers whisper.cpp + ggml,
+          #    which libvkb link-time-depends on via cgo).
+          # 2. libonnxruntime.dylib (loaded at runtime via dlopen, not in
+          #    libvkb's dep table — must be seeded explicitly).
+          SEEN="$(mktemp)"
+          trap 'rm -f "$SEEN"' EXIT
+
+          walk() {
+            local real
+            real="$(readlink -f "$1" 2>/dev/null || echo "$1")"
+            if grep -qFx "$real" "$SEEN" 2>/dev/null; then return; fi
+            echo "$real" >> "$SEEN"
+            local deps
+            deps="$(otool -L "$real" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true)"
+            while IFS= read -r dep; do
+              [ -n "$dep" ] && walk "$dep"
+            done <<< "$deps"
+          }
+          walk "$BREW_PREFIX/lib/libonnxruntime.dylib"
+          # Walk libvkb's deps. Note: libvkb itself isn't in $SEEN
+          # because it's not under $BREW_PREFIX — but its Homebrew deps
+          # are now reached.
+          for dep in $(otool -L "$DST/libvkb.dylib" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
+            walk "$dep"
+          done
+
+          echo "Bundling $(wc -l < "$SEEN") Homebrew dylibs from $BREW_PREFIX into $DST"
+
+          # First pass: copy each, using basename; set install_name to
+          # @rpath/<basename> so dependents find them via the app's rpath.
+          while IFS= read -r src; do
+            base="$(basename "$src")"
+            cp -f "$src" "$DST/$base"
+            chmod u+w "$DST/$base"
+            install_name_tool -id "@rpath/$base" "$DST/$base"
+          done < "$SEEN"
+
+          # Second pass: rewrite each bundled dylib's deps to @rpath.
+          # We resolve each dep through readlink to handle the opt/
+          # symlink layer (e.g. /opt/homebrew/opt/onnx/lib/libonnx.dylib
+          # points at the versioned file in Cellar; we want both
+          # rewritten to the same @rpath/<basename>).
+          rewrite_deps() {
+            local target="$1"
+            for dep in $(otool -L "$target" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
+              local dep_real dep_base
+              dep_real="$(readlink -f "$dep" 2>/dev/null || echo "$dep")"
+              dep_base="$(basename "$dep_real")"
+              install_name_tool -change "$dep" "@rpath/$dep_base" "$target"
+            done
+          }
+          while IFS= read -r src; do
+            rewrite_deps "$DST/$(basename "$src")"
+          done < "$SEEN"
+
+          # Also rewrite libvkb.dylib's own /opt/homebrew refs.
+          chmod u+w "$DST/libvkb.dylib"
+          rewrite_deps "$DST/libvkb.dylib"
+        inputFiles:
+          - "/opt/homebrew/lib/libonnxruntime.dylib"
 schemes:
   VoiceKeyboard:
     build:

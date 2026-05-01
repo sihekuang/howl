@@ -148,8 +148,20 @@ enum ModelPaths {
         ).first!
         return appSupport.appendingPathComponent("VoiceKeyboard/voice")
     }
-    /// Default location for the ONNX Runtime shared library on Apple Silicon.
+    /// Path to the ONNX Runtime shared library. The Mac app bundles
+    /// libonnxruntime + its transitive Homebrew deps into Frameworks
+    /// (see "Bundle Homebrew dylibs" build phase), and we use that
+    /// versioned dylib so Apple's dynamic loader resolves the
+    /// @rpath/... references in our other bundled dylibs through the
+    /// same physical file. Falls back to the Homebrew prefix for
+    /// developer scenarios where the build phase didn't run (e.g.
+    /// running a stale build).
     static var onnxLib: URL {
-        URL(fileURLWithPath: "/opt/homebrew/lib/libonnxruntime.dylib")
+        if let bundled = Bundle.main.privateFrameworksURL?
+            .appendingPathComponent("libonnxruntime.1.25.1.dylib"),
+            FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return URL(fileURLWithPath: "/opt/homebrew/lib/libonnxruntime.dylib")
     }
 }
