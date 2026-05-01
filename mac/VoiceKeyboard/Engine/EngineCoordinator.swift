@@ -154,8 +154,15 @@ public final class EngineCoordinator {
         composition.appState.transientWarning = nil
     }
 
+    /// Tiny audible cue played at the start of each capture cycle so
+    /// the user knows the engine is listening without staring at the
+    /// menu bar. Held as an instance property so the AVAudioPlayer
+    /// has time to actually fire before deinit.
+    private let cueSound = CueSound()
+
     private func onPress() async {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
+        cueSound.playListening()
         composition.appState.engineState = .recording
         composition.overlay.show()
         do {
