@@ -129,11 +129,12 @@ struct DictionaryTab: View {
 
     @ViewBuilder
     private var manageSection: some View {
-        HStack {
+        HStack(spacing: 12) {
+            statsView
+            Spacer()
             Button("Export…") { exportToFile() }
                 .disabled(settings.customDict.isEmpty)
             Button("Import…") { importFromFile() }
-            Spacer()
             Button(role: .destructive) {
                 confirmingClear = true
             } label: {
@@ -141,6 +142,37 @@ struct DictionaryTab: View {
             }
             .disabled(settings.customDict.isEmpty)
         }
+    }
+
+    /// Counts what this dictionary adds to the LLM cleanup prompt. The Go
+    /// side renders `strings.Join(terms, ", ")` and slots it into the
+    /// prompt template (see core/internal/llm/prompt.go), so we measure
+    /// the same string the model sees.
+    @ViewBuilder
+    private var statsView: some View {
+        let s = dictStats()
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(s.words) word\(s.words == 1 ? "" : "s") · ~\(s.tokens) token\(s.tokens == 1 ? "" : "s")")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.primary)
+            Text("Added to every cleanup request")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .help("Approximate token count of the joined dictionary as it ships to the LLM. The prompt template adds another ~60 tokens regardless. Token estimate is char-count / 4; actual cost will vary slightly with the model's tokenizer.")
+    }
+
+    private func dictStats() -> (words: Int, chars: Int, tokens: Int) {
+        let terms = settings.customDict
+        guard !terms.isEmpty else { return (0, 0, 0) }
+        // Same shape as Go's strings.Join(terms, ", ").
+        let payload = terms.joined(separator: ", ")
+        let chars = payload.count
+        // Heuristic: Claude averages ~3.5–4 chars per token for English;
+        // technical jargon and acronyms compress slightly less. Dividing
+        // by 4 biases a touch conservative (overcount > undercount).
+        let tokens = Int((Double(chars) / 4.0).rounded(.up))
+        return (terms.count, chars, tokens)
     }
 
     // MARK: - Actions
