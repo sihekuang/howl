@@ -1,0 +1,629 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
+		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
+		19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */; };
+		1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */; };
+		23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D191FF4976526AAF109C19EB /* AppDelegate.swift */; };
+		4102BD8E2579447BA75C2865 /* EnrollmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */; };
+		4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */; };
+		57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */; };
+		5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */; };
+		60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6533D8DC82E66396D8BA7557 /* Assets.xcassets */; };
+		64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */; };
+		68025E317F55A3908E958FEF /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B5C020D95C44A45E9A2DCA /* WaveformView.swift */; };
+		6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */; };
+		789F2C4BF7718DD124B97B43 /* EngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */; };
+		81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7398A10FF69BCB846098786E /* ProviderTab.swift */; };
+		87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */; };
+		8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */; };
+		967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */; };
+		9800CFAFB9EFD13E4C3839DB /* listen-cue.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = AC49053786E5F4980978B90A /* listen-cue.mp3 */; };
+		9AB5252581905E6AA95725A5 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89C9EC21971FDD8AB9937B2 /* MenuBarController.swift */; };
+		A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */; };
+		ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */; };
+		B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */; };
+		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
+		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
+		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
+		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
+		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
+		F0FB30D506A0C389662232B1 /* GeneralTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D5234E365C4BA6093A5C613 /* GeneralTab.swift */; };
+		F68C7C74F80910D38629B127 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC04BF85399775A80EDBB0B1 /* AppState.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
+		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
+		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
+		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
+		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
+		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
+		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
+		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
+		4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
+		6533D8DC82E66396D8BA7557 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		67B5C020D95C44A45E9A2DCA /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWindow.swift; sourceTree = "<group>"; };
+		6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
+		7398A10FF69BCB846098786E /* ProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderTab.swift; sourceTree = "<group>"; };
+		8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTab.swift; sourceTree = "<group>"; };
+		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
+		9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadPanel.swift; sourceTree = "<group>"; };
+		9D5234E365C4BA6093A5C613 /* GeneralTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTab.swift; sourceTree = "<group>"; };
+		AC49053786E5F4980978B90A /* listen-cue.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "listen-cue.mp3"; sourceTree = "<group>"; };
+		B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentSheet.swift; sourceTree = "<group>"; };
+		B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
+		C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTab.swift; sourceTree = "<group>"; };
+		D191FF4976526AAF109C19EB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		D89C9EC21971FDD8AB9937B2 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OccupationPacks.swift; sourceTree = "<group>"; };
+		E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		EC04BF85399775A80EDBB0B1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPanel.swift; sourceTree = "<group>"; };
+		F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceKeyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayController.swift; sourceTree = "<group>"; };
+		"TEMP_17B40D7F-BF4E-422E-8ED5-34A8456E11CF" /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B1C913F6CEDB9C5FCEDCC1A4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1CC706A263CB17ACFBB62F43 /* Overlay */ = {
+			isa = PBXGroup;
+			children = (
+				FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */,
+				02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */,
+				67B5C020D95C44A45E9A2DCA /* WaveformView.swift */,
+			);
+			path = Overlay;
+			sourceTree = "<group>";
+		};
+		227B92BFEB8D385423847AF8 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */,
+				B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */,
+				9D5234E365C4BA6093A5C613 /* GeneralTab.swift */,
+				3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */,
+				DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */,
+				0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */,
+				7398A10FF69BCB846098786E /* ProviderTab.swift */,
+				FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */,
+				E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */,
+				C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		338FA19A1CA6AD7AFC52D9AA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				251226AFC921562507D69444 /* VoiceKeyboardCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		3F747DF7DF114C8CBE21414E /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				AC49053786E5F4980978B90A /* listen-cue.mp3 */,
+			);
+			path = Sounds;
+			sourceTree = "<group>";
+		};
+		45CF7EB85093E7D5F643F76E /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				472E78728D09A3E81034A3F0 /* FirstRun */,
+				591D73F8DB7364A8B880BF9C /* MenuBar */,
+				1CC706A263CB17ACFBB62F43 /* Overlay */,
+				227B92BFEB8D385423847AF8 /* Settings */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		472E78728D09A3E81034A3F0 /* FirstRun */ = {
+			isa = PBXGroup;
+			children = (
+				EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */,
+				2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */,
+				6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */,
+				6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */,
+				9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */,
+			);
+			path = FirstRun;
+			sourceTree = "<group>";
+		};
+		591D73F8DB7364A8B880BF9C /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				18FA1218DF9D8268E17C4E2F /* CueSound.swift */,
+				D89C9EC21971FDD8AB9937B2 /* MenuBarController.swift */,
+				27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		692595C215D369602D2B308F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		77FC1DB6661B7B7F21B80843 /* VoiceKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				D191FF4976526AAF109C19EB /* AppDelegate.swift */,
+				6533D8DC82E66396D8BA7557 /* Assets.xcassets */,
+				9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */,
+				81A35619E8B455EC01773816 /* Composition */,
+				D4F2CAC41CD8277D7B06C0C6 /* Engine */,
+				3F747DF7DF114C8CBE21414E /* Sounds */,
+				B66B9181E706833C7ED96746 /* StateMachine */,
+				45CF7EB85093E7D5F643F76E /* UI */,
+			);
+			path = VoiceKeyboard;
+			sourceTree = "<group>";
+		};
+		81A35619E8B455EC01773816 /* Composition */ = {
+			isa = PBXGroup;
+			children = (
+				3945B1FA01BC8077164E634C /* CompositionRoot.swift */,
+			);
+			path = Composition;
+			sourceTree = "<group>";
+		};
+		B66B9181E706833C7ED96746 /* StateMachine */ = {
+			isa = PBXGroup;
+			children = (
+				EC04BF85399775A80EDBB0B1 /* AppState.swift */,
+			);
+			path = StateMachine;
+			sourceTree = "<group>";
+		};
+		D4F2CAC41CD8277D7B06C0C6 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */,
+				B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */,
+			);
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		F43C5AECB42C18347426326A = {
+			isa = PBXGroup;
+			children = (
+				338FA19A1CA6AD7AFC52D9AA /* Packages */,
+				77FC1DB6661B7B7F21B80843 /* VoiceKeyboard */,
+				692595C215D369602D2B308F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		"TEMP_D4EDD16C-024B-4E0E-B804-5AA9920AA9D9" /* mac */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_17B40D7F-BF4E-422E-8ED5-34A8456E11CF" /* Local.xcconfig */,
+			);
+			path = mac;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C252467323F8F0A73E2E9C12 /* VoiceKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 76A098DCA3E6397F7520852F /* Build configuration list for PBXNativeTarget "VoiceKeyboard" */;
+			buildPhases = (
+				AD500750EC43DB6F01CA3790 /* Build Go core */,
+				428DFA0117395DEF6985FF9E /* Sources */,
+				E1C1588A609B82AC256677A3 /* Copy libvkb.dylib + libdf.dylib into Frameworks */,
+				A2D142A03BBFF13FE9BFB8D1 /* Copy TSE models into Resources (Release only) */,
+				660CF6214BB490527A9FD63D /* Bundle Homebrew dylibs (Release only) */,
+				DF841738A3AA45AEB729D5E9 /* Resources */,
+				B1C913F6CEDB9C5FCEDCC1A4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoiceKeyboard;
+			packageProductDependencies = (
+				39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */,
+			);
+			productName = VoiceKeyboard;
+			productReference = F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F626CD2105B014B2D60736FA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C252467323F8F0A73E2E9C12 = {
+						DevelopmentTeam = TULKQWS4XL;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 851E0E1603DC950120B346FB /* Build configuration list for PBXProject "VoiceKeyboard" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F43C5AECB42C18347426326A;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9C18F350D1EE5C5DBB52330C /* XCLocalSwiftPackageReference "Packages/VoiceKeyboardCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 692595C215D369602D2B308F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C252467323F8F0A73E2E9C12 /* VoiceKeyboard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DF841738A3AA45AEB729D5E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */,
+				9800CFAFB9EFD13E4C3839DB /* listen-cue.mp3 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		660CF6214BB490527A9FD63D /* Bundle Homebrew dylibs (Release only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				/opt/homebrew/lib/libonnxruntime.dylib,
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib",
+			);
+			name = "Bundle Homebrew dylibs (Release only)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libonnxruntime.1.25.1.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -e\n# Debug builds skip the dylib bundle entirely: libvkb.dylib's\n# cgo link table holds absolute /opt/homebrew paths to whisper /\n# ggml that dyld will resolve at runtime, and ModelPaths.onnxLib\n# falls back to /opt/homebrew/lib/libonnxruntime.dylib when the\n# bundled copy isn't present. The dev runs against Homebrew in\n# place — much faster cold builds and the .app stays tiny.\n# Release does the full bundle so the artifact is self-contained.\nif [ \"$CONFIGURATION\" != \"Release\" ]; then\n  echo \"Skipping Homebrew dylib bundle (Debug — using /opt/homebrew at runtime).\"\n  exit 0\nfi\n# Locate Homebrew prefix. Apple Silicon vs Intel.\nBREW_PREFIX=\"\"\nfor prefix in /opt/homebrew /usr/local; do\n  if [ -e \"$prefix/lib/libonnxruntime.dylib\" ]; then\n    BREW_PREFIX=\"$prefix\"\n    break\n  fi\ndone\nif [ -z \"$BREW_PREFIX\" ]; then\n  echo \"error: libonnxruntime.dylib not found — install via 'brew install onnxruntime'\" >&2\n  exit 1\nfi\n\nDST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DST\"\n\n# Skip the whole phase when the bundle is already up to date.\n# Without this guard, the phase adds ~30-60s to every warm\n# build because Xcode can't dependency-track all ~88 output\n# dylibs. Compare against the SOURCE libvkb (in core/build),\n# not the copy in Frameworks — Go rebuilds libvkb only when\n# its sources change, and that's the actual \"did anything\n# change?\" signal we want.\n#\n# IMPORTANT: keep the sentinel OUTSIDE the .app bundle. Any\n# file inside Frameworks/ is treated as a code subcomponent\n# by Xcode's codesign step and must itself be signed; an\n# unsigned sentinel there breaks the .app's seal with\n# \"code object is not signed at all\" failures.\nSENTINEL=\"$BUILT_PRODUCTS_DIR/.${TARGET_NAME}-bundled-deps-stamp\"\nLIBVKB_SRC=\"$SRCROOT/../core/build/libvkb.dylib\"\nif [ -e \"$SENTINEL\" ] \\\n    && [ \"$SENTINEL\" -nt \"$BREW_PREFIX/lib/libonnxruntime.dylib\" ] \\\n    && [ \"$SENTINEL\" -nt \"$LIBVKB_SRC\" ]; then\n  echo \"Homebrew dylib bundle up to date — skipping.\"\n  exit 0\nfi\n\n# Walk the transitive Homebrew dep closure starting from:\n# 1. The just-bundled libvkb.dylib (covers whisper.cpp + ggml,\n#    which libvkb link-time-depends on via cgo).\n# 2. libonnxruntime.dylib (loaded at runtime via dlopen, not in\n#    libvkb's dep table — must be seeded explicitly).\nSEEN=\"$(mktemp)\"\ntrap 'rm -f \"$SEEN\"' EXIT\n\nwalk() {\n  local real\n  real=\"$(readlink -f \"$1\" 2>/dev/null || echo \"$1\")\"\n  if grep -qFx \"$real\" \"$SEEN\" 2>/dev/null; then return; fi\n  echo \"$real\" >> \"$SEEN\"\n  local deps\n  deps=\"$(otool -L \"$real\" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep \"^$BREW_PREFIX/\" || true)\"\n  while IFS= read -r dep; do\n    [ -n \"$dep\" ] && walk \"$dep\"\n  done <<< \"$deps\"\n}\nwalk \"$BREW_PREFIX/lib/libonnxruntime.dylib\"\n# Walk libvkb's deps. Note: libvkb itself isn't in $SEEN\n# because it's not under $BREW_PREFIX — but its Homebrew deps\n# are now reached.\nfor dep in $(otool -L \"$DST/libvkb.dylib\" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep \"^$BREW_PREFIX/\" || true); do\n  walk \"$dep\"\ndone\n\necho \"Bundling $(wc -l < \"$SEEN\") Homebrew dylibs from $BREW_PREFIX into $DST\"\n\n# First pass: copy each, using basename; set install_name to\n# @rpath/<basename> so dependents find them via the app's rpath.\nwhile IFS= read -r src; do\n  base=\"$(basename \"$src\")\"\n  cp -f \"$src\" \"$DST/$base\"\n  chmod u+w \"$DST/$base\"\n  install_name_tool -id \"@rpath/$base\" \"$DST/$base\"\ndone < \"$SEEN\"\n\n# Second pass: rewrite each bundled dylib's deps to @rpath.\n# We resolve each dep through readlink to handle the opt/\n# symlink layer (e.g. /opt/homebrew/opt/onnx/lib/libonnx.dylib\n# points at the versioned file in Cellar; we want both\n# rewritten to the same @rpath/<basename>).\nrewrite_deps() {\n  local target=\"$1\"\n  for dep in $(otool -L \"$target\" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep \"^$BREW_PREFIX/\" || true); do\n    local dep_real dep_base\n    dep_real=\"$(readlink -f \"$dep\" 2>/dev/null || echo \"$dep\")\"\n    dep_base=\"$(basename \"$dep_real\")\"\n    install_name_tool -change \"$dep\" \"@rpath/$dep_base\" \"$target\"\n  done\n}\nwhile IFS= read -r src; do\n  rewrite_deps \"$DST/$(basename \"$src\")\"\ndone < \"$SEEN\"\n\n# Also rewrite libvkb.dylib's own /opt/homebrew refs.\nchmod u+w \"$DST/libvkb.dylib\"\nrewrite_deps \"$DST/libvkb.dylib\"\n\n# Third pass: replicate Homebrew's short-name → long-name symlinks\n# alongside each bundled dylib. Some packages (e.g. ggml) embed\n# @rpath/<short>.dylib refs at build time; my rewrite step only\n# matches /opt/homebrew/... refs and so leaves those untouched.\n# Without the short-name symlink, dyld fails with \"Library not\n# loaded: @rpath/libggml-base.0.dylib\" at runtime.\nwhile IFS= read -r src; do\n  src_dir=\"$(dirname \"$src\")\"\n  src_base=\"$(basename \"$src\")\"\n  for link in \"$src_dir\"/*.dylib; do\n    [ -L \"$link\" ] || continue\n    target_base=\"$(basename \"$(readlink \"$link\")\")\"\n    link_base=\"$(basename \"$link\")\"\n    if [ \"$target_base\" = \"$src_base\" ] && [ \"$link_base\" != \"$src_base\" ]; then\n      (cd \"$DST\" && ln -sf \"$src_base\" \"$link_base\")\n    fi\n  done\ndone < \"$SEEN\"\n\n# Fourth pass: re-codesign every dylib we modified.\n# install_name_tool invalidates the original ad-hoc signatures,\n# and Xcode's automatic codesign at the end of the build does\n# NOT re-sign Frameworks/*.dylib (only the .app bundle and main\n# executable). Without re-signing, macOS SIGKILLs the process\n# at launch with \"code or signature have been modified\".\n# Use $EXPANDED_CODE_SIGN_IDENTITY when available, else ad-hoc.\nIDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nwhile IFS= read -r src; do\n  codesign --force --sign \"$IDENTITY\" \"$DST/$(basename \"$src\")\"\ndone < \"$SEEN\"\ncodesign --force --sign \"$IDENTITY\" \"$DST/libvkb.dylib\"\ncodesign --force --sign \"$IDENTITY\" \"$DST/libdf.dylib\"\n\n# Mark the bundle as up-to-date so the next warm build can skip.\ntouch \"$SENTINEL\"\n";
+		};
+		A2D142A03BBFF13FE9BFB8D1 /* Copy TSE models into Resources (Release only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../core/build/models/tse_model.onnx",
+				"$(SRCROOT)/../core/build/models/speaker_encoder.onnx",
+			);
+			name = "Copy TSE models into Resources (Release only)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tse_model.onnx",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/speaker_encoder.onnx",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Debug builds skip the model copy: ModelPaths.tseModel falls\n# back to ~/Library/Application Support/VoiceKeyboard/models/,\n# which the dev should have populated once via enroll.sh. Saves\n# ~32MB of cp work and keeps fresh-clone Debug builds from\n# erroring on missing models.\nif [ \"$CONFIGURATION\" != \"Release\" ]; then\n  echo \"Skipping TSE model copy (Debug — using ~/Library/Application Support fallback).\"\n  exit 0\nfi\nSRC=\"$SRCROOT/../core/build/models\"\nDST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nfor f in tse_model.onnx speaker_encoder.onnx; do\n  if [ ! -f \"$SRC/$f\" ]; then\n    echo \"error: $SRC/$f missing — run ./enroll.sh once from the repo root to build the TSE models\" >&2\n    exit 1\n  fi\ndone\nmkdir -p \"$DST\"\ncp -f \"$SRC/tse_model.onnx\"       \"$DST/\"\ncp -f \"$SRC/speaker_encoder.onnx\" \"$DST/\"\n";
+		};
+		AD500750EC43DB6F01CA3790 /* Build Go core */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Go core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/../core/build/libvkb.dylib",
+				"$(SRCROOT)/../core/build/libvkb.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Xcode's GUI build doesn't inherit the user shell PATH, so make/go\n# in /opt/homebrew/bin aren't found by default. Source the user's\n# zprofile / bash_profile if present, then ensure /opt/homebrew/bin\n# and /usr/local/bin are on PATH for the rest of this script.\n[ -f \"$HOME/.zprofile\" ] && . \"$HOME/.zprofile\" >/dev/null 2>&1 || true\n[ -f \"$HOME/.bash_profile\" ] && . \"$HOME/.bash_profile\" >/dev/null 2>&1 || true\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\"\n\n# Sanity check toolchain — gives a clear error if anything's missing.\ncommand -v make >/dev/null || { echo \"error: make not found on PATH\" >&2; exit 1; }\ncommand -v go   >/dev/null || { echo \"error: go not found (brew install go)\" >&2; exit 1; }\n\ncd \"$SRCROOT/../core\"\nunset GOFLAGS\nmake build-dylib\n";
+		};
+		E1C1588A609B82AC256677A3 /* Copy libvkb.dylib + libdf.dylib into Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../core/build/libvkb.dylib",
+				"$(SRCROOT)/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib",
+			);
+			name = "Copy libvkb.dylib + libdf.dylib into Frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib",
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libdf.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nDST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DST\"\n# Both sources already have install_name = @rpath/<basename>\n# (libvkb's is set by core/Makefile build-dylib; libdf's is\n# pre-vendored). cp -p preserves mtime AND signature, so on\n# warm builds we don't bump anything. Don't re-run\n# install_name_tool here — that would invalidate signatures\n# and force a costly re-sign every build.\ncp -pf \"$SRCROOT/../core/build/libvkb.dylib\" \"$DST/\"\ncp -pf \"$SRCROOT/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib\" \"$DST/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		428DFA0117395DEF6985FF9E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */,
+				57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */,
+				23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */,
+				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
+				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
+				C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */,
+				1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */,
+				789F2C4BF7718DD124B97B43 /* EngineCoordinator.swift in Sources */,
+				4102BD8E2579447BA75C2865 /* EnrollmentSheet.swift in Sources */,
+				DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */,
+				F0FB30D506A0C389662232B1 /* GeneralTab.swift in Sources */,
+				B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */,
+				967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */,
+				9AB5252581905E6AA95725A5 /* MenuBarController.swift in Sources */,
+				ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */,
+				64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */,
+				8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */,
+				A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */,
+				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
+				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
+				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
+				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
+				4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */,
+				5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */,
+				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,
+				E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */,
+				68025E317F55A3908E958FEF /* WaveformView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		59BF5329AB88AB26D27DAFF5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VoiceKeyboard/VoiceKeyboard.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = VoiceKeyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../core/build";
+				OTHER_LDFLAGS = "-lvkb";
+				PRODUCT_BUNDLE_IDENTIFIER = com.voicekeyboard.app;
+				PRODUCT_NAME = VoiceKeyboard;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6A429A52F25F277F999C989B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_17B40D7F-BF4E-422E-8ED5-34A8456E11CF" /* Local.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		888071B2EE635B95C74B2267 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_17B40D7F-BF4E-422E-8ED5-34A8456E11CF" /* Local.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A2D3F047994A606D874F7835 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VoiceKeyboard/VoiceKeyboard.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = VoiceKeyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../core/build";
+				OTHER_LDFLAGS = "-lvkb";
+				PRODUCT_BUNDLE_IDENTIFIER = com.voicekeyboard.app;
+				PRODUCT_NAME = VoiceKeyboard;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		76A098DCA3E6397F7520852F /* Build configuration list for PBXNativeTarget "VoiceKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				59BF5329AB88AB26D27DAFF5 /* Debug */,
+				A2D3F047994A606D874F7835 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		851E0E1603DC950120B346FB /* Build configuration list for PBXProject "VoiceKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A429A52F25F277F999C989B /* Debug */,
+				888071B2EE635B95C74B2267 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		9C18F350D1EE5C5DBB52330C /* XCLocalSwiftPackageReference "Packages/VoiceKeyboardCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/VoiceKeyboardCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceKeyboardCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = F626CD2105B014B2D60736FA /* Project object */;
+}
