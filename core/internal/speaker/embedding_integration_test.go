@@ -31,8 +31,8 @@ func TestComputeEmbedding_NormalisedAndDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeEmbedding (1st): %v", err)
 	}
-	if len(emb1) != 256 {
-		t.Fatalf("len(emb) = %d, want 256", len(emb1))
+	if len(emb1) != EmbeddingDim {
+		t.Fatalf("len(emb) = %d, want %d", len(emb1), EmbeddingDim)
 	}
 
 	// L2 norm should be ~1

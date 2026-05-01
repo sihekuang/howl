@@ -6,8 +6,13 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+// EmbeddingDim is the speaker embedding dimensionality produced by
+// speaker_encoder.onnx (Wespeaker ECAPA-TDNN-512 wrapped with a Kaldi
+// Fbank front-end and L2-normalisation).
+const EmbeddingDim = 192
+
 // ComputeEmbedding runs speaker_encoder.onnx on samples (16 kHz mono PCM)
-// and returns a 256-dim L2-normalised float32 embedding.
+// and returns an L2-normalised float32 embedding of length EmbeddingDim.
 //
 // The caller is responsible for InitONNXRuntime; ComputeEmbedding opens
 // and closes the session itself. Callable safely on demand.
@@ -32,7 +37,7 @@ func ComputeEmbedding(modelPath string, samples16k []float32) ([]float32, error)
 	}
 	defer inT.Destroy()
 
-	outT, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 256))
+	outT, err := ort.NewEmptyTensor[float32](ort.NewShape(1, EmbeddingDim))
 	if err != nil {
 		return nil, fmt.Errorf("compute_embedding: output tensor: %w", err)
 	}
@@ -45,7 +50,7 @@ func ComputeEmbedding(modelPath string, samples16k []float32) ([]float32, error)
 		return nil, fmt.Errorf("compute_embedding: inference: %w", err)
 	}
 
-	emb := make([]float32, 256)
+	emb := make([]float32, EmbeddingDim)
 	copy(emb, outT.GetData())
 	return emb, nil
 }

@@ -9,14 +9,16 @@ import (
 
 // SpeakerGate implements TSEExtractor using the combined tse_model.onnx.
 //
-// The model separates mixed audio into 2 sources (ConvTasNet), embeds each
-// source with the resemblyzer GE2E encoder, and soft-selects the source
-// closest to the enrolled speaker embedding. It returns actual extracted audio,
-// not a gated/zeroed copy.
+// The model separates mixed audio into 2 sources (ConvTasNet Libri2Mix
+// sep_noisy 16k), embeds each source with the Wespeaker ECAPA-TDNN-512
+// encoder (Kaldi Fbank front-end + L2-norm baked into the same ONNX), and
+// hard-selects the source whose embedding has the higher cosine similarity
+// to the enrolled speaker embedding. It returns actual extracted audio, not
+// a gated/zeroed copy.
 //
 // Inputs:  mixed         float32[1, T]   — 16 kHz mono audio
 //
-//	ref_embedding float32[1, 256] — L2-normalised enrolled speaker embedding
+//	ref_embedding float32[1, EmbeddingDim] — L2-normalised enrolled speaker embedding
 //
 // Output:  extracted     float32[1, T]   — separated audio for enrolled speaker
 type SpeakerGate struct {
@@ -40,7 +42,8 @@ func NewSpeakerGate(modelPath string) (*SpeakerGate, error) {
 
 // Extract runs speaker extraction inference.
 //   - mixed: 16 kHz mono PCM chunk.
-//   - ref:   L2-normalised 256-dim enrollment embedding (from enrollment.emb).
+//   - ref:   L2-normalised enrollment embedding (from enrollment.emb).
+//     Length must equal EmbeddingDim.
 //
 // Returns the separated audio for the enrolled speaker.
 func (g *SpeakerGate) Extract(_ context.Context, mixed []float32, ref []float32) ([]float32, error) {

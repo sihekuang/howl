@@ -32,7 +32,7 @@ if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]] || [[ ! -f "$MODELS_DIR/speaker_encod
   if [[ ! -d "$VENV" ]]; then
     "$PYTHON312" -m venv "$VENV"
   fi
-  "$VENV/bin/pip" install --quiet torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
+  "$VENV/bin/pip" install --quiet torch asteroid requests onnxscript onnxruntime onnx onnx2torch soundfile numpy
   "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
