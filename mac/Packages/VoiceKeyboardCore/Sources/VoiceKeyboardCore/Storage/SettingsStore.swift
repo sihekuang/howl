@@ -6,6 +6,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
     public var disableNoiseSuppression: Bool
     public var llmProvider: String
     public var llmModel: String
+    public var llmBaseURL: String   // empty = provider's default endpoint
     public var customDict: [String]
     public var hotkey: KeyboardShortcut
     /// CoreAudio/AVCaptureDevice unique ID for the input device.
@@ -22,6 +23,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         disableNoiseSuppression: Bool = false,
         llmProvider: String = "anthropic",
         llmModel: String = "claude-sonnet-4-6",
+        llmBaseURL: String = "",
         customDict: [String] = [],
         hotkey: KeyboardShortcut = .defaultPTT,
         inputDeviceUID: String? = nil,
@@ -32,6 +34,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.disableNoiseSuppression = disableNoiseSuppression
         self.llmProvider = llmProvider
         self.llmModel = llmModel
+        self.llmBaseURL = llmBaseURL
         self.customDict = customDict
         self.hotkey = hotkey
         self.inputDeviceUID = inputDeviceUID
@@ -45,6 +48,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         disableNoiseSuppression = try c.decodeIfPresent(Bool.self, forKey: .disableNoiseSuppression) ?? false
         llmProvider = try c.decodeIfPresent(String.self, forKey: .llmProvider) ?? "anthropic"
         llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel) ?? "claude-sonnet-4-6"
+        llmBaseURL = try c.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
         customDict = try c.decodeIfPresent([String].self, forKey: .customDict) ?? []
         hotkey = try c.decodeIfPresent(KeyboardShortcut.self, forKey: .hotkey) ?? .defaultPTT
         inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
@@ -53,7 +57,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case whisperModelSize, language, disableNoiseSuppression
-        case llmProvider, llmModel, customDict, hotkey, inputDeviceUID, tseEnabled
+        case llmProvider, llmModel, llmBaseURL, customDict, hotkey, inputDeviceUID, tseEnabled
     }
 }
 
