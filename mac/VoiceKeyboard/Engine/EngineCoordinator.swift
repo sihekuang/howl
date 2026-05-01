@@ -15,6 +15,25 @@ public final class EngineCoordinator {
         self.composition = composition
     }
 
+    /// Best-effort warmup of the active Ollama model at app start. No-op
+    /// if the active provider isn't Ollama or no model is selected. Runs
+    /// in the background — we don't await the result here because the
+    /// load can take 5–15 s and we don't want to block coordinator
+    /// startup. Errors are silent; the next real Clean call surfaces
+    /// any persistent problem with a clearer message.
+    private func prewarmOllamaIfActive() async {
+        let settings = (try? composition.settings.get()) ?? UserSettings()
+        guard settings.llmProvider == "ollama", !settings.llmModel.isEmpty else { return }
+        let raw = settings.llmBaseURL.isEmpty
+            ? OllamaClient.defaultBaseURL
+            : (URL(string: settings.llmBaseURL) ?? OllamaClient.defaultBaseURL)
+        let model = settings.llmModel
+        Task.detached {
+            let client = OllamaClient(baseURL: raw)
+            try? await client.preloadModel(model)
+        }
+    }
+
     /// Set a transient warning that auto-clears after 5 seconds, unless a
     /// newer warning replaces it first.
     private func setTransientWarning(_ msg: String) {
@@ -34,6 +53,9 @@ public final class EngineCoordinator {
         log.info("coordinator.start: applying config and binding hotkey")
         // Apply current settings to the engine
         await applyConfig()
+        // Pre-warm Ollama if it's the active provider so the user's
+        // first dictation isn't blocked by a 5–15 s cold model load.
+        await prewarmOllamaIfActive()
         // Hook hotkey
         do {
             let settings = try composition.settings.get()

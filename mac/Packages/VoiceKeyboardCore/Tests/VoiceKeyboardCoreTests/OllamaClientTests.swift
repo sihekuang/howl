@@ -105,4 +105,73 @@ struct OllamaClientTests {
             Issue.record("wrong error type: \(error)")
         }
     }
+
+    @Test func preloadModel_Success() async throws {
+        let body = #"{"model":"llama3.2","done":true,"done_reason":"load"}"#.data(using: .utf8)!
+        let client = makeClient { req in
+            #expect(req.url?.path == "/api/generate")
+            #expect(req.httpMethod == "POST")
+            // Verify the body carries model + keep_alive.
+            if let bodyData = req.httpBodyStreamData() ?? req.httpBody,
+               let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+                #expect(json["model"] as? String == "llama3.2")
+                #expect(json["keep_alive"] as? String == "30m")
+            } else {
+                Issue.record("preload body did not parse as JSON")
+            }
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body, nil)
+        }
+        try await client.preloadModel("llama3.2")
+    }
+
+    @Test func preloadModel_HTTPError() async {
+        let client = makeClient { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+             #"{"error":"model 'missing' not found"}"#.data(using: .utf8), nil)
+        }
+        do {
+            try await client.preloadModel("missing")
+            Issue.record("expected error")
+        } catch OllamaClientError.http(let status, _) {
+            #expect(status == 404)
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
+    @Test func preloadModel_Unreachable() async {
+        let client = makeClient { _ in
+            (HTTPURLResponse(url: URL(string: "http://localhost:11434")!, statusCode: 0, httpVersion: nil, headerFields: nil)!,
+             nil, URLError(.cannotConnectToHost))
+        }
+        do {
+            try await client.preloadModel("llama3.2")
+            Issue.record("expected error")
+        } catch OllamaClientError.unreachable {
+            // expected
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+}
+
+// URLRequest's httpBody can be nil for streaming bodies; this helper
+// reads from httpBodyStream when present so tests don't have to know
+// which form was used. Returns nil if neither is set.
+private extension URLRequest {
+    func httpBodyStreamData() -> Data? {
+        guard let stream = httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufSize = 1024
+        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
+        defer { buf.deallocate() }
+        while stream.hasBytesAvailable {
+            let n = stream.read(buf, maxLength: bufSize)
+            if n <= 0 { break }
+            data.append(buf, count: n)
+        }
+        return data.isEmpty ? nil : data
+    }
 }
