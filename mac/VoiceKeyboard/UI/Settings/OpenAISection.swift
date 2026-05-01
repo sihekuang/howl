@@ -8,23 +8,14 @@ struct OpenAISection: View {
 
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyStatus: String = ""
-    @State private var testStatus: TestStatus = .idle
+    @State private var loadState: LoadState = .noKey
 
-    enum TestStatus: Equatable {
-        case idle
-        case testing
-        case ok(String)        // model count or status
-        case bad(String)       // human-readable failure
+    enum LoadState: Equatable {
+        case noKey
+        case loading
+        case loaded(models: [OpenAIModel])
+        case failed(message: String)
     }
-
-    // OpenAI model IDs surfaced in the picker. Keep the default first
-    // (small, cheap, fast). Add new ones at the top when they ship.
-    private let llmModels: [(id: String, label: String)] = [
-        ("gpt-4o-mini",  "GPT-4o mini — balanced (default)"),
-        ("gpt-4o",       "GPT-4o — most capable"),
-        ("gpt-4.1-mini", "GPT-4.1 mini"),
-        ("gpt-4.1",      "GPT-4.1"),
-    ]
 
     // Both legacy ("sk-...") and project-scoped ("sk-proj-...") OpenAI
     // keys start with "sk-", so a single prefix check covers both.
@@ -32,94 +23,113 @@ struct OpenAISection: View {
 
     var body: some View {
         Group {
-            Picker("Model", selection: $settings.llmModel) {
-                ForEach(llmModels, id: \.id) { m in
-                    Text(m.label).tag(m.id)
-                }
-            }
+            modelRow
             SecureField("API Key", text: $apiKeyDraft, prompt: Text("sk-..."))
             HStack {
                 Button("Save") {
                     do {
                         try secrets.setAPIKey(apiKeyDraft, forProvider: "openai")
                         apiKeyStatus = "Saved"
+                        Task { await refreshModels() }
                     } catch {
                         apiKeyStatus = "Failed: \(error)"
                     }
                 }
                 .disabled(!keyLooksValid)
-
-                Button(testStatus == .testing ? "Testing…" : "Test Key") {
-                    Task { await runTest() }
-                }
-                .disabled(!keyLooksValid || testStatus == .testing)
             }
             Text(apiKeyStatus).foregroundStyle(.secondary)
-            testResultRow
             Link("Get one from platform.openai.com",
                  destination: URL(string: "https://platform.openai.com/api-keys")!)
         }
         .task {
             apiKeyDraft = (try? secrets.getAPIKey(forProvider: "openai")) ?? ""
+            await refreshModels()
         }
     }
+
+    // MARK: – Model row (driven by loadState)
 
     @ViewBuilder
-    private var testResultRow: some View {
-        switch testStatus {
-        case .idle:
-            EmptyView()
-        case .testing:
-            Label("Reaching api.openai.com…", systemImage: "ellipsis.circle")
-                .foregroundStyle(.secondary)
-        case .ok(let detail):
-            Label("Key works — \(detail)", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .bad(let detail):
-            Label(detail, systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
+    private var modelRow: some View {
+        switch loadState {
+        case .noKey:
+            HStack {
+                Text("Model")
+                Spacer()
+                Text("Save an API key to load models")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        case .loading:
+            HStack {
+                Text("Model")
+                Spacer()
+                ProgressView().controlSize(.small)
+            }
+        case .loaded(let models):
+            HStack {
+                Picker("Model", selection: $settings.llmModel) {
+                    if !models.contains(where: { $0.id == settings.llmModel }), !settings.llmModel.isEmpty {
+                        Text("\(settings.llmModel) (not available)").tag(settings.llmModel)
+                    }
+                    ForEach(models) { m in
+                        Text(m.id).tag(m.id)
+                    }
+                }
+                Button {
+                    Task { await refreshModels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh model list")
+            }
+        case .failed(let msg):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Couldn't load models", systemImage: "xmark.octagon.fill")
+                    .foregroundStyle(.red)
+                Text(msg)
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                Button("Retry") { Task { await refreshModels() } }
+            }
         }
     }
 
-    private func runTest() async {
-        testStatus = .testing
-        let key = apiKeyDraft
-        guard let url = URL(string: "https://api.openai.com/v1/models") else {
-            testStatus = .bad("invalid URL")
+    // MARK: – Behaviour
+
+    private func refreshModels() async {
+        let savedKey = (try? secrets.getAPIKey(forProvider: "openai")) ?? ""
+        guard !savedKey.isEmpty else {
+            loadState = .noKey
             return
         }
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 5
-
+        loadState = .loading
+        let client = OpenAIClient(apiKey: savedKey)
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse else {
-                testStatus = .bad("no HTTP response")
-                return
-            }
-            switch http.statusCode {
-            case 200:
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let arr = json["data"] as? [Any] {
-                    testStatus = .ok("\(arr.count) models available")
-                } else {
-                    testStatus = .ok("HTTP 200")
-                }
-            case 401:
-                testStatus = .bad("Invalid API key (HTTP 401)")
-            case 403:
-                testStatus = .bad("Key not authorized for this resource (HTTP 403)")
-            case 429:
-                testStatus = .bad("Rate-limited (HTTP 429)")
-            default:
-                let body = String(data: data, encoding: .utf8) ?? ""
-                let snippet = body.prefix(120)
-                testStatus = .bad("HTTP \(http.statusCode): \(snippet)")
-            }
+            let models = try await client.listModels()
+            loadState = models.isEmpty
+                ? .failed(message: "API returned no chat-streaming models — check your account permissions.")
+                : .loaded(models: models)
+        } catch let e as OpenAIClientError {
+            loadState = .failed(message: humanize(e))
         } catch {
-            testStatus = .bad("Network error: \(error.localizedDescription)")
+            loadState = .failed(message: error.localizedDescription)
+        }
+    }
+
+    private func humanize(_ e: OpenAIClientError) -> String {
+        switch e {
+        case .unreachable(let url):
+            return "Couldn't reach \(url.host ?? url.absoluteString)"
+        case .http(let status, _):
+            switch status {
+            case 401: return "Invalid API key (HTTP 401)"
+            case 403: return "Key not authorized for this resource (HTTP 403)"
+            case 429: return "Rate-limited (HTTP 429)"
+            default:  return "HTTP \(status)"
+            }
+        case .decode(let detail):
+            return "Bad response from API: \(detail)"
         }
     }
 }

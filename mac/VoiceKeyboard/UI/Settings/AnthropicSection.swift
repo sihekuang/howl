@@ -8,114 +8,135 @@ struct AnthropicSection: View {
 
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyStatus: String = ""
-    @State private var testStatus: TestStatus = .idle
+    @State private var loadState: LoadState = .noKey
 
-    enum TestStatus: Equatable {
-        case idle
-        case testing
-        case ok(String)        // model count or version
-        case bad(String)       // human-readable failure
+    /// Same shape OllamaSection uses, with an extra `noKey` state for
+    /// the cloud providers that can't fetch their model list without
+    /// authentication.
+    enum LoadState: Equatable {
+        case noKey
+        case loading
+        case loaded(models: [AnthropicModel])
+        case failed(message: String)
     }
-
-    // Anthropic model IDs surfaced in the picker. Keep the most capable
-    // first, fastest last. Add new ones at the top.
-    private let llmModels: [(id: String, label: String)] = [
-        ("claude-opus-4-7",    "Opus 4.7 — most capable"),
-        ("claude-sonnet-4-6",  "Sonnet 4.6 — balanced (default)"),
-        ("claude-haiku-4-5",   "Haiku 4.5 — fastest, cheapest"),
-    ]
 
     var body: some View {
         Group {
-            Picker("Model", selection: $settings.llmModel) {
-                ForEach(llmModels, id: \.id) { m in
-                    Text(m.label).tag(m.id)
-                }
-            }
+            modelRow
             SecureField("API Key", text: $apiKeyDraft, prompt: Text("sk-ant-..."))
             HStack {
                 Button("Save") {
                     do {
                         try secrets.setAPIKey(apiKeyDraft, forProvider: "anthropic")
                         apiKeyStatus = "Saved"
+                        Task { await refreshModels() }
                     } catch {
                         apiKeyStatus = "Failed: \(error)"
                     }
                 }
-                .disabled(!apiKeyDraft.hasPrefix("sk-ant-"))
-
-                Button(testStatus == .testing ? "Testing…" : "Test Key") {
-                    Task { await runTest() }
-                }
-                .disabled(!apiKeyDraft.hasPrefix("sk-ant-") || testStatus == .testing)
+                .disabled(!keyLooksValid)
             }
             Text(apiKeyStatus).foregroundStyle(.secondary)
-            testResultRow
             Link("Get one from console.anthropic.com",
                  destination: URL(string: "https://console.anthropic.com/")!)
         }
         .task {
             apiKeyDraft = (try? secrets.getAPIKey(forProvider: "anthropic")) ?? ""
+            await refreshModels()
         }
     }
+
+    // MARK: – Model row (driven by loadState)
 
     @ViewBuilder
-    private var testResultRow: some View {
-        switch testStatus {
-        case .idle:
-            EmptyView()
-        case .testing:
-            Label("Reaching api.anthropic.com…", systemImage: "ellipsis.circle")
-                .foregroundStyle(.secondary)
-        case .ok(let detail):
-            Label("Key works — \(detail)", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .bad(let detail):
-            Label(detail, systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
+    private var modelRow: some View {
+        switch loadState {
+        case .noKey:
+            HStack {
+                Text("Model")
+                Spacer()
+                Text("Save an API key to load models")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        case .loading:
+            HStack {
+                Text("Model")
+                Spacer()
+                ProgressView().controlSize(.small)
+            }
+        case .loaded(let models):
+            HStack {
+                Picker("Model", selection: $settings.llmModel) {
+                    // Preserve a saved selection that's not in the live
+                    // list (deprecated id, or new model the API has
+                    // dropped) so the binding stays valid and the user
+                    // can see what's set.
+                    if !models.contains(where: { $0.id == settings.llmModel }), !settings.llmModel.isEmpty {
+                        Text("\(settings.llmModel) (not available)").tag(settings.llmModel)
+                    }
+                    ForEach(models) { m in
+                        Text(m.displayName).tag(m.id)
+                    }
+                }
+                Button {
+                    Task { await refreshModels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh model list")
+            }
+        case .failed(let msg):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Couldn't load models", systemImage: "xmark.octagon.fill")
+                    .foregroundStyle(.red)
+                Text(msg)
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                Button("Retry") { Task { await refreshModels() } }
+            }
         }
     }
 
-    private func runTest() async {
-        testStatus = .testing
-        let key = apiKeyDraft
-        guard let url = URL(string: "https://api.anthropic.com/v1/models") else {
-            testStatus = .bad("invalid URL")
+    // MARK: – Behaviour
+
+    private var keyLooksValid: Bool { apiKeyDraft.hasPrefix("sk-ant-") }
+
+    private func refreshModels() async {
+        // Use the saved key, not the draft — the draft might be a
+        // half-typed value the user hasn't committed yet.
+        let savedKey = (try? secrets.getAPIKey(forProvider: "anthropic")) ?? ""
+        guard !savedKey.isEmpty else {
+            loadState = .noKey
             return
         }
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue(key, forHTTPHeaderField: "x-api-key")
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        req.timeoutInterval = 5
-
+        loadState = .loading
+        let client = AnthropicClient(apiKey: savedKey)
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse else {
-                testStatus = .bad("no HTTP response")
-                return
-            }
-            switch http.statusCode {
-            case 200:
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let arr = json["data"] as? [Any] {
-                    testStatus = .ok("\(arr.count) models available")
-                } else {
-                    testStatus = .ok("HTTP 200")
-                }
-            case 401:
-                testStatus = .bad("Invalid API key (HTTP 401)")
-            case 403:
-                testStatus = .bad("Key not authorized for this resource (HTTP 403)")
-            case 429:
-                testStatus = .bad("Rate-limited (HTTP 429)")
-            default:
-                let body = String(data: data, encoding: .utf8) ?? ""
-                let snippet = body.prefix(120)
-                testStatus = .bad("HTTP \(http.statusCode): \(snippet)")
-            }
+            let models = try await client.listModels()
+            loadState = models.isEmpty
+                ? .failed(message: "API returned no Claude models — check your account permissions.")
+                : .loaded(models: models)
+        } catch let e as AnthropicClientError {
+            loadState = .failed(message: humanize(e))
         } catch {
-            testStatus = .bad("Network error: \(error.localizedDescription)")
+            loadState = .failed(message: error.localizedDescription)
+        }
+    }
+
+    private func humanize(_ e: AnthropicClientError) -> String {
+        switch e {
+        case .unreachable(let url):
+            return "Couldn't reach \(url.host ?? url.absoluteString)"
+        case .http(let status, _):
+            switch status {
+            case 401: return "Invalid API key (HTTP 401)"
+            case 403: return "Key not authorized for this resource (HTTP 403)"
+            case 429: return "Rate-limited (HTTP 429)"
+            default:  return "HTTP \(status)"
+            }
+        case .decode(let detail):
+            return "Bad response from API: \(detail)"
         }
     }
 }
