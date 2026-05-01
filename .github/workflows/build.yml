@@ -67,7 +67,7 @@ jobs:
           if [ ! -d "$VENV" ]; then "$PY" -m venv "$VENV"; fi
           "$VENV/bin/pip" install --quiet --upgrade pip
           "$VENV/bin/pip" install --quiet \
-            torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
+            torch resemblyzer asteroid requests onnx onnx2torch onnxscript onnxruntime soundfile numpy
           "$VENV/bin/python" scripts/export_tse_model.py --out core/build/models/tse_model.onnx
 
       # No xcconfig override needed any more: SharedSettings.xcconfig
@@ -126,11 +126,14 @@ jobs:
           ditto -c -k --keepParent "$APP" VoiceKeyboard.app.zip
           ls -lh VoiceKeyboard.app.zip
           echo "zip=mac/VoiceKeyboard.app.zip" >> "$GITHUB_OUTPUT"
+          # Artifact names can't contain '/', so flatten branch refs like
+          # 'feat/x' to 'feat-x'. Tag refs (e.g. 'v0.1.0') pass through.
+          echo "ref_slug=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Upload .app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VoiceKeyboard-${{ github.ref_name }}-app
+          name: VoiceKeyboard-${{ steps.pack.outputs.ref_slug }}-app
           path: ${{ steps.pack.outputs.zip }}
           retention-days: 30
 
