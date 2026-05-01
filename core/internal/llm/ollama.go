@@ -150,7 +150,18 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
+	// KeepAlive controls how long Ollama keeps the model loaded after
+	// this request. Default Ollama behaviour is 5 minutes; we extend
+	// to 30 minutes so dictation sessions don't repeatedly pay the
+	// model-load cost (typically 5–15 s for 3B–8B models).
+	KeepAlive string `json:"keep_alive,omitempty"`
 }
+
+// ollamaKeepAlive is sent on every chat request. "30m" stays loaded for
+// 30 minutes after the last call. Ollama's default is "5m"; users could
+// blow this off and unload eagerly with "0", or pin permanently with
+// "-1", but 30 minutes matches typical dictation-session length.
+const ollamaKeepAlive = "30m"
 
 type chatMessage struct {
 	Role    string `json:"role"`
@@ -173,12 +184,13 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	}
 	prompt := renderPrompt(raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
-		Model:    o.model,
-		Messages: []chatMessage{{Role: "user", Content: prompt}},
-		Stream:   false,
+		Model:     o.model,
+		Messages:  []chatMessage{{Role: "user", Content: prompt}},
+		Stream:    false,
+		KeepAlive: ollamaKeepAlive,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d", o.model, o.baseURL, len(raw), len(preserveTerms))
+	log.Printf("[vkb] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
@@ -225,12 +237,13 @@ func (o *Ollama) CleanStream(
 	}
 	prompt := renderPrompt(raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
-		Model:    o.model,
-		Messages: []chatMessage{{Role: "user", Content: prompt}},
-		Stream:   true,
+		Model:     o.model,
+		Messages:  []chatMessage{{Role: "user", Content: prompt}},
+		Stream:    true,
+		KeepAlive: ollamaKeepAlive,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] ollama.CleanStream: starting model=%s baseURL=%s rawLen=%d termCount=%d", o.model, o.baseURL, len(raw), len(preserveTerms))
+	log.Printf("[vkb] ollama.CleanStream: starting model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {

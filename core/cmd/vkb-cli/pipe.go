@@ -81,10 +81,14 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "llm: %v\n", perr)
 			return 2
 		}
-		// Model precedence: --llm-model flag > ANTHROPIC_MODEL env (legacy) >
-		// provider's DefaultModel (filled in by provider.New if still empty).
+		// Model precedence: --llm-model flag > provider-specific legacy env >
+		// provider's DefaultModel (filled in by provider.New) > provider's
+		// auto-detect (e.g. Ollama queries /api/tags). The ANTHROPIC_MODEL
+		// fallback is anthropic-flavoured, so only honour it when actually
+		// using Anthropic — otherwise users with that var lingering in
+		// their environment ship it to Ollama and get a confusing 404.
 		model := *llmModel
-		if model == "" {
+		if model == "" && provider.Name == "anthropic" {
 			model = os.Getenv("ANTHROPIC_MODEL")
 		}
 		opts := llm.Options{
@@ -92,6 +96,8 @@ func runPipe(args []string) int {
 			BaseURL: *llmBaseURL,
 		}
 		if provider.NeedsAPIKey {
+			// Only Anthropic today; one provider-specific env var is fine.
+			// When a second cloud provider lands this becomes a switch.
 			opts.APIKey = os.Getenv("ANTHROPIC_API_KEY")
 			if opts.APIKey == "" {
 				fmt.Fprintf(os.Stderr, "ANTHROPIC_API_KEY required for provider %q\n", provider.Name)
