@@ -13,6 +13,16 @@ build/
 *.out
 coverage.out
 
+# Bare-name executables from `go build ./cmd/<x>` without -o. The Makefile
+# routes proper builds into core/build/ (already ignored above), but it's
+# easy to accidentally produce these by running `go build ./cmd/vkb-cli`
+# directly. They're platform-specific arm64 binaries and shouldn't ship.
+/libvkb
+/vkb-cli
+/enroll
+/ollama-smoke
+/test/cabi/smoke
+
 # IDE
 .vscode/
 .idea/
