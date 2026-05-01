@@ -132,7 +132,8 @@ enum ModelPaths {
         }
         return modelsDir.appendingPathComponent("tse_model.onnx")
     }
-    /// Speaker encoder used by enrollment to produce the 256-dim reference embedding.
+    /// Speaker encoder used by enrollment to produce the reference embedding
+    /// (Wespeaker ECAPA-TDNN-512 with Kaldi Fbank front-end; 192-dim, L2-normalised).
     /// See `tseModel` for bundling rationale.
     static var speakerEncoder: URL {
         if let bundled = Bundle.main.url(forResource: "speaker_encoder", withExtension: "onnx"),

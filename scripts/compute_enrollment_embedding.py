@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Compute a speaker embedding from enrollment.wav using the exported ONNX model
-and save it as enrollment.emb (raw float32 little-endian binary, 256 values).
+and save it as enrollment.emb (raw float32 little-endian binary).
+
+The embedding length is whatever speaker_encoder.onnx outputs (currently 192
+floats — Wespeaker ECAPA-TDNN-512 with Kaldi Fbank front-end + L2-norm).
 
 Usage:
     python scripts/compute_enrollment_embedding.py \

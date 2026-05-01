@@ -19,6 +19,8 @@ func main() {
 		os.Exit(runTranscribe(os.Args[2:]))
 	case "pipe":
 		os.Exit(runPipe(os.Args[2:]))
+	case "backends":
+		os.Exit(runBackends(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -38,6 +40,9 @@ Usage:
   vkb-cli transcribe FILE                run Whisper on a WAV
   vkb-cli pipe FILE                      run full pipeline on a WAV
   vkb-cli pipe --live                    record from mic, full pipeline
+  vkb-cli backends                       list registered TSE backends
+                                         (--models-dir DIR also checks
+                                         that each backend's files exist)
 
 Environment:
   ANTHROPIC_API_KEY   required for cleanup

@@ -58,8 +58,13 @@ func SaveEmbedding(path string, emb []float32) error {
 }
 
 // LoadEmbedding reads a raw float32 little-endian binary written by SaveEmbedding
-// (or by compute_enrollment_embedding.py).
-func LoadEmbedding(path string) ([]float32, error) {
+// (or by compute_enrollment_embedding.py). The file must contain exactly
+// expectedDim float32 values; mismatches return an error so users hit a
+// clear failure if they kept an old enrollment.emb across a backend swap
+// (e.g. resemblyzer 256-dim → ECAPA-TDNN 192-dim).
+//
+// Pass the active backend's EmbeddingDim as expectedDim.
+func LoadEmbedding(path string, expectedDim int) ([]float32, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("store: read embedding: %w", err)
@@ -67,7 +72,11 @@ func LoadEmbedding(path string) ([]float32, error) {
 	if len(data)%4 != 0 {
 		return nil, fmt.Errorf("store: embedding file size %d not a multiple of 4", len(data))
 	}
-	emb := make([]float32, len(data)/4)
+	got := len(data) / 4
+	if got != expectedDim {
+		return nil, fmt.Errorf("store: embedding length mismatch: file has %d floats, backend expects %d (re-run enrollment)", got, expectedDim)
+	}
+	emb := make([]float32, got)
 	if err := binary.Read(bytes.NewReader(data), binary.LittleEndian, emb); err != nil {
 		return nil, fmt.Errorf("store: decode embedding: %w", err)
 	}

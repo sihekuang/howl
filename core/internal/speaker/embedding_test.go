@@ -8,6 +8,6 @@ import "testing"
 
 func TestComputeEmbedding_SymbolExists(t *testing.T) {
 	// Compile-time check that ComputeEmbedding has the expected signature.
-	var fn func(string, []float32) ([]float32, error) = ComputeEmbedding
+	var fn func(string, []float32, int) ([]float32, error) = ComputeEmbedding
 	_ = fn
 }

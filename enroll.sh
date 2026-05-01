@@ -6,6 +6,7 @@ MODELS_DIR="$SCRIPT_DIR/core/build/models"
 PROFILE_DIR="${HOME}/.config/voice-keyboard"
 ONNX_LIB="${ONNXRUNTIME_LIB_PATH:-/opt/homebrew/lib/libonnxruntime.dylib}"
 SILERO_URL="https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx"
+VENV="$SCRIPT_DIR/core/build/.venv-tse"
 
 mkdir -p "$MODELS_DIR" "$PROFILE_DIR"
 
@@ -15,24 +16,30 @@ if [[ ! -f "$MODELS_DIR/silero_vad.onnx" ]]; then
   curl -L -o "$MODELS_DIR/silero_vad.onnx" "$SILERO_URL"
 fi
 
+# Ensure the Python venv exists and has the deps the embedding step needs.
+# We need this even when models are already built, because
+# compute_enrollment_embedding.py runs after recording.
+PYTHON312="${PYTHON312:-$(command -v python3.12 2>/dev/null)}"
+if [[ -z "$PYTHON312" ]]; then
+  echo "ERROR: python3.12 not found. Install with: brew install python@3.12"
+  exit 1
+fi
+if [[ -d "$VENV" ]] && ! "$VENV/bin/python" --version 2>&1 | grep -q "3\.12"; then
+  echo "Recreating venv (wrong Python version)..."
+  rm -rf "$VENV"
+fi
+if [[ ! -d "$VENV" ]]; then
+  "$PYTHON312" -m venv "$VENV"
+fi
+# Cheap presence check — full deps are needed for the export step below.
+if ! "$VENV/bin/python" -c "import onnxruntime, numpy" 2>/dev/null; then
+  echo "Installing Python dependencies..."
+  "$VENV/bin/pip" install --quiet torch asteroid requests onnxscript onnxruntime onnx onnx2torch soundfile numpy
+fi
+
 # Build tse_model.onnx + speaker_encoder.onnx if missing
 if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]] || [[ ! -f "$MODELS_DIR/speaker_encoder.onnx" ]]; then
   echo "Building tse_model.onnx (requires Python 3.12, PyTorch, asteroid)..."
-  PYTHON312="${PYTHON312:-$(command -v python3.12 2>/dev/null)}"
-  if [[ -z "$PYTHON312" ]]; then
-    echo "ERROR: python3.12 not found. Install with: brew install python@3.12"
-    exit 1
-  fi
-  VENV="$SCRIPT_DIR/core/build/.venv-tse"
-  # Recreate venv if it's not running Python 3.12
-  if [[ -d "$VENV" ]] && ! "$VENV/bin/python" --version 2>&1 | grep -q "3\.12"; then
-    echo "Recreating venv (wrong Python version)..."
-    rm -rf "$VENV"
-  fi
-  if [[ ! -d "$VENV" ]]; then
-    "$PYTHON312" -m venv "$VENV"
-  fi
-  "$VENV/bin/pip" install --quiet torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
   "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
@@ -51,7 +58,6 @@ ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
 
 # Compute and save the speaker embedding from the just-recorded WAV
 echo "Computing speaker embedding..."
-VENV="$SCRIPT_DIR/core/build/.venv-tse"
 "$VENV/bin/python" "$SCRIPT_DIR/scripts/compute_enrollment_embedding.py" \
   --model "$MODELS_DIR/speaker_encoder.onnx" \
   --wav   "$PROFILE_DIR/enrollment.wav" \
