@@ -93,10 +93,13 @@ security find-identity -v -p codesigning
 
 ## Why signing matters here
 
-VoiceKeyboard needs three macOS permissions: **Microphone**,
-**Accessibility** (for paste), and **Input Monitoring** (for the global
-PTT hotkey). All three are managed by macOS's TCC subsystem, which keys
-permissions to the binary's **code-signing identity** (cdhash chain).
+VoiceKeyboard needs two macOS permissions: **Microphone** and
+**Accessibility** (the latter for paste injection, and for the
+fn/Globe-key PTT path that uses CGEventTap). The standard
+key-plus-modifier PTT shortcut goes through Carbon's
+`RegisterEventHotKey` and needs no permission at all. Both granted
+permissions are managed by macOS's TCC subsystem, which keys them to
+the binary's **code-signing identity** (cdhash chain).
 
 With ad-hoc signing (`CODE_SIGN_IDENTITY = -`), every rebuild produces a
 new cdhash and TCC silently treats the binary as a new app — so granted

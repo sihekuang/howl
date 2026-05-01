@@ -12,11 +12,6 @@ public protocol AccessibilityPermissions: Sendable {
 
     /// Open the System Settings panel to the Accessibility privacy section.
     func openSystemSettings()
-
-    /// Open the System Settings panel to the Input Monitoring privacy
-    /// section. CGEventTap for keyboard events requires this permission
-    /// on macOS 10.15+, separately from Accessibility.
-    func openInputMonitoringSettings()
 }
 
 public final class DefaultAccessibilityPermissions: AccessibilityPermissions, @unchecked Sendable {
@@ -35,11 +30,6 @@ public final class DefaultAccessibilityPermissions: AccessibilityPermissions, @u
 
     public func openSystemSettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
-    }
-
-    public func openInputMonitoringSettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
         NSWorkspace.shared.open(url)
     }
 }

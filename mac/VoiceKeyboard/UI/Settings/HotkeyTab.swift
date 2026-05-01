@@ -33,16 +33,6 @@ struct HotkeyTab: View {
                     Button("Open…") { permissions.openSystemSettings() }
                 }
             }
-            LabeledContent("Input Monitoring") {
-                HStack(spacing: 8) {
-                    Image(systemName: "questionmark.circle")
-                        .foregroundStyle(.secondary)
-                    Text("Required for global hotkey listening")
-                        .font(.caption)
-                    Spacer()
-                    Button("Open…") { permissions.openInputMonitoringSettings() }
-                }
-            }
             LabeledContent("Microphone") {
                 HStack(spacing: 8) {
                     Image(systemName: micGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -54,7 +44,7 @@ struct HotkeyTab: View {
                 }
             }
             Section {
-                Text("After granting either permission — or after rebuilding the app — toggle the switch **off then on** so macOS picks up the new binary. The PTT hotkey still won't fire until both panes have VoiceKeyboard enabled.")
+                Text("After granting Accessibility — or after rebuilding the app — toggle the switch **off then on** so macOS picks up the new binary. Standard hotkeys (key + modifiers) work without any permission, but paste injection still needs Accessibility.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
