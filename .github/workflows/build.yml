@@ -1,0 +1,153 @@
+name: Build .app
+
+# Triggered by:
+#   - Tag pushes matching v*  (e.g. v0.1.0)        — for releases
+#   - Manual dispatch from the Actions tab          — for ad-hoc verification
+#
+# Produces an ad-hoc-signed .app uploaded as a workflow artifact. NOT
+# notarized; users will see a Gatekeeper prompt on first launch ("can't
+# be opened because Apple cannot check it for malicious software"). For
+# real distribution add Developer ID + notarization in a follow-up.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build, bundle, sign (ad-hoc), upload
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache: true
+          cache-dependency-path: core/go.sum
+
+      - name: Install Homebrew deps
+        # whisper-cpp + ggml: libvkb cgo link.
+        # onnxruntime: TSE pipeline at runtime (and bundled into .app).
+        # xcodegen: regenerates VoiceKeyboard.xcodeproj from project.yml.
+        # python@3.12: pinned by scripts/export_tse_model.py (asteroid req).
+        run: brew install whisper-cpp ggml onnxruntime xcodegen python@3.12
+
+      # The Python venv is ~2GB once torch + asteroid + resemblyzer land.
+      # Cache it so re-runs don't re-pip-install. Key on the export script
+      # so changes to pinned deps invalidate.
+      - name: Cache TSE Python venv
+        uses: actions/cache@v4
+        with:
+          path: core/build/.venv-tse
+          key: tse-venv-${{ runner.os }}-${{ hashFiles('scripts/export_tse_model.py') }}-v1
+
+      # The built ONNX models (~32MB) only depend on the export script.
+      # If the cache hits we skip the (slow) PyTorch tracing run entirely.
+      - name: Cache TSE models
+        id: cache-models
+        uses: actions/cache@v4
+        with:
+          path: core/build/models
+          key: tse-models-${{ runner.os }}-${{ hashFiles('scripts/export_tse_model.py') }}-v1
+
+      - name: Build TSE models (only on cache miss)
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          mkdir -p core/build/models
+          # Silero VAD is small enough to download fresh every miss.
+          curl -sSL -o core/build/models/silero_vad.onnx \
+            https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx
+          # tse_model.onnx + speaker_encoder.onnx via PyTorch tracing.
+          PY="$(brew --prefix python@3.12)/bin/python3.12"
+          VENV=core/build/.venv-tse
+          if [ ! -d "$VENV" ]; then "$PY" -m venv "$VENV"; fi
+          "$VENV/bin/pip" install --quiet --upgrade pip
+          "$VENV/bin/pip" install --quiet \
+            torch resemblyzer asteroid requests onnxscript onnxruntime soundfile numpy
+          "$VENV/bin/python" scripts/export_tse_model.py --out core/build/models/tse_model.onnx
+
+      - name: Override Local.xcconfig for ad-hoc signing
+        # The committed Local.xcconfig.sample sets CODE_SIGN_IDENTITY to
+        # "Apple Development", which fails in CI (no cert in keychain).
+        # Manual signing with identity "-" produces an ad-hoc-signed .app
+        # that Gatekeeper will gate-prompt but otherwise works.
+        working-directory: mac
+        run: |
+          cat > Local.xcconfig <<'EOF'
+          DEVELOPMENT_TEAM =
+          CODE_SIGN_STYLE = Manual
+          CODE_SIGN_IDENTITY = -
+          EOF
+
+      - name: Generate Xcode project
+        working-directory: mac
+        run: xcodegen generate
+
+      - name: Build .app
+        working-directory: mac
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project VoiceKeyboard.xcodeproj \
+            -scheme VoiceKeyboard \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/derived \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= \
+            build
+
+      - name: Locate, verify, and zip .app
+        id: pack
+        working-directory: mac
+        run: |
+          set -euo pipefail
+          APP="build/derived/Build/Products/Release/VoiceKeyboard.app"
+          test -d "$APP"
+          # Smoke check: every @rpath dep must resolve to a real file or
+          # symlink in Frameworks. Catches a class of bundling regressions
+          # without launching the app (which would need the runner desktop).
+          missing=0
+          for d in "$APP/Contents/Frameworks/"*.dylib; do
+            [ -L "$d" ] && continue
+            for ref in $(otool -L "$d" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep '^@rpath/' || true); do
+              name="${ref#@rpath/}"
+              if [ ! -e "$APP/Contents/Frameworks/$name" ]; then
+                echo "MISSING dep: $(basename "$d") -> @rpath/$name"
+                missing=$((missing+1))
+              fi
+            done
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing missing @rpath references in bundled dylibs"
+            exit 1
+          fi
+          # Also verify codesign accepts the bundle.
+          codesign --verify --deep --strict "$APP"
+          # Ditto produces a zip Finder will unpack cleanly (preserves
+          # symlinks, xattrs, ACLs — plain `zip -r` corrupts the bundle).
+          ditto -c -k --keepParent "$APP" VoiceKeyboard.app.zip
+          ls -lh VoiceKeyboard.app.zip
+          echo "zip=mac/VoiceKeyboard.app.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceKeyboard-${{ github.ref_name }}-app
+          path: ${{ steps.pack.outputs.zip }}
+          retention-days: 30
+
+      # On a tag push, also attach the zip to the GitHub Release. Created
+      # automatically if it doesn't already exist.
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.zip }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true

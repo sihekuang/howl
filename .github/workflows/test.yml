@@ -1,0 +1,48 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs when a new commit is pushed to the same branch.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (whispercpp)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache: true
+          cache-dependency-path: core/go.sum
+
+      - name: Install Homebrew dylib deps
+        # libvkb's whispercpp build tag links against libwhisper / libggml.
+        # ONNX integration tests use libonnxruntime when SPEAKERBEAM_PATH is
+        # set; we don't set it, so those tests skip — but the package still
+        # links against ort at compile time via vad.go / speakerbeam.go.
+        run: brew install whisper-cpp ggml onnxruntime
+
+      - name: Run Go tests
+        working-directory: core
+        run: go test -tags whispercpp ./...
+
+  swift:
+    name: Swift (VoiceKeyboardCore)
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Swift package tests
+        working-directory: mac/Packages/VoiceKeyboardCore
+        run: swift test
