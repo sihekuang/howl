@@ -1,44 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   VoiceKeyboard app icon — master.
-  Canvas: 1024×1024. Will be rasterized to .icns / .ico / .png by
-  assets/icons/build.sh. Designed for full-bleed (no internal margin)
-  to match modern macOS icon convention.
+  Canvas: 1024×1024.
 
-  Concept: rainbow-gradient microphone capsule on a dark squircle.
-  Calls back to the rainbow waveform inside the recording overlay.
+  Concept: stylised husky head, front-facing, on a dark squircle.
+  Bold flat shapes so the silhouette reads at 16×16; the icy-blue
+  eyes are the only chromatic accent so the icon doesn't get noisy
+  at small sizes. The husky calls back to "voice" via the implied
+  howl/bark; a tiny mouth detail keeps it readable as a face rather
+  than an abstract logo.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <!-- Squircle background: subtle top-down gradient. -->
+    <!-- Squircle background — cool dark slate, evokes snow at dusk. -->
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"  stop-color="#2a2a30"/>
-      <stop offset="100%" stop-color="#0a0a0d"/>
+      <stop offset="0%"   stop-color="#2a3242"/>
+      <stop offset="100%" stop-color="#0d121a"/>
     </linearGradient>
 
-    <!-- Mic capsule fill: vertical rainbow. -->
-    <linearGradient id="rainbow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#ff3b30"/>
-      <stop offset="17%"  stop-color="#ff9500"/>
-      <stop offset="33%"  stop-color="#ffd60a"/>
-      <stop offset="50%"  stop-color="#34c759"/>
-      <stop offset="67%"  stop-color="#0a84ff"/>
-      <stop offset="83%"  stop-color="#5e5ce6"/>
-      <stop offset="100%" stop-color="#ff2d55"/>
-    </linearGradient>
-
-    <!-- Soft top-light highlight on the capsule, sells the 3D feel. -->
-    <radialGradient id="capsuleHighlight" cx="0.35" cy="0.18" r="0.55" fx="0.30" fy="0.10">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.45"/>
-      <stop offset="60%" stop-color="#ffffff" stop-opacity="0.10"/>
+    <!-- Subtle top-left highlight on the squircle (catches light). -->
+    <radialGradient id="bgGlow" cx="0.30" cy="0.18" r="0.65" fx="0.25" fy="0.10">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0.04"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Drop shadow for the mic — gives the icon depth on the squircle. -->
-    <filter id="micShadow" x="-20%" y="-10%" width="140%" height="130%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+    <!-- Eye gradient: icy blue with a darker rim. -->
+    <radialGradient id="eye" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0%"  stop-color="#9be7ff"/>
+      <stop offset="60%" stop-color="#4ac6e8"/>
+      <stop offset="100%" stop-color="#1f7ea3"/>
+    </radialGradient>
+
+    <!-- Soft drop shadow for the husky head against the squircle. -->
+    <filter id="dropShadow" x="-15%" y="-10%" width="130%" height="130%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
       <feOffset dx="0" dy="14" result="off"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
       <feMerge>
         <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
@@ -46,39 +44,110 @@
     </filter>
   </defs>
 
-  <!-- Dark squircle background. Corner radius matches Big Sur convention
-       (≈ 184/1024 ≈ 18%). macOS will mask further if needed. -->
+  <!-- Dark squircle background. -->
   <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bgGlow)"/>
 
-  <!-- Subtle inner top highlight on the squircle itself (catches light). -->
-  <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184"
-        fill="url(#capsuleHighlight)" opacity="0.5"/>
+  <g filter="url(#dropShadow)">
 
-  <!-- Microphone group, drop-shadowed against the squircle. -->
-  <g filter="url(#micShadow)">
-    <!-- Capsule body: rainbow fill with a thin white outline so the
-         shape reads cleanly even when scaled down to 16px. -->
-    <rect x="372" y="180" width="280" height="500" rx="140" ry="140"
-          fill="url(#rainbow)" stroke="#ffffff" stroke-width="14"/>
+    <!-- ===== EARS (drawn first so the head sits on top) ===== -->
+    <!-- Left ear: triangle, dark grey outer, pink inner. -->
+    <path d="M 240 360
+             L 295 110
+             L 430 320
+             Z"
+          fill="#3b3f4a"/>
+    <path d="M 285 340
+             L 315 180
+             L 400 310
+             Z"
+          fill="#ff8e9b" opacity="0.85"/>
 
-    <!-- Glossy top-left highlight inside the capsule. -->
-    <rect x="372" y="180" width="280" height="500" rx="140" ry="140"
-          fill="url(#capsuleHighlight)"/>
+    <!-- Right ear: mirror. -->
+    <path d="M 784 360
+             L 729 110
+             L 594 320
+             Z"
+          fill="#3b3f4a"/>
+    <path d="M 739 340
+             L 709 180
+             L 624 310
+             Z"
+          fill="#ff8e9b" opacity="0.85"/>
 
-    <!-- Yoke (U-shape) under the capsule. Two strokes that meet the
-         capsule sides and curve into the stand. -->
-    <path d="M 320 540
-             V 640
-             A 192 192 0 0 0 704 640
-             V 540"
-          fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+    <!-- ===== HEAD ===== -->
+    <!-- Main head shape: rounded pear, narrower at chin. Built from a
+         smooth path so the silhouette has a lived-in feel rather than
+         a perfect ellipse. -->
+    <path d="M 200 480
+             C 200 320, 350 260, 512 260
+             C 674 260, 824 320, 824 480
+             C 824 600, 800 720, 720 800
+             C 660 860, 590 880, 512 880
+             C 434 880, 364 860, 304 800
+             C 224 720, 200 600, 200 480 Z"
+          fill="#f5f5f7"/>
 
-    <!-- Stand. -->
-    <line x1="512" y1="700" x2="512" y2="820"
-          stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+    <!-- Forehead/mask: classic husky V-mask between the eyes. -->
+    <path d="M 360 320
+             C 420 300, 470 380, 512 460
+             C 554 380, 604 300, 664 320
+             C 660 380, 640 440, 612 480
+             L 412 480
+             C 384 440, 364 380, 360 320 Z"
+          fill="#3b3f4a"/>
 
-    <!-- Base. -->
-    <rect x="376" y="800" width="272" height="40" rx="20" ry="20"
-          fill="#ffffff"/>
+    <!-- Cheek shading: subtle grey patches under each eye for depth. -->
+    <ellipse cx="360" cy="600" rx="80" ry="60" fill="#dadde2" opacity="0.85"/>
+    <ellipse cx="664" cy="600" rx="80" ry="60" fill="#dadde2" opacity="0.85"/>
+
+    <!-- ===== EYES ===== -->
+    <!-- Eye whites/sockets (subtle dark almond). -->
+    <ellipse cx="400" cy="540" rx="62" ry="52" fill="#1a1d24"/>
+    <ellipse cx="624" cy="540" rx="62" ry="52" fill="#1a1d24"/>
+
+    <!-- Iris (icy blue gradient). -->
+    <ellipse cx="400" cy="540" rx="46" ry="40" fill="url(#eye)"/>
+    <ellipse cx="624" cy="540" rx="46" ry="40" fill="url(#eye)"/>
+
+    <!-- Pupil. -->
+    <ellipse cx="400" cy="544" rx="14" ry="20" fill="#0a1015"/>
+    <ellipse cx="624" cy="544" rx="14" ry="20" fill="#0a1015"/>
+
+    <!-- Eye highlights (sells the "alive" feel). -->
+    <circle cx="412" cy="528" r="9" fill="#ffffff"/>
+    <circle cx="636" cy="528" r="9" fill="#ffffff"/>
+
+    <!-- ===== SNOUT + NOSE + MOUTH ===== -->
+    <!-- Snout patch: lighter shape over the lower face. -->
+    <ellipse cx="512" cy="720" rx="200" ry="140" fill="#ffffff"/>
+
+    <!-- Nose. -->
+    <path d="M 460 660
+             C 460 640, 484 624, 512 624
+             C 540 624, 564 640, 564 660
+             C 564 686, 540 706, 512 706
+             C 484 706, 460 686, 460 660 Z"
+          fill="#1a1d24"/>
+
+    <!-- Nose highlight. -->
+    <ellipse cx="498" cy="648" rx="10" ry="7" fill="#ffffff" opacity="0.6"/>
+
+    <!-- Mouth: small "y"-shape (philtrum + smile curve). -->
+    <path d="M 512 706
+             V 760"
+          stroke="#1a1d24" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <path d="M 460 770
+             Q 512 800, 564 770"
+          stroke="#1a1d24" stroke-width="9" stroke-linecap="round" fill="none"/>
+
+    <!-- Tiny tongue tip peeking out, just enough to feel like a husky
+         mid-bark — ties back to "voice" without screaming microphone. -->
+    <path d="M 488 780
+             Q 512 800, 536 780
+             Q 528 808, 512 814
+             Q 496 808, 488 780 Z"
+          fill="#ff6b85"/>
+
   </g>
 </svg>
