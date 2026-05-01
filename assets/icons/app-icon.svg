@@ -3,40 +3,37 @@
   VoiceKeyboard app icon — master.
   Canvas: 1024×1024.
 
-  Concept: stylised husky head, front-facing, on a dark squircle.
-  Bold flat shapes so the silhouette reads at 16×16; the icy-blue
-  eyes are the only chromatic accent so the icon doesn't get noisy
-  at small sizes. The husky calls back to "voice" via the implied
-  howl/bark; a tiny mouth detail keeps it readable as a face rather
-  than an abstract logo.
+  Concept: stylised husky head, front-facing, on a cool dark squircle.
+  Markings match the classic black-masked Siberian: black ears + face
+  mask, white inverted-Y blaze running up the forehead between the
+  ears, white muzzle and chin. Icy blue eyes are the only chromatic
+  accent so the silhouette stays clean at 16×16. Mouth is open with
+  a small pink tongue — that's the implied bark which carries the
+  "voice" association without needing a microphone.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <!-- Squircle background — cool dark slate, evokes snow at dusk. -->
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#2a3242"/>
-      <stop offset="100%" stop-color="#0d121a"/>
+      <stop offset="0%"   stop-color="#3a4658"/>
+      <stop offset="100%" stop-color="#0e1420"/>
     </linearGradient>
 
-    <!-- Subtle top-left highlight on the squircle (catches light). -->
     <radialGradient id="bgGlow" cx="0.30" cy="0.18" r="0.65" fx="0.25" fy="0.10">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.18"/>
       <stop offset="60%" stop-color="#ffffff" stop-opacity="0.04"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Eye gradient: icy blue with a darker rim. -->
     <radialGradient id="eye" cx="0.5" cy="0.4" r="0.6">
-      <stop offset="0%"  stop-color="#9be7ff"/>
-      <stop offset="60%" stop-color="#4ac6e8"/>
-      <stop offset="100%" stop-color="#1f7ea3"/>
+      <stop offset="0%"  stop-color="#bdf0ff"/>
+      <stop offset="55%" stop-color="#5bc8ee"/>
+      <stop offset="100%" stop-color="#1a73a0"/>
     </radialGradient>
 
-    <!-- Soft drop shadow for the husky head against the squircle. -->
     <filter id="dropShadow" x="-15%" y="-10%" width="130%" height="130%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
-      <feOffset dx="0" dy="14" result="off"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dx="0" dy="16"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
       <feMerge>
         <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
@@ -44,110 +41,114 @@
     </filter>
   </defs>
 
-  <!-- Dark squircle background. -->
+  <!-- Squircle background. -->
   <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bg)"/>
   <rect x="0" y="0" width="1024" height="1024" rx="184" ry="184" fill="url(#bgGlow)"/>
 
   <g filter="url(#dropShadow)">
 
-    <!-- ===== EARS (drawn first so the head sits on top) ===== -->
-    <!-- Left ear: triangle, dark grey outer, pink inner. -->
-    <path d="M 240 360
-             L 295 110
-             L 430 320
-             Z"
-          fill="#3b3f4a"/>
-    <path d="M 285 340
-             L 315 180
-             L 400 310
-             Z"
-          fill="#ff8e9b" opacity="0.85"/>
+    <!-- ===== EARS (pointy black triangles at the top of the head) ===== -->
+    <!-- Left ear -->
+    <path d="M 280 360
+             L 320 100
+             L 460 320 Z"
+          fill="#0c0c10"/>
+    <!-- Subtle pink inner detail. -->
+    <path d="M 320 320
+             L 340 180
+             L 420 310 Z"
+          fill="#a45d6b" opacity="0.7"/>
 
-    <!-- Right ear: mirror. -->
-    <path d="M 784 360
-             L 729 110
-             L 594 320
-             Z"
-          fill="#3b3f4a"/>
-    <path d="M 739 340
-             L 709 180
-             L 624 310
-             Z"
-          fill="#ff8e9b" opacity="0.85"/>
+    <!-- Right ear -->
+    <path d="M 744 360
+             L 704 100
+             L 564 320 Z"
+          fill="#0c0c10"/>
+    <path d="M 704 320
+             L 684 180
+             L 604 310 Z"
+          fill="#a45d6b" opacity="0.7"/>
 
-    <!-- ===== HEAD ===== -->
-    <!-- Main head shape: rounded pear, narrower at chin. Built from a
-         smooth path so the silhouette has a lived-in feel rather than
-         a perfect ellipse. -->
-    <path d="M 200 480
+    <!-- ===== HEAD: BLACK BASE ===== -->
+    <!-- Whole head silhouette in black. The white markings are layered
+         on top. Slightly squarer than my previous pear shape — closer
+         to the reference photo's broader skull. -->
+    <path d="M 200 470
              C 200 320, 350 260, 512 260
-             C 674 260, 824 320, 824 480
-             C 824 600, 800 720, 720 800
-             C 660 860, 590 880, 512 880
-             C 434 880, 364 860, 304 800
-             C 224 720, 200 600, 200 480 Z"
+             C 674 260, 824 320, 824 470
+             C 824 590, 798 712, 720 800
+             C 658 866, 588 884, 512 884
+             C 436 884, 366 866, 304 800
+             C 226 712, 200 590, 200 470 Z"
+          fill="#0c0c10"/>
+
+    <!-- ===== WHITE MARKINGS ===== -->
+    <!-- Single continuous shape: narrow blaze coming to a point between
+         the ears, descending the forehead, pinching at eye level (so
+         the eyes sit in black mask to either side), then sweeping
+         outward into the cheeks and rounding under for the chin. The
+         ref photo's white pattern is one connected region; rendering
+         it as one path avoids the disconnected-boxes look the previous
+         draft had. -->
+    <path d="M 512 232
+             Q 484 264, 478 340
+             L 478 540
+             Q 478 580, 432 596
+             Q 332 612, 296 696
+             Q 280 800, 360 856
+             Q 432 884, 512 888
+             Q 592 884, 664 856
+             Q 744 800, 728 696
+             Q 692 612, 592 596
+             Q 546 580, 546 540
+             L 546 340
+             Q 540 264, 512 232 Z"
           fill="#f5f5f7"/>
 
-    <!-- Forehead/mask: classic husky V-mask between the eyes. -->
-    <path d="M 360 320
-             C 420 300, 470 380, 512 460
-             C 554 380, 604 300, 664 320
-             C 660 380, 640 440, 612 480
-             L 412 480
-             C 384 440, 364 380, 360 320 Z"
-          fill="#3b3f4a"/>
-
-    <!-- Cheek shading: subtle grey patches under each eye for depth. -->
-    <ellipse cx="360" cy="600" rx="80" ry="60" fill="#dadde2" opacity="0.85"/>
-    <ellipse cx="664" cy="600" rx="80" ry="60" fill="#dadde2" opacity="0.85"/>
-
     <!-- ===== EYES ===== -->
-    <!-- Eye whites/sockets (subtle dark almond). -->
-    <ellipse cx="400" cy="540" rx="62" ry="52" fill="#1a1d24"/>
-    <ellipse cx="624" cy="540" rx="62" ry="52" fill="#1a1d24"/>
+    <!-- Eye sockets — almond-shaped, sitting in the black mask just to
+         either side of the blaze. -->
+    <ellipse cx="384" cy="510" rx="60" ry="50" fill="#0a0d12"/>
+    <ellipse cx="640" cy="510" rx="60" ry="50" fill="#0a0d12"/>
 
-    <!-- Iris (icy blue gradient). -->
-    <ellipse cx="400" cy="540" rx="46" ry="40" fill="url(#eye)"/>
-    <ellipse cx="624" cy="540" rx="46" ry="40" fill="url(#eye)"/>
+    <!-- Iris (icy blue). -->
+    <ellipse cx="384" cy="510" rx="44" ry="38" fill="url(#eye)"/>
+    <ellipse cx="640" cy="510" rx="44" ry="38" fill="url(#eye)"/>
 
-    <!-- Pupil. -->
-    <ellipse cx="400" cy="544" rx="14" ry="20" fill="#0a1015"/>
-    <ellipse cx="624" cy="544" rx="14" ry="20" fill="#0a1015"/>
+    <!-- Pupil — slightly oval to give the husky a focused expression. -->
+    <ellipse cx="384" cy="514" rx="13" ry="20" fill="#0a0d12"/>
+    <ellipse cx="640" cy="514" rx="13" ry="20" fill="#0a0d12"/>
 
-    <!-- Eye highlights (sells the "alive" feel). -->
-    <circle cx="412" cy="528" r="9" fill="#ffffff"/>
-    <circle cx="636" cy="528" r="9" fill="#ffffff"/>
+    <!-- Eye highlights. -->
+    <circle cx="396" cy="498" r="9" fill="#ffffff"/>
+    <circle cx="652" cy="498" r="9" fill="#ffffff"/>
 
-    <!-- ===== SNOUT + NOSE + MOUTH ===== -->
-    <!-- Snout patch: lighter shape over the lower face. -->
-    <ellipse cx="512" cy="720" rx="200" ry="140" fill="#ffffff"/>
+    <!-- ===== NOSE ===== -->
+    <path d="M 462 668
+             C 462 644, 484 628, 512 628
+             C 540 628, 562 644, 562 668
+             C 562 696, 540 716, 512 716
+             C 484 716, 462 696, 462 668 Z"
+          fill="#0a0d12"/>
+    <ellipse cx="498" cy="654" rx="9" ry="6" fill="#ffffff" opacity="0.55"/>
 
-    <!-- Nose. -->
-    <path d="M 460 660
-             C 460 640, 484 624, 512 624
-             C 540 624, 564 640, 564 660
-             C 564 686, 540 706, 512 706
-             C 484 706, 460 686, 460 660 Z"
-          fill="#1a1d24"/>
+    <!-- ===== OPEN MOUTH + TONGUE ===== -->
+    <!-- Mouth opening (dark), then pink tongue draped out. -->
+    <path d="M 442 740
+             Q 512 770, 582 740
+             Q 582 820, 512 824
+             Q 442 820, 442 740 Z"
+          fill="#0a0d12"/>
 
-    <!-- Nose highlight. -->
-    <ellipse cx="498" cy="648" rx="10" ry="7" fill="#ffffff" opacity="0.6"/>
-
-    <!-- Mouth: small "y"-shape (philtrum + smile curve). -->
-    <path d="M 512 706
-             V 760"
-          stroke="#1a1d24" stroke-width="9" stroke-linecap="round" fill="none"/>
-    <path d="M 460 770
-             Q 512 800, 564 770"
-          stroke="#1a1d24" stroke-width="9" stroke-linecap="round" fill="none"/>
-
-    <!-- Tiny tongue tip peeking out, just enough to feel like a husky
-         mid-bark — ties back to "voice" without screaming microphone. -->
-    <path d="M 488 780
-             Q 512 800, 536 780
-             Q 528 808, 512 814
-             Q 496 808, 488 780 Z"
-          fill="#ff6b85"/>
+    <!-- Tongue (drooping out of the open mouth). -->
+    <path d="M 470 766
+             Q 512 802, 554 766
+             Q 552 824, 512 836
+             Q 472 824, 470 766 Z"
+          fill="#ff7d92"/>
+    <!-- Subtle centre line on the tongue. -->
+    <path d="M 512 786 V 826"
+          stroke="#d65a72" stroke-width="4" stroke-linecap="round" fill="none"/>
 
   </g>
 </svg>
