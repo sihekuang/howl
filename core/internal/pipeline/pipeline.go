@@ -254,10 +254,16 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }
 
-// LoadTSE initialises a SpeakerGate and loads the enrollment embedding from profileDir.
-// Returns nil extractor + nil error when speaker.json is absent (TSE off).
-// Returns error only on partial state (json present but embedding missing/corrupt).
-func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
+// LoadTSE initialises a TSE extractor for the given backend and loads the
+// enrollment embedding from profileDir. Returns nil extractor + nil error
+// when speaker.json is absent (TSE off). Returns error only on partial
+// state (json present but embedding missing/corrupt).
+//
+// modelsDir holds the backend's ONNX files (resolved via backend.TSEPath).
+func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
+	if backend == nil {
+		backend = speaker.Default
+	}
 	_, err := speaker.LoadProfile(profileDir)
 	if os.IsNotExist(err) {
 		return nil, nil, nil // no enrollment — TSE off
@@ -266,7 +272,7 @@ func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, [
 		return nil, nil, fmt.Errorf("load tse: profile: %w", err)
 	}
 	embPath := profileDir + "/enrollment.emb"
-	ref, err := speaker.LoadEmbedding(embPath)
+	ref, err := speaker.LoadEmbedding(embPath, backend.EmbeddingDim)
 	if os.IsNotExist(err) {
 		return nil, nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
 	}
@@ -276,7 +282,7 @@ func LoadTSE(profileDir, modelPath, onnxLibPath string) (speaker.TSEExtractor, [
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
 		return nil, nil, fmt.Errorf("load tse: onnx runtime: %w", err)
 	}
-	tse, err := speaker.NewSpeakerGate(modelPath)
+	tse, err := speaker.NewSpeakerGate(backend.TSEPath(modelsDir))
 	if err != nil {
 		return nil, nil, fmt.Errorf("load tse: model: %w", err)
 	}

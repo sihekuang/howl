@@ -27,12 +27,12 @@ func TestComputeEmbedding_NormalisedAndDeterministic(t *testing.T) {
 		samples[i] = 0.3 * float32(math.Sin(2*math.Pi*440*float64(i)/16000))
 	}
 
-	emb1, err := ComputeEmbedding(modelPath, samples)
+	emb1, err := ComputeEmbedding(modelPath, samples, Default.EmbeddingDim)
 	if err != nil {
 		t.Fatalf("ComputeEmbedding (1st): %v", err)
 	}
-	if len(emb1) != EmbeddingDim {
-		t.Fatalf("len(emb) = %d, want %d", len(emb1), EmbeddingDim)
+	if len(emb1) != Default.EmbeddingDim {
+		t.Fatalf("len(emb) = %d, want %d", len(emb1), Default.EmbeddingDim)
 	}
 
 	// L2 norm should be ~1
@@ -46,7 +46,7 @@ func TestComputeEmbedding_NormalisedAndDeterministic(t *testing.T) {
 	}
 
 	// Determinism: same input → same output
-	emb2, err := ComputeEmbedding(modelPath, samples)
+	emb2, err := ComputeEmbedding(modelPath, samples, Default.EmbeddingDim)
 	if err != nil {
 		t.Fatalf("ComputeEmbedding (2nd): %v", err)
 	}
@@ -78,11 +78,11 @@ func TestComputeEmbedding_DifferentInputsDifferentEmbeds(t *testing.T) {
 		noise[i] = float32((float64(i*1103515245+12345)/2147483647.0)*2 - 1) * 0.3
 	}
 
-	a, err := ComputeEmbedding(modelPath, tone)
+	a, err := ComputeEmbedding(modelPath, tone, Default.EmbeddingDim)
 	if err != nil {
 		t.Fatalf("ComputeEmbedding(tone): %v", err)
 	}
-	b, err := ComputeEmbedding(modelPath, noise)
+	b, err := ComputeEmbedding(modelPath, noise, Default.EmbeddingDim)
 	if err != nil {
 		t.Fatalf("ComputeEmbedding(noise): %v", err)
 	}

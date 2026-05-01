@@ -2,3 +2,4 @@ core/build/models/
 core/build/.venv-tse/
 .worktrees/
 scripts/__pycache__/
+.env

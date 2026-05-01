@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"log"
+	"path/filepath"
 	"sync"
 
 	"github.com/voice-keyboard/core/internal/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
@@ -120,9 +122,21 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 	p := pipeline.New(d, tr, dy, cleaner)
 
 	if e.cfg.TSEEnabled {
+		backend, beErr := speaker.BackendByName(e.cfg.TSEBackend)
+		if beErr != nil {
+			// Same policy as tseErr below: don't fail the whole configure;
+			// surface via vkb_last_error and run without TSE.
+			log.Printf("[vkb] buildPipeline: TSE backend lookup failed, continuing without TSE: %v", beErr)
+			e.setLastError("tse: " + beErr.Error())
+			return p, nil
+		}
+		// TSEModelPath is the back-compat per-file path; we use its parent
+		// directory as the modelsDir and let the backend resolve filenames.
+		modelsDir := filepath.Dir(e.cfg.TSEModelPath)
 		tse, ref, tseErr := pipeline.LoadTSE(
+			backend,
 			e.cfg.TSEProfileDir,
-			e.cfg.TSEModelPath,
+			modelsDir,
 			e.cfg.ONNXLibPath,
 		)
 		if tseErr != nil {

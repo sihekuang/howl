@@ -15,7 +15,13 @@ type Config struct {
 
 	// TSE (Target Speaker Extraction) fields. All optional; when
 	// TSEEnabled is false the pipeline runs without the TSE stage.
+	//
+	// Backend selection is by name (TSEBackend), and the ONNX files
+	// live in TSEModelPath's parent directory. TSEModelPath and
+	// SpeakerEncoderPath are kept for back-compat with existing Swift
+	// callers; their basenames are ignored when TSEBackend is set.
 	TSEEnabled         bool   `json:"tse_enabled"`
+	TSEBackend         string `json:"tse_backend"` // e.g. "ecapa"; empty = default
 	TSEProfileDir      string `json:"tse_profile_dir"`
 	TSEModelPath       string `json:"tse_model_path"`
 	SpeakerEncoderPath string `json:"speaker_encoder_path"`
