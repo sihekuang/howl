@@ -26,7 +26,7 @@ struct APIKeyPanel: View {
                 Spacer()
                 Button("Save & Continue") {
                     do {
-                        try secrets.setAPIKey(key)
+                        try secrets.setAPIKey(key, forProvider: "anthropic")
                         onComplete()
                     } catch let err {
                         error = "\(err)"

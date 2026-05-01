@@ -1,29 +1,37 @@
 import Foundation
 import Security
 
+/// Per-provider API-key storage. Each provider (e.g. "anthropic", "openai")
+/// gets its own slot, so switching providers in Settings doesn't clobber
+/// the previous one's key.
 public protocol SecretStore: Sendable {
-    func getAPIKey() throws -> String?
-    func setAPIKey(_ key: String) throws
-    func deleteAPIKey() throws
+    func getAPIKey(forProvider provider: String) throws -> String?
+    func setAPIKey(_ key: String, forProvider provider: String) throws
+    func deleteAPIKey(forProvider provider: String) throws
 }
 
 public enum SecretStoreError: Error {
     case keychainStatus(OSStatus)
 }
 
-/// Keychain-backed production impl. Stores under a single service+account
-/// pair: service="VoiceKeyboard", account="anthropic.api_key".
+/// Keychain-backed production impl. Stores under
+/// service="VoiceKeyboard", account="\(provider).api_key", so each
+/// provider keeps a distinct slot. Existing "anthropic.api_key" entries
+/// from before this refactor are read transparently.
 public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
     private let service = "VoiceKeyboard"
-    private let account = "anthropic.api_key"
 
     public init() {}
 
-    public func getAPIKey() throws -> String? {
+    private func account(for provider: String) -> String {
+        "\(provider).api_key"
+    }
+
+    public func getAPIKey(forProvider provider: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account(for: provider),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -43,12 +51,12 @@ public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
         }
     }
 
-    public func setAPIKey(_ key: String) throws {
-        try deleteAPIKey()
+    public func setAPIKey(_ key: String, forProvider provider: String) throws {
+        try deleteAPIKey(forProvider: provider)
         let attrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account(for: provider),
             kSecValueData as String: Data(key.utf8),
         ]
         let status = SecItemAdd(attrs as CFDictionary, nil)
@@ -57,11 +65,11 @@ public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
         }
     }
 
-    public func deleteAPIKey() throws {
+    public func deleteAPIKey(forProvider provider: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account(for: provider),
         ]
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
@@ -72,23 +80,23 @@ public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
 
 /// In-memory impl for tests.
 public final class InMemorySecretStore: SecretStore, @unchecked Sendable {
-    private var key: String?
+    private var keys: [String: String] = [:]
     private let lock = NSLock()
 
     public init() {}
 
-    public func getAPIKey() throws -> String? {
+    public func getAPIKey(forProvider provider: String) throws -> String? {
         lock.lock(); defer { lock.unlock() }
-        return key
+        return keys[provider]
     }
 
-    public func setAPIKey(_ key: String) throws {
+    public func setAPIKey(_ key: String, forProvider provider: String) throws {
         lock.lock(); defer { lock.unlock() }
-        self.key = key
+        keys[provider] = key
     }
 
-    public func deleteAPIKey() throws {
+    public func deleteAPIKey(forProvider provider: String) throws {
         lock.lock(); defer { lock.unlock() }
-        key = nil
+        keys.removeValue(forKey: provider)
     }
 }

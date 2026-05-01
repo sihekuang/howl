@@ -60,8 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = (try? composition.settings.get()) ?? UserSettings()
         let modelPath = ModelPaths.whisperModel(size: settings.whisperModelSize)
         let modelOK = FileManager.default.fileExists(atPath: modelPath.path)
-        let storedKey = (try? composition.secrets.getAPIKey()) ?? ""
-        let keyOK = !storedKey.isEmpty
+        // Cloud providers (anthropic, openai) need a key to be useful.
+        // Local providers (ollama) don't — let those users through.
+        let needsKey = (settings.llmProvider == "anthropic" || settings.llmProvider == "openai")
+        let storedKey = (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? ""
+        let keyOK = !needsKey || !storedKey.isEmpty
 
         log.info("evaluateSetup: accessOK=\(accessOK, privacy: .public) modelOK=\(modelOK, privacy: .public) modelPath=\(modelPath.path, privacy: .public) keyOK=\(keyOK, privacy: .public) keyLen=\(storedKey.count, privacy: .public)")
 

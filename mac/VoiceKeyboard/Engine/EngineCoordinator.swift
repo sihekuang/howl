@@ -289,7 +289,11 @@ public final class EngineCoordinator {
 
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
-        let key = settings.llmProvider == "anthropic" ? (try? composition.secrets.getAPIKey()) ?? "" : ""
+        // Look up the API key for the active cloud provider. Ollama and
+        // any future local-only providers fall through with key="" — the
+        // engine ignores LLMAPIKey for providers whose NeedsAPIKey is false.
+        let needsKey = (settings.llmProvider == "anthropic" || settings.llmProvider == "openai")
+        let key = needsKey ? (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? "" : ""
         var resolvedSize = settings.whisperModelSize
         var modelPath = ModelPaths.whisperModel(size: resolvedSize).path
         // If the configured size isn't downloaded but another size is,

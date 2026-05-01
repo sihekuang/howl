@@ -1,8 +1,8 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Anthropic-specific settings. Shown when settings.llmProvider == "anthropic".
-struct AnthropicSection: View {
+/// OpenAI-specific settings. Shown when settings.llmProvider == "openai".
+struct OpenAISection: View {
     @Binding var settings: UserSettings
     let secrets: any SecretStore
 
@@ -13,17 +13,22 @@ struct AnthropicSection: View {
     enum TestStatus: Equatable {
         case idle
         case testing
-        case ok(String)        // model count or version
+        case ok(String)        // model count or status
         case bad(String)       // human-readable failure
     }
 
-    // Anthropic model IDs surfaced in the picker. Keep the most capable
-    // first, fastest last. Add new ones at the top.
+    // OpenAI model IDs surfaced in the picker. Keep the default first
+    // (small, cheap, fast). Add new ones at the top when they ship.
     private let llmModels: [(id: String, label: String)] = [
-        ("claude-opus-4-7",    "Opus 4.7 — most capable"),
-        ("claude-sonnet-4-6",  "Sonnet 4.6 — balanced (default)"),
-        ("claude-haiku-4-5",   "Haiku 4.5 — fastest, cheapest"),
+        ("gpt-4o-mini",  "GPT-4o mini — balanced (default)"),
+        ("gpt-4o",       "GPT-4o — most capable"),
+        ("gpt-4.1-mini", "GPT-4.1 mini"),
+        ("gpt-4.1",      "GPT-4.1"),
     ]
+
+    // Both legacy ("sk-...") and project-scoped ("sk-proj-...") OpenAI
+    // keys start with "sk-", so a single prefix check covers both.
+    private var keyLooksValid: Bool { apiKeyDraft.hasPrefix("sk-") }
 
     var body: some View {
         Group {
@@ -32,30 +37,30 @@ struct AnthropicSection: View {
                     Text(m.label).tag(m.id)
                 }
             }
-            SecureField("API Key", text: $apiKeyDraft, prompt: Text("sk-ant-..."))
+            SecureField("API Key", text: $apiKeyDraft, prompt: Text("sk-..."))
             HStack {
                 Button("Save") {
                     do {
-                        try secrets.setAPIKey(apiKeyDraft, forProvider: "anthropic")
+                        try secrets.setAPIKey(apiKeyDraft, forProvider: "openai")
                         apiKeyStatus = "Saved"
                     } catch {
                         apiKeyStatus = "Failed: \(error)"
                     }
                 }
-                .disabled(!apiKeyDraft.hasPrefix("sk-ant-"))
+                .disabled(!keyLooksValid)
 
                 Button(testStatus == .testing ? "Testing…" : "Test Key") {
                     Task { await runTest() }
                 }
-                .disabled(!apiKeyDraft.hasPrefix("sk-ant-") || testStatus == .testing)
+                .disabled(!keyLooksValid || testStatus == .testing)
             }
             Text(apiKeyStatus).foregroundStyle(.secondary)
             testResultRow
-            Link("Get one from console.anthropic.com",
-                 destination: URL(string: "https://console.anthropic.com/")!)
+            Link("Get one from platform.openai.com",
+                 destination: URL(string: "https://platform.openai.com/api-keys")!)
         }
         .task {
-            apiKeyDraft = (try? secrets.getAPIKey(forProvider: "anthropic")) ?? ""
+            apiKeyDraft = (try? secrets.getAPIKey(forProvider: "openai")) ?? ""
         }
     }
 
@@ -65,7 +70,7 @@ struct AnthropicSection: View {
         case .idle:
             EmptyView()
         case .testing:
-            Label("Reaching api.anthropic.com…", systemImage: "ellipsis.circle")
+            Label("Reaching api.openai.com…", systemImage: "ellipsis.circle")
                 .foregroundStyle(.secondary)
         case .ok(let detail):
             Label("Key works — \(detail)", systemImage: "checkmark.circle.fill")
@@ -79,14 +84,13 @@ struct AnthropicSection: View {
     private func runTest() async {
         testStatus = .testing
         let key = apiKeyDraft
-        guard let url = URL(string: "https://api.anthropic.com/v1/models") else {
+        guard let url = URL(string: "https://api.openai.com/v1/models") else {
             testStatus = .bad("invalid URL")
             return
         }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue(key, forHTTPHeaderField: "x-api-key")
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 5
 
         do {

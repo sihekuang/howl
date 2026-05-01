@@ -32,6 +32,7 @@
 		ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */; };
 		B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */; };
 		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
+		C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */; };
 		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
 		CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59636EC6C578038A015432EA /* OllamaSection.swift */; };
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
@@ -63,6 +64,7 @@
 		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
 		9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadPanel.swift; sourceTree = "<group>"; };
 		9D5234E365C4BA6093A5C613 /* GeneralTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTab.swift; sourceTree = "<group>"; };
+		A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		AC49053786E5F4980978B90A /* listen-cue.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "listen-cue.mp3"; sourceTree = "<group>"; };
 		B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentSheet.swift; sourceTree = "<group>"; };
 		B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 				3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */,
 				DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */,
 				59636EC6C578038A015432EA /* OllamaSection.swift */,
+				A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */,
 				0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */,
 				7398A10FF69BCB846098786E /* ProviderTab.swift */,
 				FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */,
@@ -423,6 +426,7 @@
 				8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */,
 				A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */,
 				CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */,
+				C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */,
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
 				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
