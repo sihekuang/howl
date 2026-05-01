@@ -63,15 +63,14 @@ targets:
           set -e
           DST="$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
           mkdir -p "$DST"
-          cp -f "$SRCROOT/../core/build/libvkb.dylib" "$DST/"
-          install_name_tool -id "@rpath/libvkb.dylib" "$DST/libvkb.dylib"
-          # libdf.dylib is the vendored DeepFilterNet binary that libvkb
-          # link-time references at @rpath/libdf.dylib (see core/Makefile
-          # build-dylib target). It's not pulled by the Go build, so we
-          # ship it from third_party.
-          cp -f "$SRCROOT/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib" "$DST/"
-          chmod u+w "$DST/libdf.dylib"
-          install_name_tool -id "@rpath/libdf.dylib" "$DST/libdf.dylib"
+          # Both sources already have install_name = @rpath/<basename>
+          # (libvkb's is set by core/Makefile build-dylib; libdf's is
+          # pre-vendored). cp -p preserves mtime AND signature, so on
+          # warm builds we don't bump anything. Don't re-run
+          # install_name_tool here — that would invalidate signatures
+          # and force a costly re-sign every build.
+          cp -pf "$SRCROOT/../core/build/libvkb.dylib" "$DST/"
+          cp -pf "$SRCROOT/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib" "$DST/"
         inputFiles:
           - "$(SRCROOT)/../core/build/libvkb.dylib"
           - "$(SRCROOT)/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib"
@@ -117,6 +116,28 @@ targets:
 
           DST="$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
           mkdir -p "$DST"
+
+          # Skip the whole phase when the bundle is already up to date.
+          # Without this guard, the phase adds ~30-60s to every warm
+          # build because Xcode can't dependency-track all ~88 output
+          # dylibs. Compare against the SOURCE libvkb (in core/build),
+          # not the copy in Frameworks — Go rebuilds libvkb only when
+          # its sources change, and that's the actual "did anything
+          # change?" signal we want.
+          #
+          # IMPORTANT: keep the sentinel OUTSIDE the .app bundle. Any
+          # file inside Frameworks/ is treated as a code subcomponent
+          # by Xcode's codesign step and must itself be signed; an
+          # unsigned sentinel there breaks the .app's seal with
+          # "code object is not signed at all" failures.
+          SENTINEL="$BUILT_PRODUCTS_DIR/.${TARGET_NAME}-bundled-deps-stamp"
+          LIBVKB_SRC="$SRCROOT/../core/build/libvkb.dylib"
+          if [ -e "$SENTINEL" ] \
+              && [ "$SENTINEL" -nt "$BREW_PREFIX/lib/libonnxruntime.dylib" ] \
+              && [ "$SENTINEL" -nt "$LIBVKB_SRC" ]; then
+            echo "Homebrew dylib bundle up to date — skipping."
+            exit 0
+          fi
 
           # Walk the transitive Homebrew dep closure starting from:
           # 1. The just-bundled libvkb.dylib (covers whisper.cpp + ggml,
@@ -210,6 +231,9 @@ targets:
           done < "$SEEN"
           codesign --force --sign "$IDENTITY" "$DST/libvkb.dylib"
           codesign --force --sign "$IDENTITY" "$DST/libdf.dylib"
+
+          # Mark the bundle as up-to-date so the next warm build can skip.
+          touch "$SENTINEL"
         inputFiles:
           - "/opt/homebrew/lib/libonnxruntime.dylib"
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
