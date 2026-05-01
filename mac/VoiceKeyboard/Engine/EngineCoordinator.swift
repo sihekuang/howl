@@ -258,7 +258,7 @@ public final class EngineCoordinator {
 
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
-        let key = (try? composition.secrets.getAPIKey()) ?? ""
+        let key = settings.llmProvider == "anthropic" ? (try? composition.secrets.getAPIKey()) ?? "" : ""
         var resolvedSize = settings.whisperModelSize
         var modelPath = ModelPaths.whisperModel(size: resolvedSize).path
         // If the configured size isn't downloaded but another size is,
@@ -283,6 +283,7 @@ public final class EngineCoordinator {
             llmModel: settings.llmModel,
             llmAPIKey: key,
             customDict: settings.customDict,
+            llmBaseURL: settings.llmBaseURL,
             tseEnabled: settings.tseEnabled && tseAssetsPresent(),
             tseProfileDir: ModelPaths.voiceProfileDir.path,
             tseModelPath: ModelPaths.tseModel.path,

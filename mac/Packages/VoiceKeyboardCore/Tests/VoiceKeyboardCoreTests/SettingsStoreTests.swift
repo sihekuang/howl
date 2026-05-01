@@ -41,4 +41,30 @@ struct SettingsStoreTests {
         let got = try store.get()
         #expect(got.tseEnabled == true)
     }
+
+    @Test func testUserSettings_LLMBaseURL_RoundTrip() throws {
+        var s = UserSettings()
+        s.llmBaseURL = "http://10.0.0.5:11434"
+        let data = try JSONEncoder().encode(s)
+        let decoded = try JSONDecoder().decode(UserSettings.self, from: data)
+        #expect(decoded.llmBaseURL == "http://10.0.0.5:11434")
+    }
+
+    @Test func testUserSettings_LLMBaseURL_DefaultsEmptyOnLegacyBlob() throws {
+        // Simulates a UserDefaults blob written before this PR (no llmBaseURL key).
+        let legacyJSON = """
+        {
+          "whisperModelSize": "small",
+          "language": "en",
+          "disableNoiseSuppression": false,
+          "llmProvider": "anthropic",
+          "llmModel": "claude-sonnet-4-6",
+          "customDict": [],
+          "tseEnabled": false
+        }
+        """
+        let data = legacyJSON.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(UserSettings.self, from: data)
+        #expect(decoded.llmBaseURL == "")
+    }
 }
