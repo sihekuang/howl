@@ -25,19 +25,9 @@ struct RecordingOverlayView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            ZStack {
-                // Rainbow halo only while actively recording — fade it
-                // out during the processing phase so it doesn't fight
-                // the spinner/dotted-circle indicator for attention.
-                if appState.engineState == .recording {
-                    RainbowGlow(level: appState.liveRMS)
-                        .transition(.opacity)
-                }
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.black.opacity(0.78))
-            }
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.black.opacity(0.78))
         )
-        .animation(.easeInOut(duration: 0.25), value: appState.engineState)
         .onChange(of: appState.liveRMS) { _, new in
             samples.append(new)
             if samples.count > capacity { samples.removeFirst(samples.count - capacity) }

@@ -27,10 +27,7 @@ public final class RecordingOverlayController {
 
     private func makePanel() -> NSPanel {
         let host = NSHostingView(rootView: RecordingOverlayView(appState: appState))
-        // Panel is wider/taller than the pill itself so the rainbow halo
-        // (RainbowGlow.halo == 28pt) has room to bleed without clipping.
-        // The pill centers within this frame via SwiftUI's natural layout.
-        host.frame = NSRect(x: 0, y: 0, width: 320, height: 110)
+        host.frame = NSRect(x: 0, y: 0, width: 220, height: 44)
         let panel = NSPanel(
             contentRect: host.frame,
             styleMask: [.borderless, .nonactivatingPanel],
