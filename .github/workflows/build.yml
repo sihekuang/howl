@@ -132,7 +132,7 @@ jobs:
           ls -lh VoiceKeyboard.app.zip
           echo "zip=mac/VoiceKeyboard.app.zip" >> "$GITHUB_OUTPUT"
           # Artifact names can't contain '/', so flatten branch refs like
-          # 'feat/x' to 'feat-x'. Tag refs (e.g. 'v0.1.0') pass through.
+          # 'feat/x' to 'feat-x'. Tag refs (e.g. 'mac-v0.1.0') pass through.
           echo "ref_slug=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Upload .app artifact
@@ -145,7 +145,7 @@ jobs:
       # On a tag push, also attach the zip to the GitHub Release. Created
       # automatically if it doesn't already exist.
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/mac-v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.pack.outputs.zip }}
