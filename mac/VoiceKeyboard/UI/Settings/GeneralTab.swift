@@ -32,6 +32,18 @@ struct GeneralTab: View {
                 ForEach(devices) { dev in
                     Text(dev.name).tag(dev.id)
                 }
+                // Saved selection points to a device that isn't in the
+                // discovery list (disconnected, or `.task` hasn't loaded
+                // yet on first render). Without this stub the picker
+                // binding has no matching tag and SwiftUI logs
+                // "selection is invalid and does not have an associated
+                // tag, this will give undefined results." Same pattern
+                // OllamaSection uses for uninstalled models.
+                if let savedUID = settings.inputDeviceUID,
+                   !savedUID.isEmpty,
+                   !devices.contains(where: { $0.id == savedUID }) {
+                    Text("\(displayName(for: savedUID)) — not connected").tag(savedUID)
+                }
             }
             Picker("Whisper model", selection: $settings.whisperModelSize) {
                 ForEach(modelSizes, id: \.size) { m in
@@ -121,5 +133,21 @@ struct GeneralTab: View {
             get: { settings.inputDeviceUID ?? "" },
             set: { settings.inputDeviceUID = $0.isEmpty ? nil : $0 }
         )
+    }
+
+    /// Best-effort friendly name from a Core Audio UID. macOS UIDs for
+    /// USB devices come through as colon-delimited strings whose third
+    /// segment is the model name, e.g.
+    ///   AppleUSBAudioEngine:Creative Technology Ltd:SB Katana SE:6E0…:5
+    /// becomes "SB Katana SE". Falls back to the whole UID for unknown
+    /// formats (Bluetooth, AirPods, virtual devices) — better than
+    /// showing nothing.
+    private func displayName(for uid: String) -> String {
+        let parts = uid.split(separator: ":", omittingEmptySubsequences: false)
+        if parts.count >= 3 {
+            let model = parts[2].trimmingCharacters(in: .whitespaces)
+            if !model.isEmpty { return model }
+        }
+        return uid
     }
 }
