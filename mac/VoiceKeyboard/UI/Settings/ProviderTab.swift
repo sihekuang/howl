@@ -13,22 +13,26 @@ struct ProviderTab: View {
 
     var body: some View {
         Form {
-            Picker("Provider", selection: $settings.llmProvider) {
+            Picker("Provider", selection: Binding(
+                get: { settings.llmProvider },
+                set: { newProvider in
+                    // Mutate provider + model atomically so the body-level
+                    // .onChange(of: settings) fires once with consistent state
+                    // (provider, model) instead of twice — once with the stale
+                    // model, once after correction.
+                    var next = settings
+                    next.llmProvider = newProvider
+                    if newProvider == "ollama" && next.llmModel.hasPrefix("claude-") {
+                        next.llmModel = ""   // hand off to OllamaSection.refresh() to auto-detect
+                    }
+                    if newProvider == "anthropic" && !next.llmModel.hasPrefix("claude-") {
+                        next.llmModel = "claude-sonnet-4-6"
+                    }
+                    settings = next
+                }
+            )) {
                 ForEach(Self.providers, id: \.id) { p in
                     Text(p.label).tag(p.id)
-                }
-            }
-            .onChange(of: settings.llmProvider) { _, _ in
-                // When switching to Ollama for the first time, clear the
-                // Anthropic-shaped llmModel so the OllamaSection's picker
-                // doesn't show "claude-sonnet-4-6 (not installed)".
-                // Only clear if the current model clearly belongs to the
-                // wrong provider — keep user-entered values otherwise.
-                if settings.llmProvider == "ollama" && settings.llmModel.hasPrefix("claude-") {
-                    settings.llmModel = ""
-                }
-                if settings.llmProvider == "anthropic" && !settings.llmModel.hasPrefix("claude-") {
-                    settings.llmModel = "claude-sonnet-4-6"
                 }
             }
 
