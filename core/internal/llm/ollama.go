@@ -26,24 +26,88 @@ const (
 // OllamaProvider is the registry entry for Ollama. Local-only — no API key.
 // Default base URL targets the standard Ollama port on localhost.
 //
-// DefaultModel is intentionally empty: there is no universally-installed
-// Ollama model, so we require the user to pick one (via vkb-cli
-// --llm-model or config.LLMModel) rather than guessing.
+// DefaultModel is intentionally empty. When Options.Model is also empty,
+// the factory queries /api/tags and auto-selects the first installed
+// model (deterministic order from Ollama). To disable auto-detect and
+// fail fast instead, set Options.Model explicitly.
 var OllamaProvider = &Provider{
 	Name:         "ollama",
 	DefaultModel: "",
 	NeedsAPIKey:  false,
 	factory: func(opts Options) (Cleaner, error) {
+		if opts.Model == "" {
+			models, err := ollamaListModels(opts.BaseURL, opts.Timeout)
+			if err != nil {
+				return nil, fmt.Errorf("ollama: model not specified and auto-detect failed: %w", err)
+			}
+			if len(models) == 0 {
+				return nil, errors.New("ollama: model not specified and none installed (run `ollama pull llama3.2` or similar, or pass --llm-model)")
+			}
+			opts.Model = models[0]
+			log.Printf("[vkb] ollama: auto-detected model %q (use --llm-model to override; %d installed)", opts.Model, len(models))
+		}
 		return NewOllama(OllamaOptions{
 			Model:   opts.Model,
 			BaseURL: opts.BaseURL,
 			Timeout: opts.Timeout,
 		})
 	},
+	listLocalModels: func(opts Options) ([]string, error) {
+		return ollamaListModels(opts.BaseURL, opts.Timeout)
+	},
 }
 
 func init() {
 	register(OllamaProvider)
+}
+
+// ollamaTagsResponse is the wire format for GET /api/tags.
+type ollamaTagsResponse struct {
+	Models []struct {
+		Name string `json:"name"`
+	} `json:"models"`
+}
+
+// ollamaListModels queries /api/tags and returns the names of installed
+// models in the order Ollama returned them. Used both by the auto-detect
+// path in factory and by Provider.LocalModels for the `vkb-cli providers
+// --models` listing.
+func ollamaListModels(baseURL string, timeout time.Duration) ([]string, error) {
+	if baseURL == "" {
+		baseURL = ollamaDefaultBaseURL
+	}
+	if timeout == 0 {
+		// /api/tags is a cheap local lookup; use a short timeout so users
+		// see a connection failure quickly rather than waiting 60s.
+		timeout = 5 * time.Second
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: build tags request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("ollama: tags HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+	var tags ollamaTagsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return nil, fmt.Errorf("ollama: decode tags: %w", err)
+	}
+	names := make([]string, 0, len(tags.Models))
+	for _, m := range tags.Models {
+		if m.Name != "" {
+			names = append(names, m.Name)
+		}
+	}
+	return names, nil
 }
 
 // OllamaOptions configures the Ollama Cleaner.

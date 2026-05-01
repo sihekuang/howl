@@ -1,10 +1,16 @@
 package llm
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 )
+
+// ErrNotSupported is returned by capability methods (e.g. Provider.LocalModels)
+// for providers that don't implement the capability. Callers should check
+// errors.Is(err, ErrNotSupported) to differentiate from real failures.
+var ErrNotSupported = errors.New("not supported by this provider")
 
 // Options is the union of fields any provider's constructor might want.
 // Each provider's factory uses the subset it needs and ignores the rest.
@@ -36,10 +42,18 @@ type Provider struct {
 	// factory builds the actual Cleaner. Set internally; not part of
 	// the public API surface.
 	factory func(opts Options) (Cleaner, error)
+
+	// listLocalModels enumerates models the provider can serve right now
+	// (e.g. Ollama queries /api/tags for installed models). nil means the
+	// provider doesn't support enumeration — Provider.LocalModels then
+	// returns ErrNotSupported.
+	listLocalModels func(opts Options) ([]string, error)
 }
 
 // New constructs a Cleaner for this provider using opts. Falls back to
-// p.DefaultModel when opts.Model is empty.
+// p.DefaultModel when opts.Model is empty. Provider factories can apply
+// further fallbacks (e.g. Ollama auto-detects from /api/tags when the
+// model is still unset).
 func (p *Provider) New(opts Options) (Cleaner, error) {
 	if p == nil {
 		return nil, fmt.Errorf("llm: nil provider")
@@ -51,6 +65,21 @@ func (p *Provider) New(opts Options) (Cleaner, error) {
 		return nil, fmt.Errorf("llm: provider %q has no factory", p.Name)
 	}
 	return p.factory(opts)
+}
+
+// LocalModels enumerates models the provider can serve right now.
+// Returns ErrNotSupported for providers that don't support enumeration
+// (cloud providers whose model lists require auth or aren't queryable).
+// Real failures (e.g. Ollama not running) are returned as-is so callers
+// can distinguish "didn't ask" (ErrNotSupported) from "asked and failed".
+func (p *Provider) LocalModels(opts Options) ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("llm: nil provider")
+	}
+	if p.listLocalModels == nil {
+		return nil, ErrNotSupported
+	}
+	return p.listLocalModels(opts)
 }
 
 // providers is the registry, keyed by Name. Add new providers here.
