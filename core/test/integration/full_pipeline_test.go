@@ -18,6 +18,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
@@ -62,19 +63,26 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 		t.Fatalf("NewAnthropic: %v", err)
 	}
 
-	p := pipeline.New(cap, d, tr, dy, cl)
+	p := pipeline.New(tr, dy, cl)
+	p.FrameStages = []audio.Stage{denoise.NewStage(d), resample.NewDecimate3()}
+
 	var levelCount int32
-	p.LevelCallback = func(rms float32) {
-		atomic.AddInt32(&levelCount, 1)
+	p.Listener = func(ev pipeline.Event) {
+		if ev.Kind == pipeline.EventStageProcessed && ev.Stage == "denoise" {
+			atomic.AddInt32(&levelCount, 1)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	// Do not close stop — let FakeCapture exhaust its buffer and close
-	// the frames channel naturally so Whisper receives all the audio.
-	stop := make(chan struct{})
 
-	res, err := p.Run(ctx, stop)
+	frames, err := cap.Start(ctx, 48000)
+	if err != nil {
+		t.Fatalf("capture start: %v", err)
+	}
+
+	res, err := p.Run(ctx, frames)
+	_ = cap.Stop()
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -86,7 +94,7 @@ func TestFullPipeline_RealWhisperFakeAudioMockedLLM(t *testing.T) {
 	}
 	t.Logf("raw=%q cleaned=%q", res.Raw, res.Cleaned)
 	if atomic.LoadInt32(&levelCount) == 0 {
-		t.Errorf("expected at least one RMS level callback, got 0")
+		t.Errorf("expected at least one stage_processed event for 'denoise', got 0")
 	}
 }
 

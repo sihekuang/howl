@@ -8,8 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/denoise"
 	"github.com/voice-keyboard/core/internal/dict"
+	"github.com/voice-keyboard/core/internal/llm"
+	"github.com/voice-keyboard/core/internal/resample"
+	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 // fakeTSEExtractor records calls and returns zeros (simulates TSE suppressing all audio).
@@ -20,8 +24,8 @@ type fakeTSEExtractor struct {
 	out   []float32 // if nil, returns zeros of mixed length
 }
 
-func (f *fakeTSEExtractor) Name() string       { return "fake-tse" }
-func (f *fakeTSEExtractor) OutputRate() int    { return 0 }
+func (f *fakeTSEExtractor) Name() string    { return "fake-tse" }
+func (f *fakeTSEExtractor) OutputRate() int { return 0 }
 func (f *fakeTSEExtractor) Process(ctx context.Context, in []float32) ([]float32, error) {
 	return f.Extract(ctx, in)
 }
@@ -33,13 +37,19 @@ func (f *fakeTSEExtractor) Extract(_ context.Context, mixed []float32) ([]float3
 	return make([]float32, len(mixed)), nil
 }
 
+func newTestPipeline(tr transcribe.Transcriber, dy dict.Dictionary, cl llm.Cleaner) *Pipeline {
+	p := New(tr, dy, cl)
+	p.FrameStages = []audio.Stage{denoise.NewStage(denoise.NewPassthrough()), resample.NewDecimate3()}
+	return p
+}
+
 func TestPipeline_TSENilSkipsExtract(t *testing.T) {
 	src := make([]float32, 24000)
 	for i := range src {
 		src[i] = 0.1
 	}
 	tse := &fakeTSEExtractor{}
-	p := New(denoise.NewPassthrough(), &fakeTranscriber{out: "hello"}, dict.NewFuzzy(nil, 1), &fakeCleaner{out: "hello"})
+	p := newTestPipeline(&fakeTranscriber{out: "hello"}, dict.NewFuzzy(nil, 1), &fakeCleaner{out: "hello"})
 	// TSE is nil — not set on pipeline
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -58,8 +68,8 @@ func TestPipeline_TSEActiveCallsExtractPerChunk(t *testing.T) {
 	cl := &fakeCleaner{out: "Hello world."}
 	tse := &fakeTSEExtractor{}
 
-	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
-	p.TSE = tse
+	p := newTestPipeline(tr, dict.NewFuzzy(nil, 0), cl)
+	p.ChunkStages = []audio.Stage{tse}
 	p.ChunkerOpts = ChunkerOpts{
 		VoiceThreshold: 0.005,
 		SilenceHangMs:  100,
@@ -94,8 +104,8 @@ func TestPipeline_TSEOutputZeroYieldsEmptyResult(t *testing.T) {
 	tr := &fakeTranscriber{out: ""}
 	cl := &fakeCleaner{out: "should not be called"}
 
-	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 1), cl)
-	p.TSE = tse
+	p := newTestPipeline(tr, dict.NewFuzzy(nil, 1), cl)
+	p.ChunkStages = []audio.Stage{tse}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -128,7 +138,7 @@ func (f *fakeCleaner) Clean(ctx context.Context, _ string, _ []string) (string, 
 }
 
 // fakeStreamingCleaner exposes both Clean and CleanStream so tests can
-// assert pipeline picks the streaming path when LLMDeltaCallback is set
+// assert pipeline picks the streaming path when Listener is set
 // and the cleaner satisfies StreamingCleaner.
 type fakeStreamingCleaner struct {
 	out         string
@@ -173,12 +183,11 @@ func TestPipeline_HappyPath(t *testing.T) {
 	for i := range src {
 		src[i] = 0.1 // voiced — above VoiceThreshold so the chunker emits
 	}
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "hello webrt world"}
 	cl := &fakeCleaner{out: "Hello, WebRTC world."}
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -200,12 +209,11 @@ func TestPipeline_LLMErrorFallsBackToDictText(t *testing.T) {
 	for i := range src {
 		src[i] = 0.1
 	}
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy([]string{"WebRTC"}, 1)
 	tr := &fakeTranscriber{out: "use webrt please"}
 	cl := &fakeCleaner{err: errors.New("network down")}
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -226,18 +234,19 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 	for i := range src {
 		src[i] = 0.5
 	}
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hi"}
 	cl := &fakeCleaner{out: "hi"}
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 	var levels []float32
 	var levelMu sync.Mutex
-	p.LevelCallback = func(rms float32) {
-		levelMu.Lock()
-		levels = append(levels, rms)
-		levelMu.Unlock()
+	p.Listener = func(e Event) {
+		if e.Kind == EventStageProcessed && e.Stage == "denoise" {
+			levelMu.Lock()
+			levels = append(levels, e.RMSOut)
+			levelMu.Unlock()
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -250,7 +259,7 @@ func TestPipeline_LevelCallbackFires(t *testing.T) {
 	levelMu.Lock()
 	defer levelMu.Unlock()
 	if len(levels) == 0 {
-		t.Fatalf("expected at least one level callback")
+		t.Fatalf("expected at least one level event")
 	}
 	for i, l := range levels {
 		if l < 0.4 || l > 0.6 {
@@ -264,7 +273,6 @@ func TestPipeline_StreamingCleanerEmitsDeltas(t *testing.T) {
 	for i := range src {
 		src[i] = 0.1
 	}
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hello world"}
 	cl := &fakeStreamingCleaner{
@@ -272,13 +280,15 @@ func TestPipeline_StreamingCleanerEmitsDeltas(t *testing.T) {
 		chunks: []string{"Hello", " world", "."},
 	}
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 	var got []string
 	var mu sync.Mutex
-	p.LLMDeltaCallback = func(s string) {
-		mu.Lock()
-		got = append(got, s)
-		mu.Unlock()
+	p.Listener = func(e Event) {
+		if e.Kind == EventLLMDelta {
+			mu.Lock()
+			got = append(got, e.Text)
+			mu.Unlock()
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -308,7 +318,6 @@ func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
 	for i := range src {
 		src[i] = 0.1
 	}
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hello"}
 	cl := &fakeStreamingCleaner{
@@ -316,8 +325,8 @@ func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
 		chunks: []string{"should", "not", "fire"},
 	}
 
-	p := New(d, tr, dy, cl)
-	// LLMDeltaCallback intentionally nil — pipeline should pick the
+	p := newTestPipeline(tr, dy, cl)
+	// Listener intentionally nil — pipeline should pick the
 	// non-streaming Clean path even though cleaner can stream.
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -326,7 +335,7 @@ func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if cl.streamCalls != 0 {
-		t.Errorf("CleanStream should NOT be called when LLMDeltaCallback is nil; got %d", cl.streamCalls)
+		t.Errorf("CleanStream should NOT be called when Listener is nil; got %d", cl.streamCalls)
 	}
 	if cl.cleanCalls != 1 {
 		t.Errorf("expected one Clean call, got %d", cl.cleanCalls)
@@ -335,14 +344,17 @@ func TestPipeline_StreamingCleanerNoCallbackFallsBackToClean(t *testing.T) {
 
 func TestPipeline_NonStreamingCleanerWithCallbackStillUsesClean(t *testing.T) {
 	src := make([]float32, 24000)
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: "hello"}
 	cl := &fakeCleaner{out: "Hello."} // does NOT implement StreamingCleaner
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 	deltaCalls := 0
-	p.LLMDeltaCallback = func(_ string) { deltaCalls++ }
+	p.Listener = func(e Event) {
+		if e.Kind == EventLLMDelta {
+			deltaCalls++
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -350,7 +362,7 @@ func TestPipeline_NonStreamingCleanerWithCallbackStillUsesClean(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if deltaCalls != 0 {
-		t.Errorf("non-streaming cleaner should never invoke delta callback; got %d", deltaCalls)
+		t.Errorf("non-streaming cleaner should never invoke delta events; got %d", deltaCalls)
 	}
 }
 
@@ -370,12 +382,11 @@ func silence48k(ms int) []float32 {
 
 func TestPipeline_EmptyTranscriptionYieldsEmptyResult(t *testing.T) {
 	src := make([]float32, 240) // half a frame
-	d := denoise.NewPassthrough()
 	dy := dict.NewFuzzy(nil, 1)
 	tr := &fakeTranscriber{out: ""}
 	cl := &fakeCleaner{out: "should not be called"}
 
-	p := New(d, tr, dy, cl)
+	p := newTestPipeline(tr, dy, cl)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -407,8 +418,8 @@ func (f *fakeMultiTranscriber) Close() error { return nil }
 func TestPipeline_MultiChunkJoinedAndCleanedOnce(t *testing.T) {
 	tr := &fakeMultiTranscriber{outputs: []string{"hello", "world"}}
 	cl := &fakeStreamingCleaner{out: "Hello world.", chunks: []string{"Hello ", "world."}}
-	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
-	p.LLMDeltaCallback = func(string) {}
+	p := newTestPipeline(tr, dict.NewFuzzy(nil, 0), cl)
+	p.Listener = func(Event) {} // non-nil so streaming path is taken
 	p.ChunkerOpts = ChunkerOpts{
 		VoiceThreshold: 0.005,
 		SilenceHangMs:  100, // tiny so the test silences split
@@ -459,8 +470,8 @@ func (f *errOnNthTranscriber) Close() error { return nil }
 func TestPipeline_WorkerErrorPropagates(t *testing.T) {
 	tr := &errOnNthTranscriber{failOn: 2}
 	cl := &fakeStreamingCleaner{}
-	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
-	p.LLMDeltaCallback = func(string) {}
+	p := newTestPipeline(tr, dict.NewFuzzy(nil, 0), cl)
+	p.Listener = func(Event) {} // non-nil so streaming path is taken
 	p.ChunkerOpts = ChunkerOpts{
 		VoiceThreshold: 0.005,
 		SilenceHangMs:  100,
@@ -504,8 +515,8 @@ func (s *slowTranscriber) Close() error { return nil }
 func TestPipeline_CancelMidRecordingReturnsContextErr(t *testing.T) {
 	tr := &slowTranscriber{delay: 200 * time.Millisecond}
 	cl := &fakeStreamingCleaner{}
-	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
-	p.LLMDeltaCallback = func(string) {}
+	p := newTestPipeline(tr, dict.NewFuzzy(nil, 0), cl)
+	p.Listener = func(Event) {} // non-nil so streaming path is taken
 	p.ChunkerOpts = ChunkerOpts{
 		VoiceThreshold: 0.005,
 		SilenceHangMs:  100,

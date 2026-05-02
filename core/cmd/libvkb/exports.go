@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/voice-keyboard/core/internal/config"
+	"github.com/voice-keyboard/core/internal/pipeline"
 )
 
 // Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
@@ -131,44 +132,46 @@ func vkb_start_capture() C.int {
 	e.mu.Unlock()
 
 	// Throttle level events to ~30Hz, taking max RMS in each window.
+	// Stream LLM cleaned-text deltas to Swift as they arrive via EventLLMDelta.
 	const levelHz = 30
 	levelInterval := time.Second / levelHz
 	var (
 		levelMu     sync.Mutex
 		levelMax    float32
-		levelLastAt time.Time
+		levelLastAt = time.Now()
 	)
-	levelLastAt = time.Now()
-	pipe.LevelCallback = func(rms float32) {
-		levelMu.Lock()
-		defer levelMu.Unlock()
-		now := time.Now()
-		if rms > levelMax {
-			levelMax = rms
+	pipe.Listener = func(ev pipeline.Event) {
+		switch ev.Kind {
+		case pipeline.EventStageProcessed:
+			if ev.Stage != "denoise" {
+				return
+			}
+			levelMu.Lock()
+			defer levelMu.Unlock()
+			now := time.Now()
+			if ev.RMSOut > levelMax {
+				levelMax = ev.RMSOut
+			}
+			if now.Sub(levelLastAt) < levelInterval {
+				return
+			}
+			select {
+			case e.events <- event{Kind: "level", RMS: levelMax}:
+			default:
+			}
+			levelMax = 0
+			levelLastAt = now
+		case pipeline.EventLLMDelta:
+			// Each chunk becomes an event{Kind: "chunk", Text: "..."}; Swift types
+			// them at the cursor incrementally. Terminal `result` event is
+			// still emitted at the end with the full cleaned text (Swift can
+			// ignore the text since it's already typed, but the event signals
+			// state transition idle ← processing).
+			if ev.Text == "" {
+				return
+			}
+			e.events <- event{Kind: "chunk", Text: ev.Text}
 		}
-		if now.Sub(levelLastAt) < levelInterval {
-			return
-		}
-		ev := event{Kind: "level", RMS: levelMax}
-		select {
-		case e.events <- ev:
-		default:
-		}
-		levelMax = 0
-		levelLastAt = now
-	}
-
-	// Stream LLM cleaned-text deltas to Swift as they arrive. Each
-	// chunk becomes an event{Kind: "chunk", Text: "..."}; Swift types
-	// them at the cursor incrementally. Terminal `result` event is
-	// still emitted at the end with the full cleaned text (Swift can
-	// ignore the text since it's already typed, but the event signals
-	// state transition idle ← processing).
-	pipe.LLMDeltaCallback = func(delta string) {
-		if delta == "" {
-			return
-		}
-		e.events <- event{Kind: "chunk", Text: delta}
 	}
 
 	go func() {

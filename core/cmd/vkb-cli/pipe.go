@@ -18,6 +18,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
@@ -126,7 +127,8 @@ func runPipe(args []string) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	p := pipeline.New(d, w, dy, cleaner)
+	p := pipeline.New(w, dy, cleaner)
+	p.FrameStages = []audio.Stage{denoise.NewStage(d), resample.NewDecimate3()}
 
 	if *speakerMode {
 		profileDir := os.Getenv("VKB_PROFILE_DIR")
@@ -155,14 +157,7 @@ func runPipe(args []string) int {
 			fmt.Fprintln(os.Stderr, "speaker gate: no enrollment found — run ./enroll.sh first")
 			return 1
 		}
-		// Task 7 will switch to ChunkStages; for now, type-assert back to TSEExtractor
-		// to keep the existing p.TSE field working.
-		ext, ok := tseStage.(speaker.TSEExtractor)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "speaker gate: stage type %T does not implement TSEExtractor\n", tseStage)
-			return 1
-		}
-		p.TSE = ext
+		p.ChunkStages = []audio.Stage{tseStage}
 		fmt.Fprintf(os.Stderr, "[vkb] speaker gating active (backend=%s)\n", backend.Name)
 	}
 
@@ -175,26 +170,23 @@ func runPipe(args []string) int {
 	)
 
 	if *latencyReport {
-		p.ChunkEmittedCallback = func(idx int, durationMs int, reason string) {
+		p.Listener = func(e pipeline.Event) {
 			repMu.Lock()
-			repChunks = append(repChunks, chunkInfo{
-				emittedAt: time.Now(), dur: durationMs, reason: reason,
-			})
-			repMu.Unlock()
-		}
-		p.ChunkTranscribedCallback = func(idx int, transcribeMs int, text string) {
-			repMu.Lock()
-			if idx-1 < len(repChunks) {
-				repChunks[idx-1].transcMs = transcribeMs
-				repChunks[idx-1].text = text
+			defer repMu.Unlock()
+			switch e.Kind {
+			case pipeline.EventChunkEmitted:
+				repChunks = append(repChunks, chunkInfo{
+					emittedAt: time.Now(), dur: e.DurationMs, reason: e.Reason,
+				})
+			case pipeline.EventChunkTranscribed:
+				if e.ChunkIdx-1 < len(repChunks) {
+					repChunks[e.ChunkIdx-1].transcMs = e.ElapsedMs
+					repChunks[e.ChunkIdx-1].text = e.Text
+				}
+			case pipeline.EventLLMFirstToken:
+				repFirstTok = time.Duration(e.ElapsedMs) * time.Millisecond
+				repFirstSeen = true
 			}
-			repMu.Unlock()
-		}
-		p.LLMFirstTokenCallback = func(elapsedMs int) {
-			repMu.Lock()
-			repFirstTok = time.Duration(elapsedMs) * time.Millisecond
-			repFirstSeen = true
-			repMu.Unlock()
 		}
 	}
 
