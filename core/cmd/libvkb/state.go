@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
@@ -164,10 +165,14 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		} else if tse != nil {
 			// Task 7 will switch to ChunkStages; for now, type-assert back to TSEExtractor
 			// to keep the existing p.TSE field working.
-			if ext, ok := tse.(speaker.TSEExtractor); ok {
+			ext, ok := tse.(speaker.TSEExtractor)
+			if !ok {
+				log.Printf("[vkb] buildPipeline: TSE stage does not implement TSEExtractor — skipping (type=%T)", tse)
+				e.setLastError(fmt.Sprintf("tse: stage type %T missing TSEExtractor", tse))
+			} else {
 				p.TSE = ext
+				log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
 			}
-			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
 		} else {
 			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)
 		}

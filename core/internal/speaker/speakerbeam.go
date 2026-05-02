@@ -32,6 +32,8 @@ func NewSpeakerGate(modelPath string, ref []float32) (*SpeakerGate, error) {
 	if len(ref) == 0 {
 		return nil, fmt.Errorf("speakergate: empty reference embedding")
 	}
+	captured := make([]float32, len(ref))
+	copy(captured, ref)
 	session, err := ort.NewDynamicAdvancedSession(
 		modelPath,
 		[]string{"mixed", "ref_embedding"},
@@ -41,7 +43,7 @@ func NewSpeakerGate(modelPath string, ref []float32) (*SpeakerGate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("speakergate: load %q: %w", modelPath, err)
 	}
-	return &SpeakerGate{session: session, ref: ref}, nil
+	return &SpeakerGate{session: session, ref: captured}, nil
 }
 
 func (g *SpeakerGate) Name() string    { return "tse" }

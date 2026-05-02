@@ -157,9 +157,12 @@ func runPipe(args []string) int {
 		}
 		// Task 7 will switch to ChunkStages; for now, type-assert back to TSEExtractor
 		// to keep the existing p.TSE field working.
-		if ext, ok := tseStage.(speaker.TSEExtractor); ok {
-			p.TSE = ext
+		ext, ok := tseStage.(speaker.TSEExtractor)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "speaker gate: stage type %T does not implement TSEExtractor\n", tseStage)
+			return 1
 		}
+		p.TSE = ext
 		fmt.Fprintf(os.Stderr, "[vkb] speaker gating active (backend=%s)\n", backend.Name)
 	}
 
