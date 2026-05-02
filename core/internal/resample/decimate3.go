@@ -11,7 +11,12 @@
 // drop-in optimization later if needed.
 package resample
 
-import "math"
+import (
+	"context"
+	"math"
+
+	"github.com/voice-keyboard/core/internal/audio"
+)
 
 const (
 	taps   = 33      // FIR length; 33 = 3×11 keeps a polyphase split as a future drop-in option
@@ -61,9 +66,17 @@ func NewDecimate3() *Decimate3 {
 	return &Decimate3{delay: make([]float32, taps)}
 }
 
+// Name implements audio.Stage.
+func (d *Decimate3) Name() string { return "decimate" }
+
+// OutputRate implements audio.Stage — Decimate3 converts 48kHz → 16kHz.
+func (d *Decimate3) OutputRate() int { return 16000 }
+
 // Process consumes input samples and returns output samples. State is
 // preserved across calls so streamed audio works (no boundary glitches).
-func (d *Decimate3) Process(in []float32) []float32 {
+// ctx is accepted to satisfy audio.Stage but is unused — decimation is
+// non-cancellable and trivial. err is always nil.
+func (d *Decimate3) Process(_ context.Context, in []float32) ([]float32, error) {
 	out := make([]float32, 0, len(in)/decim+1)
 	for _, x := range in {
 		// shift delay line left, append new sample
@@ -83,8 +96,11 @@ func (d *Decimate3) Process(in []float32) []float32 {
 		}
 		out = append(out, acc)
 	}
-	return out
+	return out, nil
 }
+
+// Compile-time check: Decimate3 must satisfy audio.Stage.
+var _ audio.Stage = (*Decimate3)(nil)
 
 // Reset clears the internal delay line. Use at the start of a new utterance.
 func (d *Decimate3) Reset() {

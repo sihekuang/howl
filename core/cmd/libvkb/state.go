@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/denoise"
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
@@ -135,7 +137,11 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		d = denoise.NewPassthrough()
 	}
 
-	p := pipeline.New(d, tr, dy, cleaner)
+	p := pipeline.New(tr, dy, cleaner)
+	p.FrameStages = []audio.Stage{
+		denoise.NewStage(d),
+		resample.NewDecimate3(),
+	}
 
 	if e.cfg.TSEEnabled {
 		backend, beErr := speaker.BackendByName(e.cfg.TSEBackend)
@@ -149,7 +155,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		// TSEModelPath is the back-compat per-file path; we use its parent
 		// directory as the modelsDir and let the backend resolve filenames.
 		modelsDir := filepath.Dir(e.cfg.TSEModelPath)
-		tse, ref, tseErr := pipeline.LoadTSE(
+		tse, tseErr := pipeline.LoadTSE(
 			backend,
 			e.cfg.TSEProfileDir,
 			modelsDir,
@@ -162,8 +168,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 			// vkb_last_error and the next configure attempt can fix it.
 			e.setLastError("tse: " + tseErr.Error())
 		} else if tse != nil {
-			p.TSE = tse
-			p.TSERef = ref
+			p.ChunkStages = []audio.Stage{tse}
 			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
 		} else {
 			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)

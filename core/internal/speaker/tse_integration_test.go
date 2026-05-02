@@ -34,12 +34,6 @@ func TestTSE_ReducesInterfererRMS(t *testing.T) {
 		t.Fatalf("InitONNXRuntime: %v", err)
 	}
 
-	tse, err := NewSpeakerGate(modelPath)
-	if err != nil {
-		t.Fatalf("NewSpeakerGate: %v", err)
-	}
-	defer tse.Close()
-
 	const n = 32000 // 2 seconds at 16kHz
 	target := make([]float32, n)
 	interferer := make([]float32, n)
@@ -50,7 +44,14 @@ func TestTSE_ReducesInterfererRMS(t *testing.T) {
 		mixed[i] = target[i] + interferer[i]
 	}
 
-	out, err := tse.Extract(context.Background(), mixed, target)
+	// ref is the enrollment embedding — use target as a stand-in for the test.
+	tse, err := NewSpeakerGate(modelPath, target)
+	if err != nil {
+		t.Fatalf("NewSpeakerGate: %v", err)
+	}
+	defer tse.Close()
+
+	out, err := tse.Extract(context.Background(), mixed)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}

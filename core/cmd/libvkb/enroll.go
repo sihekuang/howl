@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func runEnrollCompute(samples48k []float32, profileDir, encoderPath, onnxLibPath
 	}
 
 	dec := resample.NewDecimate3()
-	samples16k := dec.Process(samples48k)
+	samples16k, _ := dec.Process(context.Background(), samples48k)
 	if len(samples16k) == 0 {
 		return fmt.Errorf("enroll: decimation produced no samples")
 	}

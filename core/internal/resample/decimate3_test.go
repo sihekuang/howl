@@ -1,6 +1,7 @@
 package resample
 
 import (
+	"context"
 	"math"
 	"testing"
 )
@@ -8,7 +9,7 @@ import (
 func TestDecimate3_OutputLengthIsThird(t *testing.T) {
 	in := make([]float32, 4800) // 100ms @ 48kHz
 	d := NewDecimate3()
-	out := d.Process(in)
+	out, _ := d.Process(context.Background(), in)
 	wantLen := 4800 / 3
 	if len(out) < wantLen-1 || len(out) > wantLen+1 {
 		t.Errorf("output length = %d, expected ~%d", len(out), wantLen)
@@ -22,7 +23,7 @@ func TestDecimate3_DCSignalPreserved(t *testing.T) {
 		in[i] = 0.5
 	}
 	d := NewDecimate3()
-	out := d.Process(in)
+	out, _ := d.Process(context.Background(), in)
 
 	// Check the steady-state samples (skip initial filter delay; group delay is
 	// ~5 output samples for a 33-tap FIR, 20 leaves comfortable headroom).
@@ -47,7 +48,7 @@ func TestDecimate3_LowFrequencyPassesThrough(t *testing.T) {
 		in[i] = float32(math.Sin(2 * math.Pi * f * float64(i) / fs))
 	}
 	d := NewDecimate3()
-	out := d.Process(in)
+	out, _ := d.Process(context.Background(), in)
 
 	// Compute peak amplitude in steady-state region.
 	peak := 0.0
@@ -71,7 +72,7 @@ func TestDecimate3_HighFrequencyAttenuated(t *testing.T) {
 		in[i] = float32(math.Sin(2 * math.Pi * f * float64(i) / fs))
 	}
 	d := NewDecimate3()
-	out := d.Process(in)
+	out, _ := d.Process(context.Background(), in)
 
 	peak := 0.0
 	for _, v := range out[100:] {
@@ -93,12 +94,12 @@ func TestDecimate3_ResetEqualsFreshConstruction(t *testing.T) {
 	}
 
 	fresh := NewDecimate3()
-	freshOut := fresh.Process(in)
+	freshOut, _ := fresh.Process(context.Background(), in)
 
 	reused := NewDecimate3()
-	reused.Process(in)  // dirty its state
+	reused.Process(context.Background(), in) //nolint:errcheck // dirty its state
 	reused.Reset()
-	resetOut := reused.Process(in)
+	resetOut, _ := reused.Process(context.Background(), in)
 
 	if len(freshOut) != len(resetOut) {
 		t.Fatalf("output lengths differ: fresh=%d reset=%d", len(freshOut), len(resetOut))
@@ -108,5 +109,27 @@ func TestDecimate3_ResetEqualsFreshConstruction(t *testing.T) {
 			t.Errorf("sample %d: fresh=%f reset=%f", i, freshOut[i], resetOut[i])
 			break
 		}
+	}
+}
+
+func TestDecimate3StageMetadata(t *testing.T) {
+	d := NewDecimate3()
+	if d.Name() != "decimate" {
+		t.Errorf("Name=%q, want %q", d.Name(), "decimate")
+	}
+	if d.OutputRate() != 16000 {
+		t.Errorf("OutputRate=%d, want 16000", d.OutputRate())
+	}
+}
+
+func TestDecimate3StageProcess(t *testing.T) {
+	d := NewDecimate3()
+	in := make([]float32, 480)
+	out, err := d.Process(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Process error: %v", err)
+	}
+	if len(out) != 160 {
+		t.Errorf("len(out)=%d, want 160", len(out))
 	}
 }

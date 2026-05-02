@@ -22,12 +22,6 @@ func TestSpeakerBeamSS_ReducesInterferer(t *testing.T) {
 		t.Skip("TSE_MODEL_PATH not set")
 	}
 
-	tse, err := NewSpeakerGate(modelPath)
-	if err != nil {
-		t.Fatalf("NewSpeakerGate: %v", err)
-	}
-	defer tse.Close()
-
 	const n = 16000
 	// Target speaker: 440Hz sine; interferer: 880Hz sine
 	target := make([]float32, n)
@@ -41,7 +35,14 @@ func TestSpeakerBeamSS_ReducesInterferer(t *testing.T) {
 		mixed[i] = target[i] + interferer[i]
 	}
 
-	out, err := tse.Extract(context.Background(), mixed, target)
+	// ref is the enrollment embedding — use target as a stand-in for the test.
+	tse, err := NewSpeakerGate(modelPath, target)
+	if err != nil {
+		t.Fatalf("NewSpeakerGate: %v", err)
+	}
+	defer tse.Close()
+
+	out, err := tse.Extract(context.Background(), mixed)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}

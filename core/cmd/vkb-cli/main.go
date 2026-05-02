@@ -42,6 +42,8 @@ Usage:
   vkb-cli transcribe FILE                run Whisper on a WAV
   vkb-cli pipe FILE                      run full pipeline on a WAV
   vkb-cli pipe --live                    record from mic, full pipeline
+  vkb-cli pipe [...] [--record-dir DIR --record audio,transcripts]
+                                         tap audio stages / transcripts to DIR
   vkb-cli backends                       list registered TSE backends
                                          (--models-dir DIR also checks
                                          that each backend's files exist)

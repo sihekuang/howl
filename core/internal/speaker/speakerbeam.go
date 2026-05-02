@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/voice-keyboard/core/internal/audio"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -13,21 +14,26 @@ import (
 // sep_noisy 16k), embeds each source with the Wespeaker ECAPA-TDNN-512
 // encoder (Kaldi Fbank front-end + L2-norm baked into the same ONNX), and
 // hard-selects the source whose embedding has the higher cosine similarity
-// to the enrolled speaker embedding. It returns actual extracted audio, not
-// a gated/zeroed copy.
+// to the enrolled speaker embedding. It returns actual extracted audio,
+// not a gated/zeroed copy.
 //
 // Inputs:  mixed         float32[1, T]   — 16 kHz mono audio
-//
-//	ref_embedding float32[1, EmbeddingDim] — L2-normalised enrolled speaker embedding
-//
 // Output:  extracted     float32[1, T]   — separated audio for enrolled speaker
 type SpeakerGate struct {
 	session *ort.DynamicAdvancedSession
+	ref     []float32 // L2-normalised enrollment embedding, captured at construction
 }
 
-// NewSpeakerGate loads tse_model.onnx from modelPath.
-// Call InitONNXRuntime before this.
-func NewSpeakerGate(modelPath string) (*SpeakerGate, error) {
+// NewSpeakerGate loads tse_model.onnx and binds the enrollment reference.
+// Call InitONNXRuntime before this. ref must be non-empty; its length
+// must match the backend's EmbeddingDim (validated lazily on first
+// inference).
+func NewSpeakerGate(modelPath string, ref []float32) (*SpeakerGate, error) {
+	if len(ref) == 0 {
+		return nil, fmt.Errorf("speakergate: empty reference embedding")
+	}
+	captured := make([]float32, len(ref))
+	copy(captured, ref)
 	session, err := ort.NewDynamicAdvancedSession(
 		modelPath,
 		[]string{"mixed", "ref_embedding"},
@@ -37,23 +43,27 @@ func NewSpeakerGate(modelPath string) (*SpeakerGate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("speakergate: load %q: %w", modelPath, err)
 	}
-	return &SpeakerGate{session: session}, nil
+	return &SpeakerGate{session: session, ref: captured}, nil
 }
 
-// Extract runs speaker extraction inference.
+func (g *SpeakerGate) Name() string    { return "tse" }
+func (g *SpeakerGate) OutputRate() int { return 0 } // preserves 16 kHz input
+
+// Process satisfies audio.Stage. Equivalent to Extract.
+func (g *SpeakerGate) Process(ctx context.Context, mixed []float32) ([]float32, error) {
+	return g.Extract(ctx, mixed)
+}
+
+// Extract runs speaker extraction inference using the bound reference.
 //   - mixed: 16 kHz mono PCM chunk.
-//   - ref:   L2-normalised enrollment embedding (from enrollment.emb).
-//     Length must equal EmbeddingDim.
-//
-// Returns the separated audio for the enrolled speaker.
-func (g *SpeakerGate) Extract(_ context.Context, mixed []float32, ref []float32) ([]float32, error) {
+func (g *SpeakerGate) Extract(_ context.Context, mixed []float32) ([]float32, error) {
 	mixedT, err := ort.NewTensor(ort.NewShape(1, int64(len(mixed))), mixed)
 	if err != nil {
 		return nil, fmt.Errorf("speakergate: mixed tensor: %w", err)
 	}
 	defer mixedT.Destroy()
 
-	refT, err := ort.NewTensor(ort.NewShape(1, int64(len(ref))), ref)
+	refT, err := ort.NewTensor(ort.NewShape(1, int64(len(g.ref))), g.ref)
 	if err != nil {
 		return nil, fmt.Errorf("speakergate: ref tensor: %w", err)
 	}
@@ -78,3 +88,7 @@ func (g *SpeakerGate) Extract(_ context.Context, mixed []float32, ref []float32)
 func (g *SpeakerGate) Close() error {
 	return g.session.Destroy()
 }
+
+// Compile-time interface checks.
+var _ audio.Stage = (*SpeakerGate)(nil)
+var _ TSEExtractor = (*SpeakerGate)(nil)

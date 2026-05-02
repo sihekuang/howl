@@ -18,6 +18,8 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/recorder"
+	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
@@ -48,6 +50,8 @@ func runPipe(args []string) int {
 	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `vkb-cli providers`)")
 	llmModel := fs.String("llm-model", "", "LLM model id (overrides ANTHROPIC_MODEL env; required for ollama)")
 	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
+	recordDir := fs.String("record-dir", "", "directory to write per-stage WAVs and transcripts")
+	recordSpec := fs.String("record", "", "comma-separated taps: audio,transcripts (e.g. --record audio,transcripts). Requires --record-dir.")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -123,10 +127,34 @@ func runPipe(args []string) int {
 	dy := dict.NewFuzzy(terms, 1)
 	d := denoise.NewPassthrough() // build with -tags=deepfilter for real denoise; passthrough is fine for the file-mode path
 
+	var recOpts recorder.Options
+	recOpts.Dir = *recordDir
+	for _, t := range strings.Split(*recordSpec, ",") {
+		switch strings.TrimSpace(t) {
+		case "audio":
+			recOpts.AudioStages = true
+		case "transcripts":
+			recOpts.Transcripts = true
+		case "":
+			// empty token from "" or trailing comma — ignore
+		default:
+			fmt.Fprintf(os.Stderr, "unknown --record tap: %q (want audio,transcripts)\n", t)
+			return 2
+		}
+	}
+	rec, recErr := recorder.Open(recOpts)
+	if recErr != nil {
+		fmt.Fprintf(os.Stderr, "recorder: %v\n", recErr)
+		return 1
+	}
+	defer rec.Close()
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	p := pipeline.New(d, w, dy, cleaner)
+	p := pipeline.New(w, dy, cleaner)
+	p.Recorder = rec
+	p.FrameStages = []audio.Stage{denoise.NewStage(d), resample.NewDecimate3()}
 
 	if *speakerMode {
 		profileDir := os.Getenv("VKB_PROFILE_DIR")
@@ -146,17 +174,16 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", beErr)
 			return 2
 		}
-		tse, ref, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib)
+		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
 			return 1
 		}
-		if tse == nil {
+		if tseStage == nil {
 			fmt.Fprintln(os.Stderr, "speaker gate: no enrollment found — run ./enroll.sh first")
 			return 1
 		}
-		p.TSE = tse
-		p.TSERef = ref
+		p.ChunkStages = []audio.Stage{tseStage}
 		fmt.Fprintf(os.Stderr, "[vkb] speaker gating active (backend=%s)\n", backend.Name)
 	}
 
@@ -169,26 +196,23 @@ func runPipe(args []string) int {
 	)
 
 	if *latencyReport {
-		p.ChunkEmittedCallback = func(idx int, durationMs int, reason string) {
+		p.Listener = func(e pipeline.Event) {
 			repMu.Lock()
-			repChunks = append(repChunks, chunkInfo{
-				emittedAt: time.Now(), dur: durationMs, reason: reason,
-			})
-			repMu.Unlock()
-		}
-		p.ChunkTranscribedCallback = func(idx int, transcribeMs int, text string) {
-			repMu.Lock()
-			if idx-1 < len(repChunks) {
-				repChunks[idx-1].transcMs = transcribeMs
-				repChunks[idx-1].text = text
+			defer repMu.Unlock()
+			switch e.Kind {
+			case pipeline.EventChunkEmitted:
+				repChunks = append(repChunks, chunkInfo{
+					emittedAt: time.Now(), dur: e.DurationMs, reason: e.Reason,
+				})
+			case pipeline.EventChunkTranscribed:
+				if e.ChunkIdx-1 < len(repChunks) {
+					repChunks[e.ChunkIdx-1].transcMs = e.ElapsedMs
+					repChunks[e.ChunkIdx-1].text = e.Text
+				}
+			case pipeline.EventLLMFirstToken:
+				repFirstTok = time.Duration(e.ElapsedMs) * time.Millisecond
+				repFirstSeen = true
 			}
-			repMu.Unlock()
-		}
-		p.LLMFirstTokenCallback = func(elapsedMs int) {
-			repMu.Lock()
-			repFirstTok = time.Duration(elapsedMs) * time.Millisecond
-			repFirstSeen = true
-			repMu.Unlock()
 		}
 	}
 
@@ -304,7 +328,10 @@ func runOneLive(ctx context.Context, cancel context.CancelFunc, p *pipeline.Pipe
 }
 
 // runPipeLoop: --persistent mode. Reuses the same pipeline (and thus
-// the warm Whisper model) across utterances.
+// the warm Whisper model) across utterances. When recording is enabled
+// (--record-dir), every utterance's audio appends to the same per-stage
+// WAVs and every transcript overwrites the previous one — the session
+// captures one continuous concatenated artefact, not per-utterance files.
 //
 //   - First Enter: start capture.
 //   - Second Enter: stop capture, run inference, print result.
