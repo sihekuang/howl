@@ -13,12 +13,19 @@ import (
 )
 
 // fakeTSEExtractor records calls and returns zeros (simulates TSE suppressing all audio).
+// The speaker reference is captured at construction time (matching TSEExtractor's design
+// of encoding the ref in the implementation rather than passing it per-call).
 type fakeTSEExtractor struct {
 	calls int
 	out   []float32 // if nil, returns zeros of mixed length
 }
 
-func (f *fakeTSEExtractor) Extract(_ context.Context, mixed []float32, _ []float32) ([]float32, error) {
+func (f *fakeTSEExtractor) Name() string       { return "fake-tse" }
+func (f *fakeTSEExtractor) OutputRate() int    { return 0 }
+func (f *fakeTSEExtractor) Process(ctx context.Context, in []float32) ([]float32, error) {
+	return f.Extract(ctx, in)
+}
+func (f *fakeTSEExtractor) Extract(_ context.Context, mixed []float32) ([]float32, error) {
 	f.calls++
 	if f.out != nil {
 		return f.out, nil
@@ -53,7 +60,6 @@ func TestPipeline_TSEActiveCallsExtractPerChunk(t *testing.T) {
 
 	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 0), cl)
 	p.TSE = tse
-	p.TSERef = make([]float32, 16000) // 1s of silence as ref
 	p.ChunkerOpts = ChunkerOpts{
 		VoiceThreshold: 0.005,
 		SilenceHangMs:  100,
@@ -90,7 +96,6 @@ func TestPipeline_TSEOutputZeroYieldsEmptyResult(t *testing.T) {
 
 	p := New(denoise.NewPassthrough(), tr, dict.NewFuzzy(nil, 1), cl)
 	p.TSE = tse
-	p.TSERef = make([]float32, 16000)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
