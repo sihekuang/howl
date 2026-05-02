@@ -11,7 +11,14 @@ type fakeTSE struct {
 	returnSamples []float32
 }
 
-func (f *fakeTSE) Extract(_ context.Context, mixed []float32, _ []float32) ([]float32, error) {
+func (f *fakeTSE) Name() string    { return "fake-tse" }
+func (f *fakeTSE) OutputRate() int { return 0 }
+
+func (f *fakeTSE) Process(ctx context.Context, mixed []float32) ([]float32, error) {
+	return f.Extract(ctx, mixed)
+}
+
+func (f *fakeTSE) Extract(_ context.Context, mixed []float32) ([]float32, error) {
 	f.extractCalls++
 	if f.returnSamples != nil {
 		return f.returnSamples, nil
@@ -27,7 +34,7 @@ func TestFakeTSE_ImplementsInterface(t *testing.T) {
 func TestFakeTSE_ReturnsZerosForMixed(t *testing.T) {
 	f := &fakeTSE{}
 	mixed := []float32{0.1, 0.2, 0.3}
-	out, err := f.Extract(context.Background(), mixed, nil)
+	out, err := f.Extract(context.Background(), mixed)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}

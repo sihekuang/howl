@@ -149,7 +149,7 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 					return
 				}
 				if p.TSE != nil {
-					cleaned, tseErr := p.TSE.Extract(ctx, e.Samples, p.TSERef)
+					cleaned, tseErr := p.TSE.Extract(ctx, e.Samples)
 					if tseErr != nil {
 						mu.Lock()
 						workerErr = fmt.Errorf("tse: %w", tseErr)
@@ -260,33 +260,33 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 // state (json present but embedding missing/corrupt).
 //
 // modelsDir holds the backend's ONNX files (resolved via backend.TSEPath).
-func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string) (speaker.TSEExtractor, []float32, error) {
+func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string) (audio.Stage, error) {
 	if backend == nil {
 		backend = speaker.Default
 	}
 	_, err := speaker.LoadProfile(profileDir)
 	if os.IsNotExist(err) {
-		return nil, nil, nil // no enrollment — TSE off
+		return nil, nil // no enrollment — TSE off
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("load tse: profile: %w", err)
+		return nil, fmt.Errorf("load tse: profile: %w", err)
 	}
 	embPath := profileDir + "/enrollment.emb"
 	ref, err := speaker.LoadEmbedding(embPath, backend.EmbeddingDim)
 	if os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
+		return nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("load tse: embedding: %w", err)
+		return nil, fmt.Errorf("load tse: embedding: %w", err)
 	}
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
-		return nil, nil, fmt.Errorf("load tse: onnx runtime: %w", err)
+		return nil, fmt.Errorf("load tse: onnx runtime: %w", err)
 	}
-	tse, err := speaker.NewSpeakerGate(backend.TSEPath(modelsDir))
+	tse, err := speaker.NewSpeakerGate(backend.TSEPath(modelsDir), ref)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load tse: model: %w", err)
+		return nil, fmt.Errorf("load tse: model: %w", err)
 	}
-	return tse, ref, nil
+	return tse, nil
 }
 
 // Close releases resources held by the transcriber and denoiser.

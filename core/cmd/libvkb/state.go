@@ -149,7 +149,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		// TSEModelPath is the back-compat per-file path; we use its parent
 		// directory as the modelsDir and let the backend resolve filenames.
 		modelsDir := filepath.Dir(e.cfg.TSEModelPath)
-		tse, ref, tseErr := pipeline.LoadTSE(
+		tse, tseErr := pipeline.LoadTSE(
 			backend,
 			e.cfg.TSEProfileDir,
 			modelsDir,
@@ -162,8 +162,11 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 			// vkb_last_error and the next configure attempt can fix it.
 			e.setLastError("tse: " + tseErr.Error())
 		} else if tse != nil {
-			p.TSE = tse
-			p.TSERef = ref
+			// Task 7 will switch to ChunkStages; for now, type-assert back to TSEExtractor
+			// to keep the existing p.TSE field working.
+			if ext, ok := tse.(speaker.TSEExtractor); ok {
+				p.TSE = ext
+			}
 			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
 		} else {
 			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)

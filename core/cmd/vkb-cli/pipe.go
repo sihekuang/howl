@@ -146,17 +146,20 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", beErr)
 			return 2
 		}
-		tse, ref, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib)
+		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
 			return 1
 		}
-		if tse == nil {
+		if tseStage == nil {
 			fmt.Fprintln(os.Stderr, "speaker gate: no enrollment found — run ./enroll.sh first")
 			return 1
 		}
-		p.TSE = tse
-		p.TSERef = ref
+		// Task 7 will switch to ChunkStages; for now, type-assert back to TSEExtractor
+		// to keep the existing p.TSE field working.
+		if ext, ok := tseStage.(speaker.TSEExtractor); ok {
+			p.TSE = ext
+		}
 		fmt.Fprintf(os.Stderr, "[vkb] speaker gating active (backend=%s)\n", backend.Name)
 	}
 
