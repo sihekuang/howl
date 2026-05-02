@@ -18,6 +18,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
@@ -49,6 +50,8 @@ func runPipe(args []string) int {
 	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `vkb-cli providers`)")
 	llmModel := fs.String("llm-model", "", "LLM model id (overrides ANTHROPIC_MODEL env; required for ollama)")
 	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
+	recordDir := fs.String("record-dir", "", "directory to write per-stage WAVs and transcripts")
+	recordSpec := fs.String("record", "", "comma-separated taps: audio,transcripts (e.g. --record audio,transcripts). Requires --record-dir.")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -124,10 +127,33 @@ func runPipe(args []string) int {
 	dy := dict.NewFuzzy(terms, 1)
 	d := denoise.NewPassthrough() // build with -tags=deepfilter for real denoise; passthrough is fine for the file-mode path
 
+	var recOpts recorder.Options
+	recOpts.Dir = *recordDir
+	for _, t := range strings.Split(*recordSpec, ",") {
+		switch strings.TrimSpace(t) {
+		case "audio":
+			recOpts.AudioStages = true
+		case "transcripts":
+			recOpts.Transcripts = true
+		case "":
+			// empty token from "" or trailing comma — ignore
+		default:
+			fmt.Fprintf(os.Stderr, "unknown --record tap: %q (want audio,transcripts)\n", t)
+			return 2
+		}
+	}
+	rec, recErr := recorder.Open(recOpts)
+	if recErr != nil {
+		fmt.Fprintf(os.Stderr, "recorder: %v\n", recErr)
+		return 1
+	}
+	defer rec.Close()
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	p := pipeline.New(w, dy, cleaner)
+	p.Recorder = rec
 	p.FrameStages = []audio.Stage{denoise.NewStage(d), resample.NewDecimate3()}
 
 	if *speakerMode {
