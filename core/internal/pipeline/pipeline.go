@@ -82,7 +82,7 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 
 	frameRate, chunkRate := p.registerRecorderStages()
 	_ = frameRate // useful for future per-frame rate-aware logic
-	_ = chunkRate
+	_ = chunkRate // useful for future per-chunk rate-aware logic
 
 	opts := p.ChunkerOpts
 	if opts.VoiceThreshold == 0 && opts.SilenceHangMs == 0 && opts.MaxChunkMs == 0 {
@@ -119,7 +119,9 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 		for {
 			select {
 			case <-ctx.Done():
+				mu.Lock()
 				workerErr = ctx.Err()
+				mu.Unlock()
 				for range chunkCh {
 				}
 				return
