@@ -33,7 +33,7 @@ func runTranscribe(args []string) int {
 	pcm16k := pcm
 	if sr == 48000 {
 		dec := resample.NewDecimate3()
-		pcm16k = dec.Process(pcm)
+		pcm16k, _ = dec.Process(context.Background(), pcm)
 	} else if sr != 16000 {
 		fmt.Fprintf(os.Stderr, "unsupported sample rate %d (need 16000 or 48000)\n", sr)
 		return 1
