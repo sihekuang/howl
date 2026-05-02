@@ -196,8 +196,8 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 			break
 		}
 		denoised := drainAndDenoiseStreaming(f, p.denoiser, p.LevelCallback)
-		decimated := dec.Process(denoised)
-		chunker.Push(decimated)
+		decOut, _ := dec.Process(ctx, denoised)
+		chunker.Push(decOut)
 	}
 	chunker.Flush()
 	close(chunkCh)
