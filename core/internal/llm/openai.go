@@ -64,7 +64,16 @@ type OpenAI struct {
 // callers don't accidentally fall through to OPENAI_API_KEY in env — same
 // reasoning as NewAnthropic.
 func NewOpenAI(opts OpenAIOptions) (*OpenAI, error) {
-	if opts.APIKey == "" {
+	return newOpenAICompatible(opts, true)
+}
+
+// newOpenAICompatible builds the *OpenAI client without forcing an API key,
+// so OpenAI-compatible local servers (e.g. LM Studio) can reuse the same
+// HTTP wire code. requireKey=true keeps the historical NewOpenAI behaviour;
+// requireKey=false lets opts.APIKey be empty (in which case Clean/CleanStream
+// omit the Authorization header entirely).
+func newOpenAICompatible(opts OpenAIOptions, requireKey bool) (*OpenAI, error) {
+	if requireKey && opts.APIKey == "" {
 		return nil, errors.New("openai: APIKey is required")
 	}
 	baseURL := opts.BaseURL
@@ -150,7 +159,9 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 		return "", fmt.Errorf("openai: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	if o.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	}
 
 	resp, err := o.client.Do(req)
 	if err != nil {
@@ -204,7 +215,9 @@ func (o *OpenAI) CleanStream(
 		return "", fmt.Errorf("openai: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	if o.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	}
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := o.client.Do(req)

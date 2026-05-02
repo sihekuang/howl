@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
 		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
+		0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13FD3D07C12A94326240356A /* LMStudioSection.swift */; };
 		19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */; };
 		1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */; };
 		23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D191FF4976526AAF109C19EB /* AppDelegate.swift */; };
@@ -45,6 +46,7 @@
 /* Begin PBXFileReference section */
 		02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
 		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
+		13FD3D07C12A94326240356A /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
 		1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 				B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */,
 				9D5234E365C4BA6093A5C613 /* GeneralTab.swift */,
 				3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */,
+				13FD3D07C12A94326240356A /* LMStudioSection.swift */,
 				DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */,
 				59636EC6C578038A015432EA /* OllamaSection.swift */,
 				A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */,
@@ -419,6 +422,7 @@
 				DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */,
 				F0FB30D506A0C389662232B1 /* GeneralTab.swift in Sources */,
 				B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */,
+				0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */,
 				967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */,
 				9AB5252581905E6AA95725A5 /* MenuBarController.swift in Sources */,
 				ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */,
