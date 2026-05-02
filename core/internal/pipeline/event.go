@@ -12,7 +12,8 @@ const (
 
 	// EventChunkEmitted fires when the Chunker emits a chunk. ChunkIdx
 	// is 1-based, DurationMs is the chunk's audio length, Reason is the
-	// chunker's emission reason ("silence_hang" / "max_duration" / ...).
+	// chunker's emission reason — see ChunkReason constants in chunker.go
+	// ("vad-cut" / "force-cut" / "tail").
 	EventChunkEmitted
 
 	// EventChunkTranscribed fires after each chunk's Transcribe call

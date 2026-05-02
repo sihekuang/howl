@@ -229,7 +229,7 @@ func TestPipeline_LLMErrorFallsBackToDictText(t *testing.T) {
 	}
 }
 
-func TestPipeline_LevelCallbackFires(t *testing.T) {
+func TestPipeline_StageProcessedEventFires(t *testing.T) {
 	src := make([]float32, 24000) // 0.5s @ 48kHz
 	for i := range src {
 		src[i] = 0.5

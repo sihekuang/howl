@@ -16,7 +16,7 @@ import (
 // (Full C ABI integration tests would also exercise vkb_push_audio /
 // vkb_poll_event end-to-end, but Go forbids `import "C"` in _test.go
 // files and the existing pipeline + anthropic streaming tests already
-// cover the goroutine + LLMDeltaCallback wiring.)
+// cover the goroutine + Listener wiring (EventLLMDelta).)
 func TestEvent_ChunkJSONEncoding(t *testing.T) {
 	cases := []struct {
 		ev   event

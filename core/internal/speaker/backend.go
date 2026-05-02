@@ -10,8 +10,9 @@ import (
 // of the embedding it produces.
 //
 // Different backends bundle different speaker encoders and separators into
-// the combined TSE ONNX, but they all conform to the TSEExtractor interface
-// — so the pipeline is backend-agnostic. Adding a backend is a matter of
+// the combined TSE ONNX, but they all conform to the audio.Stage interface
+// (and the TSEExtractor alias) — so the pipeline is backend-agnostic.
+// Adding a backend is a matter of
 // writing the export script and registering a new Backend value here.
 type Backend struct {
 	// Name is the identifier surfaced in flags, logs, and config.

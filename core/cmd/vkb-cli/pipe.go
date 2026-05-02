@@ -328,7 +328,10 @@ func runOneLive(ctx context.Context, cancel context.CancelFunc, p *pipeline.Pipe
 }
 
 // runPipeLoop: --persistent mode. Reuses the same pipeline (and thus
-// the warm Whisper model) across utterances.
+// the warm Whisper model) across utterances. When recording is enabled
+// (--record-dir), every utterance's audio appends to the same per-stage
+// WAVs and every transcript overwrites the previous one — the session
+// captures one continuous concatenated artefact, not per-utterance files.
 //
 //   - First Enter: start capture.
 //   - Second Enter: stop capture, run inference, print result.

@@ -43,6 +43,12 @@ type Result struct {
 // fixed Chunker between them. The composer is responsible for sample-rate
 // alignment between adjacent stages (no graph-time validation).
 type Pipeline struct {
+	// FrameStages run on each pushed buffer (continuous stream). The last
+	// stage's output goes into the Chunker. If a non-terminal FrameStage
+	// implements audio.Flusher, its residual at end-of-input is dropped —
+	// only the terminal stage's residual is flushed into the chunker. For
+	// today's [denoise → decimate] composition this is moot since denoise
+	// is the only Flusher and the residual is small (<10ms).
 	FrameStages []audio.Stage
 	ChunkStages []audio.Stage
 
@@ -378,6 +384,11 @@ func (p *Pipeline) Close() error {
 			if err := c.Close(); err != nil && firstErr == nil {
 				firstErr = err
 			}
+		}
+	}
+	if p.Recorder != nil {
+		if err := p.Recorder.Close(); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
 	if p.Transcriber != nil {
