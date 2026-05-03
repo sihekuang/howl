@@ -42,6 +42,15 @@ type Config struct {
 	TSEThreshold *float32 `json:"tse_threshold,omitempty"`
 }
 
+// TSEThresholdValue returns the configured TSE threshold or 0 if unset.
+// 0 disables gating; the SpeakerGate treats 0 as a no-op.
+func (c *Config) TSEThresholdValue() float32 {
+	if c == nil || c.TSEThreshold == nil {
+		return 0
+	}
+	return *c.TSEThreshold
+}
+
 func WithDefaults(c *Config) {
 	if c.WhisperModelSize == "" {
 		c.WhisperModelSize = "small"

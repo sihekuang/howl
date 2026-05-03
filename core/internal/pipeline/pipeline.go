@@ -343,8 +343,11 @@ func (p *Pipeline) emit(e Event) {
 // when speaker.json is absent (TSE off). Returns error only on partial
 // state (json present but embedding missing/corrupt).
 //
-// modelsDir holds the backend's ONNX files (resolved via backend.TSEPath).
-func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string) (audio.Stage, error) {
+// modelsDir holds the backend's ONNX files (resolved via backend.TSEPath
+// and backend.EncoderPath). threshold > 0 enables the post-extract
+// similarity gate (zeros out chunks whose extracted output doesn't sound
+// enough like the enrolled speaker).
+func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string, threshold float32) (audio.Stage, error) {
 	if backend == nil {
 		backend = speaker.Default
 	}
@@ -366,7 +369,16 @@ func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
 		return nil, fmt.Errorf("load tse: onnx runtime: %w", err)
 	}
-	tse, err := speaker.NewSpeakerGate(backend.TSEPath(modelsDir), ref)
+	opts := speaker.SpeakerGateOptions{
+		ModelPath: backend.TSEPath(modelsDir),
+		Reference: ref,
+		Threshold: threshold,
+	}
+	if threshold > 0 {
+		opts.EncoderPath = backend.EncoderPath(modelsDir)
+		opts.EncoderDim = backend.EmbeddingDim
+	}
+	tse, err := speaker.NewSpeakerGate(opts)
 	if err != nil {
 		return nil, fmt.Errorf("load tse: model: %w", err)
 	}

@@ -174,7 +174,10 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", beErr)
 			return 2
 		}
-		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib)
+		// vkb-cli leaves the post-extract similarity gate disabled (threshold=0);
+		// the libvkb engine wires presets/threshold through. CLI is for raw
+		// pipeline shape verification, not preset evaluation.
+		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
 			return 1

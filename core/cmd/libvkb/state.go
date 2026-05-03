@@ -183,6 +183,7 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 			e.cfg.TSEProfileDir,
 			modelsDir,
 			e.cfg.ONNXLibPath,
+			e.cfg.TSEThresholdValue(),
 		)
 		if tseErr != nil {
 			log.Printf("[vkb] buildPipeline: TSE load failed, continuing without TSE: %v", tseErr)
