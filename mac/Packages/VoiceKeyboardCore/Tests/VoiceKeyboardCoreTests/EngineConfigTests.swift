@@ -106,4 +106,27 @@ struct EngineConfigTests {
         #expect(decoded.speakerEncoderPath == "/m/enc.onnx")
         #expect(decoded.onnxLibPath == "/lib/libort.dylib")
     }
+
+    @Test func engineConfig_developerMode_jsonKeyIsSnakeCase() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            developerMode: true
+        )
+        let data = try JSONEncoder().encode(cfg)
+        let json = String(data: data, encoding: .utf8) ?? ""
+        #expect(json.contains("\"developer_mode\":true"))
+    }
+
+    @Test func engineConfig_developerMode_defaultsFalse() {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: []
+        )
+        #expect(cfg.developerMode == false)
+    }
 }
