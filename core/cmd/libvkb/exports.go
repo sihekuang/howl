@@ -233,8 +233,10 @@ func vkb_start_capture() C.int {
 			e.mu.Lock()
 			sessionID := e.activeSessionID
 			sessionDir := e.activeSessionDir
+			rec := e.activeRecorder
 			e.activeSessionID = ""
 			e.activeSessionDir = ""
+			e.activeRecorder = nil
 			e.pushCh = nil
 			e.cancel = nil
 			drops := e.dropCount
@@ -298,6 +300,15 @@ func vkb_start_capture() C.int {
 					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
 				} else {
 					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)
+				}
+			}
+
+			// Close the recorder so WAV writers patch the data_bytes
+			// header — without this, players see a header claiming 0
+			// bytes of audio even though the file has plenty.
+			if rec != nil {
+				if err := rec.Close(); err != nil {
+					log.Printf("[vkb] capture goroutine: recorder.Close failed: %v", err)
 				}
 			}
 
