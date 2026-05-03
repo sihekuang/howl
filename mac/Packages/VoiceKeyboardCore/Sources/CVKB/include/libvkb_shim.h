@@ -21,4 +21,9 @@ void vkb_free_string(char* s);
 
 int vkb_enroll_compute(const float* samples, int count, int sample_rate, const char* profile_dir);
 
+char* vkb_list_sessions(void);
+char* vkb_get_session(const char* id);
+int   vkb_delete_session(const char* id);
+int   vkb_clear_sessions(void);
+
 #endif

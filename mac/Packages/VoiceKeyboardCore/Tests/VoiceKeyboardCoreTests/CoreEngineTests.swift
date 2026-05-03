@@ -10,6 +10,10 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     var pushSampleCount = 0
     var stopCalls = 0
     var nextEvent: EngineEvent?
+    var stubSessionsListJSON: String? = "[]"
+    var stubSessionGetJSON: [String: String] = [:]
+    var stubSessionDeleteRC: Int32 = 0
+    var stubSessionsClearRC: Int32 = 0
 
     func configure(_ config: EngineConfig) async throws {
         configureCalls.append(config)
@@ -24,6 +28,11 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     func computeEnrollment(samples: [Float], sampleRate: Int, profileDir: String) async throws {}
     func lastError() -> String? { nil }
     func shutdown() {}
+
+    func sessionsListJSON() -> String? { stubSessionsListJSON }
+    func sessionGetJSON(_ id: String) -> String? { stubSessionGetJSON[id] }
+    func sessionDelete(_ id: String) -> Int32 { stubSessionDeleteRC }
+    func sessionsClear() -> Int32 { stubSessionsClearRC }
 }
 
 @Suite("CoreEngine protocol")
