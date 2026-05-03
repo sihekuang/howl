@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "name": "default",
+      "description": "Standard pipeline: denoise → decimate → TSE → Whisper → dict → LLM cleanup.",
+      "frame_stages": [
+        {"name": "denoise",   "enabled": true},
+        {"name": "decimate3", "enabled": true}
+      ],
+      "chunk_stages": [
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
+      ],
+      "transcribe": {"model_size": "small"},
+      "llm":        {"provider": "anthropic"}
+    },
+    {
+      "name": "minimal",
+      "description": "No denoise, no TSE — fastest, lowest quality. Useful baseline.",
+      "frame_stages": [
+        {"name": "denoise",   "enabled": false},
+        {"name": "decimate3", "enabled": true}
+      ],
+      "chunk_stages": [
+        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
+      ],
+      "transcribe": {"model_size": "small"},
+      "llm":        {"provider": "anthropic"}
+    },
+    {
+      "name": "aggressive",
+      "description": "Denoise + TSE + larger Whisper. Higher quality, more latency.",
+      "frame_stages": [
+        {"name": "denoise",   "enabled": true},
+        {"name": "decimate3", "enabled": true}
+      ],
+      "chunk_stages": [
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
+      ],
+      "transcribe": {"model_size": "base"},
+      "llm":        {"provider": "anthropic"}
+    },
+    {
+      "name": "paranoid",
+      "description": "Default + TSE threshold 0.7 (silences low-confidence chunks; resists hallucinations in noisy rooms).",
+      "frame_stages": [
+        {"name": "denoise",   "enabled": true},
+        {"name": "decimate3", "enabled": true}
+      ],
+      "chunk_stages": [
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.7}
+      ],
+      "transcribe": {"model_size": "small"},
+      "llm":        {"provider": "anthropic"}
+    }
+  ]
+}

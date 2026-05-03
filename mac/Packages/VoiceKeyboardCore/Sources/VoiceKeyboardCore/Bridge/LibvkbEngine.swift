@@ -146,6 +146,34 @@ public actor LibvkbEngine: CoreEngine {
         return vkb_clear_sessions()
     }
 
+    public func presetsListJSON() -> String? {
+        guard let cstr = vkb_list_presets() else { return nil }
+        defer { vkb_free_string(cstr) }
+        return String(cString: cstr)
+    }
+
+    public func presetGetJSON(_ name: String) -> String? {
+        return name.withCString { cn -> String? in
+            guard let cstr = vkb_get_preset(cn) else { return nil }
+            defer { vkb_free_string(cstr) }
+            return String(cString: cstr)
+        }
+    }
+
+    public func presetSaveJSON(name: String, description: String, body: String) -> Int32 {
+        return name.withCString { cn in
+            description.withCString { cd in
+                body.withCString { cb in
+                    vkb_save_preset(cn, cd, cb)
+                }
+            }
+        }
+    }
+
+    public func presetDelete(_ name: String) -> Int32 {
+        return name.withCString { cn in vkb_delete_preset(cn) }
+    }
+
     private nonisolated func readLastError() -> String? {
         guard let cstr = vkb_last_error() else { return nil }
         defer { vkb_free_string(cstr) }

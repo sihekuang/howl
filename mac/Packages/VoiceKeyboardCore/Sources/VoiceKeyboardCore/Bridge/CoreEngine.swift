@@ -68,4 +68,20 @@ public protocol CoreEngine: Sendable {
 
     /// Clears every session folder. Same return-code convention.
     func sessionsClear() async -> Int32
+
+    /// Returns the JSON array of presets (bundled + user) from libvkb,
+    /// or nil if the engine is not initialized.
+    func presetsListJSON() async -> String?
+
+    /// Returns the JSON-encoded Preset for the given name, or nil if
+    /// the preset doesn't exist.
+    func presetGetJSON(_ name: String) async -> String?
+
+    /// Persists a user preset. body is a JSON-encoded Preset.
+    /// Returns the C ABI return code (0 = ok, 5 = invalid/reserved name,
+    /// 6 = filesystem error, 2 = parse error).
+    func presetSaveJSON(name: String, description: String, body: String) async -> Int32
+
+    /// Removes a user preset. Idempotent. Returns the C ABI return code.
+    func presetDelete(_ name: String) async -> Int32
 }

@@ -14,6 +14,10 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     var stubSessionGetJSON: [String: String] = [:]
     var stubSessionDeleteRC: Int32 = 0
     var stubSessionsClearRC: Int32 = 0
+    var stubPresetsListJSON: String? = "[]"
+    var stubPresetGetJSON: [String: String] = [:]
+    var stubPresetSaveRC: Int32 = 0
+    var stubPresetDeleteRC: Int32 = 0
 
     func configure(_ config: EngineConfig) async throws {
         configureCalls.append(config)
@@ -33,6 +37,11 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     func sessionGetJSON(_ id: String) -> String? { stubSessionGetJSON[id] }
     func sessionDelete(_ id: String) -> Int32 { stubSessionDeleteRC }
     func sessionsClear() -> Int32 { stubSessionsClearRC }
+
+    func presetsListJSON() -> String? { stubPresetsListJSON }
+    func presetGetJSON(_ name: String) -> String? { stubPresetGetJSON[name] }
+    func presetSaveJSON(name: String, description: String, body: String) -> Int32 { stubPresetSaveRC }
+    func presetDelete(_ name: String) -> Int32 { stubPresetDeleteRC }
 }
 
 @Suite("CoreEngine protocol")

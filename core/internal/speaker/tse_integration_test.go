@@ -45,7 +45,7 @@ func TestTSE_ReducesInterfererRMS(t *testing.T) {
 	}
 
 	// ref is the enrollment embedding — use target as a stand-in for the test.
-	tse, err := NewSpeakerGate(modelPath, target)
+	tse, err := NewSpeakerGate(SpeakerGateOptions{ModelPath: modelPath, Reference: target})
 	if err != nil {
 		t.Fatalf("NewSpeakerGate: %v", err)
 	}

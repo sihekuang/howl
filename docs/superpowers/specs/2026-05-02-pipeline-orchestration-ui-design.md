@@ -114,6 +114,11 @@ const char* vkb_abi_version(void);                    // semver string e.g. "1.0
 
 All return JSON for the cgo bridge. Same ownership convention as `vkb_poll_event`: the library mallocs the returned string; the caller frees via `vkb_free`.
 
+> Errata (Slice 2): the Swift `SessionsClient` (and `PresetsClient`) wrappers
+> over these calls are `async`, not sync. `LibvkbEngine` is an `actor`, so the
+> cgo bridge can't be invoked synchronously from outside the actor. Earlier
+> drafts that implied a sync wrapper were a mistake.
+
 ## Component breakdown
 
 ### Developer mode toggle

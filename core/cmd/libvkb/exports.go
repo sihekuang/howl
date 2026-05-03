@@ -21,8 +21,44 @@ import (
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/presets"
+	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/sessions"
 )
+
+// openSessionRecorder constructs a recorder.Session for the next capture
+// cycle when DeveloperMode is on. Called from vkb_start_capture before
+// the capture goroutine is launched, so the engine is single-threaded
+// at this point and lock-free access to e.cfg / e.sessions is fine.
+// The capture goroutine's defer reads e.activeRecorder, writes the
+// manifest, then closes + nils it.
+//
+// All errors are non-fatal — capture proceeds without recording if the
+// session can't be opened. Returns the error only so tests can assert
+// on it; callers should log and continue.
+func openSessionRecorder(e *engine) error {
+	if !e.cfg.DeveloperMode || e.sessions == nil {
+		return nil
+	}
+	if err := e.sessions.Prune(10); err != nil {
+		log.Printf("[vkb] openSessionRecorder: prune failed (continuing): %v", err)
+	}
+	id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
+	dir := e.sessions.SessionDir(id)
+	rec, err := recorder.Open(recorder.Options{
+		Dir:         dir,
+		AudioStages: true,
+		Transcripts: true,
+	})
+	if err != nil {
+		log.Printf("[vkb] openSessionRecorder: recorder.Open failed (continuing without capture): %v", err)
+		return err
+	}
+	e.activeSessionID = id
+	e.activeSessionDir = dir
+	e.activeRecorder = rec
+	return nil
+}
 
 // Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
 // how the app was launched (stderr is invisible when launched from
@@ -130,6 +166,13 @@ func vkb_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancel := context.WithCancel(context.Background())
 	pipe := e.pipeline
+	// Open a per-capture session recorder under DeveloperMode. Errors are
+	// non-fatal; we proceed without recording in that case. Safe under
+	// e.mu — no concurrent reader can observe the engine in this state.
+	_ = openSessionRecorder(e)
+	if e.activeRecorder != nil {
+		pipe.Recorder = e.activeRecorder
+	}
 	e.pushCh = pushCh
 	e.cancel = cancel
 	e.dropCount = 0
@@ -191,44 +234,91 @@ func vkb_start_capture() C.int {
 			e.mu.Lock()
 			sessionID := e.activeSessionID
 			sessionDir := e.activeSessionDir
+			rec := e.activeRecorder
 			e.activeSessionID = ""
 			e.activeSessionDir = ""
+			e.activeRecorder = nil
 			e.pushCh = nil
 			e.cancel = nil
 			drops := e.dropCount
 			pushes := e.pushCount
 			e.dropCount = 0
 			e.pushCount = 0
-			tseEnabled := e.cfg.TSEEnabled // read in the same critical section as session metadata
 			e.mu.Unlock()
 
 			// Write session.json — best-effort. A missing manifest just makes
 			// the session invisible to the Inspector; the WAVs still exist on
 			// disk for ad-hoc inspection.
 			if sessionID != "" && sessionDir != "" {
+				// Build the stage list from the captured pipeline so a non-default
+				// preset (Slice 2) doesn't lie about which stages actually ran.
+				// Mirrors pipeline.registerRecorderStages's rate-tracking logic.
+				const inputRate = 48000
+				stages := make([]sessions.StageEntry, 0, len(pipe.FrameStages)+len(pipe.ChunkStages))
+				rate := inputRate
+				for _, st := range pipe.FrameStages {
+					r := rate
+					if out := st.OutputRate(); out != 0 {
+						r = out
+					}
+					stages = append(stages, sessions.StageEntry{
+						Name:   st.Name(),
+						Kind:   "frame",
+						WavRel: st.Name() + ".wav",
+						RateHz: r,
+					})
+					if out := st.OutputRate(); out != 0 {
+						rate = out
+					}
+				}
+				for _, st := range pipe.ChunkStages {
+					r := rate
+					if out := st.OutputRate(); out != 0 {
+						r = out
+					}
+					entry := sessions.StageEntry{
+						Name:   st.Name(),
+						Kind:   "chunk",
+						WavRel: st.Name() + ".wav",
+						RateHz: r,
+					}
+					// For TSE, attach the most recent cosine similarity so
+					// the Inspector can surface it without parsing events.
+					if st.Name() == "tse" {
+						if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
+							s := g.LastSimilarity()
+							entry.TSESimilarity = &s
+						}
+					}
+					stages = append(stages, entry)
+					if out := st.OutputRate(); out != 0 {
+						rate = out
+					}
+				}
+
 				m := sessions.Manifest{
 					Version:     sessions.CurrentManifestVersion,
 					ID:          sessionID,
 					Preset:      "default", // populated correctly once Slice 2 lands the presets package
 					DurationSec: 0,         // TODO: pipeline-side accounting in Slice 4 (replay needs precise duration)
-					Stages: []sessions.StageEntry{
-						{Name: "denoise", Kind: "frame", WavRel: "denoise.wav", RateHz: 48000},
-						{Name: "decimate3", Kind: "frame", WavRel: "decimate3.wav", RateHz: 16000},
-					},
+					Stages:      stages,
 					Transcripts: sessions.TranscriptEntries{
 						Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
 					},
-				}
-				// Add tse stage entry iff it was registered.
-				if tseEnabled {
-					m.Stages = append(m.Stages, sessions.StageEntry{
-						Name: "tse", Kind: "chunk", WavRel: "tse.wav", RateHz: 16000,
-					})
 				}
 				if err := m.Write(sessionDir); err != nil {
 					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
 				} else {
 					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)
+				}
+			}
+
+			// Close the recorder so WAV writers patch the data_bytes
+			// header — without this, players see a header claiming 0
+			// bytes of audio even though the file has plenty.
+			if rec != nil {
+				if err := rec.Close(); err != nil {
+					log.Printf("[vkb] capture goroutine: recorder.Close failed: %v", err)
 				}
 			}
 
@@ -620,4 +710,123 @@ const abiVersion = "1.0.0"
 //export vkb_abi_version
 func vkb_abi_version() *C.char {
 	return C.CString(abiVersion)
+}
+
+// vkb_list_presets returns a JSON array of presets (bundled + user).
+// Caller frees via vkb_free_string. Returns NULL on engine-not-init.
+//
+//export vkb_list_presets
+func vkb_list_presets() *C.char {
+	e := getEngine()
+	if e == nil {
+		return nil
+	}
+	all, err := presets.Load()
+	if err != nil {
+		e.setLastError("vkb_list_presets: " + err.Error())
+		return nil
+	}
+	if all == nil {
+		all = []presets.Preset{}
+	}
+	buf, err := json.Marshal(all)
+	if err != nil {
+		e.setLastError("vkb_list_presets: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_get_preset returns the JSON-encoded Preset for the given name,
+// or NULL if not found. Caller frees via vkb_free_string.
+//
+//export vkb_get_preset
+func vkb_get_preset(nameC *C.char) *C.char {
+	e := getEngine()
+	if e == nil {
+		return nil
+	}
+	if nameC == nil {
+		e.setLastError("vkb_get_preset: name is NULL")
+		return nil
+	}
+	name := C.GoString(nameC)
+	all, err := presets.Load()
+	if err != nil {
+		e.setLastError("vkb_get_preset: " + err.Error())
+		return nil
+	}
+	for _, p := range all {
+		if p.Name == name {
+			buf, err := json.Marshal(p)
+			if err != nil {
+				e.setLastError("vkb_get_preset: marshal: " + err.Error())
+				return nil
+			}
+			return C.CString(string(buf))
+		}
+	}
+	return nil
+}
+
+// vkb_save_preset persists a user preset. body is a JSON-encoded
+// Preset. Returns 0 on success, 1 if engine not initialized, 5 for
+// invalid/reserved name, 6 for filesystem error, 2 for JSON parse error.
+//
+// nameC + descriptionC overwrite the body's Name/Description so callers
+// constructing JSON from an EngineConfig don't have to mirror them.
+//
+//export vkb_save_preset
+func vkb_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if nameC == nil || bodyC == nil {
+		e.setLastError("vkb_save_preset: nil argument")
+		return 5
+	}
+	body := C.GoString(bodyC)
+	var p presets.Preset
+	if err := json.Unmarshal([]byte(body), &p); err != nil {
+		e.setLastError("vkb_save_preset: parse: " + err.Error())
+		return 2
+	}
+	p.Name = C.GoString(nameC)
+	if descriptionC != nil {
+		p.Description = C.GoString(descriptionC)
+	}
+	if err := presets.SaveUser(p); err != nil {
+		e.setLastError("vkb_save_preset: " + err.Error())
+		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
+			return 5
+		}
+		return 6
+	}
+	return 0
+}
+
+// vkb_delete_preset removes a user preset. Returns 0 on success
+// (idempotent), 1 if engine not init, 5 for invalid/reserved name,
+// 6 for filesystem error.
+//
+//export vkb_delete_preset
+func vkb_delete_preset(nameC *C.char) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if nameC == nil {
+		e.setLastError("vkb_delete_preset: name is NULL")
+		return 5
+	}
+	name := C.GoString(nameC)
+	if err := presets.DeleteUser(name); err != nil {
+		e.setLastError("vkb_delete_preset: " + err.Error())
+		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
+			return 5
+		}
+		return 6
+	}
+	return 0
 }
