@@ -36,6 +36,7 @@
 		A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */; };
 		AC4FDB35E31B0D9BBC97E6B7 /* StageDetailPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */; };
 		ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */; };
+		AE4B9E3BD833AFBE5AA9719D /* SessionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FD3D63EFED70E41C68EC4B /* SessionList.swift */; };
 		B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */; };
 		B4423022481804CA597F11D4 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F6485D9460F04878BB6B91 /* InspectorView.swift */; };
 		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
@@ -57,6 +58,7 @@
 /* Begin PBXFileReference section */
 		02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
 		088375E753FFBEF3194F73E6 /* PresetDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDraft.swift; sourceTree = "<group>"; };
+		09FD3D63EFED70E41C68EC4B /* SessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionList.swift; sourceTree = "<group>"; };
 		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
 		13FD3D07C12A94326240356A /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
 				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
 				FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */,
+				09FD3D63EFED70E41C68EC4B /* SessionList.swift */,
 				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 				F79C5E25016E8619AC316CFD /* SessionPreview.swift */,
 				C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */,
@@ -482,6 +485,7 @@
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
 				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
 				EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */,
+				AE4B9E3BD833AFBE5AA9719D /* SessionList.swift in Sources */,
 				CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */,
 				B94B7539DDA1680F9B9566B0 /* SessionPreview.swift in Sources */,
 				4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */,
