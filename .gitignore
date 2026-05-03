@@ -12,3 +12,6 @@ assets/icons/generated/
 .claude/*
 !.claude/skills/
 .idea/
+
+# superpowers brainstorming session state (per-session mockups + server info)
+.superpowers/

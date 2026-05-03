@@ -252,11 +252,24 @@ targets:
           # at launch with "code or signature have been modified".
           # Use $EXPANDED_CODE_SIGN_IDENTITY when available, else ad-hoc.
           IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+          SIGN_FLAGS=(--force --sign "$IDENTITY")
+          # Hardened runtime is required for notarization. Add it whenever
+          # signing with a real identity; ad-hoc local builds skip it
+          # (matches the historic local-dev fast path).
+          if [ "$IDENTITY" != "-" ]; then
+            SIGN_FLAGS+=(--options runtime)
+          fi
+          # Timestamping requires a network round-trip to timestamp.apple.com
+          # (~5s per dylib). Only enable in CI when we're producing a
+          # notarizable build — keeps local Apple Development builds snappy.
+          if [ -n "${CI_TIMESTAMP_SIGN:-}" ]; then
+            SIGN_FLAGS+=(--timestamp)
+          fi
           while IFS= read -r src; do
-            codesign --force --sign "$IDENTITY" "$DST/$(basename "$src")"
+            codesign "${SIGN_FLAGS[@]}" "$DST/$(basename "$src")"
           done < "$SEEN"
-          codesign --force --sign "$IDENTITY" "$DST/libvkb.dylib"
-          codesign --force --sign "$IDENTITY" "$DST/libdf.dylib"
+          codesign "${SIGN_FLAGS[@]}" "$DST/libvkb.dylib"
+          codesign "${SIGN_FLAGS[@]}" "$DST/libdf.dylib"
 
           # Mark the bundle as up-to-date so the next warm build can skip.
           touch "$SENTINEL"
