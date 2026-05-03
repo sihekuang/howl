@@ -47,9 +47,9 @@ struct InspectorView: View {
     private var sessionBar: some View {
         HStack(spacing: 8) {
             Text("Session:").foregroundStyle(.secondary).font(.callout)
-            Picker("", selection: Binding(
+            Picker("Session", selection: Binding(
                 get: { selectedID ?? sessionList.first?.id ?? "" },
-                set: { selectedID = $0 }
+                set: { if !$0.isEmpty { selectedID = $0 } }
             )) {
                 if sessionList.isEmpty {
                     Text("(none)").tag("")
@@ -168,6 +168,9 @@ struct InspectorView: View {
     private func clearAll() async {
         do {
             try await sessions.clear()
+            await MainActor.run {
+                selectedID = nil
+            }
             await refresh()
         } catch {
             await MainActor.run {
