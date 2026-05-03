@@ -80,6 +80,43 @@ func TestPreset_ParanoidPresetTSEThresholdIs07(t *testing.T) {
 	t.Error("paranoid preset missing")
 }
 
+func TestPreset_DefaultPresetHasTimeoutSec10(t *testing.T) {
+	all, _ := loadBundled()
+	for _, p := range all {
+		if p.Name != "default" {
+			continue
+		}
+		if p.TimeoutSec == nil || *p.TimeoutSec != 10 {
+			t.Errorf("default preset's timeout_sec = %v, want 10", p.TimeoutSec)
+		}
+		return
+	}
+	t.Error("default preset missing")
+}
+
+func TestPreset_TimeoutSecRoundTrips(t *testing.T) {
+	timeout := 7
+	in := Preset{
+		Name: "custom", Description: "x",
+		FrameStages: []StageSpec{},
+		ChunkStages: []StageSpec{},
+		Transcribe:  TranscribeSpec{ModelSize: "small"},
+		LLM:         LLMSpec{Provider: "anthropic"},
+		TimeoutSec:  &timeout,
+	}
+	buf, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out Preset
+	if err := json.Unmarshal(buf, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.TimeoutSec == nil || *out.TimeoutSec != 7 {
+		t.Errorf("TimeoutSec = %v, want 7", out.TimeoutSec)
+	}
+}
+
 func TestPreset_JSONRoundTrip(t *testing.T) {
 	thr := float32(0.5)
 	in := Preset{

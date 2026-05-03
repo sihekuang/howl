@@ -35,6 +35,9 @@ type Preset struct {
 	ChunkStages []StageSpec    `json:"chunk_stages"`
 	Transcribe  TranscribeSpec `json:"transcribe"`
 	LLM         LLMSpec        `json:"llm"`
+	// TimeoutSec is the per-preset pipeline timeout in seconds.
+	// Pointer so 0 (disable timeout) differs from "not set".
+	TimeoutSec *int `json:"timeout_sec,omitempty"`
 }
 
 // StageSpec is a per-stage entry inside a preset. Threshold is a
