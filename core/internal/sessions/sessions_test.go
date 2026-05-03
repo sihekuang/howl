@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -227,5 +228,107 @@ func TestStore_Prune_BelowKeep_NoOp(t *testing.T) {
 	got, _ := s.List()
 	if len(got) != 1 {
 		t.Errorf("len = %d, want 1 (Prune below threshold should be no-op)", len(got))
+	}
+}
+
+func TestStore_Prune_KeepZero_NoOp(t *testing.T) {
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:00Z", "default")
+	s := NewStore(base)
+	if err := s.Prune(0); err != nil {
+		t.Fatalf("Prune(0): %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 1 {
+		t.Errorf("Prune(0) must be no-op; len = %d", len(got))
+	}
+}
+
+func TestStore_Prune_NegativeKeep_NoOp(t *testing.T) {
+	// Defensive: a buggy caller passing a negative keep must not wipe sessions.
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:00Z", "default")
+	s := NewStore(base)
+	if err := s.Prune(-1); err != nil {
+		t.Fatalf("Prune(-1): %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 1 {
+		t.Errorf("Prune(-1) must be no-op; len = %d", len(got))
+	}
+}
+
+func TestStore_Prune_KeepEqualsLen_NoOp(t *testing.T) {
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:00Z", "default")
+	writeFakeSession(t, base, "2026-05-02T14:31:00Z", "default")
+	s := NewStore(base)
+	if err := s.Prune(2); err != nil {
+		t.Fatalf("Prune(2): %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 2 {
+		t.Errorf("Prune(keep == len) must be no-op; len = %d", len(got))
+	}
+}
+
+func TestStore_Prune_KeepOne_KeepsNewest(t *testing.T) {
+	base := t.TempDir()
+	for _, id := range []string{
+		"2026-05-02T14:28:00Z",
+		"2026-05-02T14:29:00Z",
+		"2026-05-02T14:30:00Z",
+	} {
+		writeFakeSession(t, base, id, "default")
+	}
+	s := NewStore(base)
+	if err := s.Prune(1); err != nil {
+		t.Fatalf("Prune(1): %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 1 {
+		t.Fatalf("len after Prune(1) = %d, want 1", len(got))
+	}
+	if got[0].ID != "2026-05-02T14:30:00Z" {
+		t.Errorf("survivor = %q, want newest %q", got[0].ID, "2026-05-02T14:30:00Z")
+	}
+}
+
+func TestStore_Clear_PreservesNonDirEntries(t *testing.T) {
+	// Clear must skip non-directory entries — a stray .gitkeep, README,
+	// or symlink in the base must survive (they aren't sessions).
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:00Z", "default")
+	sentinel := filepath.Join(base, ".gitkeep")
+	if err := os.WriteFile(sentinel, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewStore(base).Clear(); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Errorf(".gitkeep should survive Clear, got: %v", err)
+	}
+}
+
+func TestStore_Delete_InvalidID_WrapsSentinel(t *testing.T) {
+	s := NewStore(t.TempDir())
+	err := s.Delete("../escape")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrInvalidSessionID) {
+		t.Errorf("err = %v, want errors.Is(_, ErrInvalidSessionID)", err)
+	}
+}
+
+func TestStore_Get_InvalidID_WrapsSentinel(t *testing.T) {
+	s := NewStore(t.TempDir())
+	_, err := s.Get("foo/bar")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrInvalidSessionID) {
+		t.Errorf("err = %v, want errors.Is(_, ErrInvalidSessionID)", err)
 	}
 }

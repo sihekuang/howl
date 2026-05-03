@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+// ErrInvalidSessionID is returned (wrapped) by Get and Delete when the
+// caller-supplied id fails validSessionID's whitelist. Callers (notably
+// the C ABI in cmd/libvkb) check errors.Is(err, ErrInvalidSessionID) to
+// distinguish bad input (caller's fault) from filesystem failures.
+var ErrInvalidSessionID = errors.New("sessions: invalid session id")
+
 // Store owns the on-disk session folder layout under a base directory
 // (typically /tmp/voicekeyboard/sessions/). All operations are safe to
 // call when base does not exist — they treat that as "no sessions".
@@ -71,7 +77,7 @@ func (s *Store) List() ([]Manifest, error) {
 // the session does not exist or its manifest is unreadable.
 func (s *Store) Get(id string) (*Manifest, error) {
 	if !validSessionID(id) {
-		return nil, fmt.Errorf("sessions: invalid id %q", id)
+		return nil, fmt.Errorf("%w: %q", ErrInvalidSessionID, id)
 	}
 	return Read(s.SessionDir(id))
 }
@@ -82,7 +88,7 @@ func (s *Store) Get(id string) (*Manifest, error) {
 // trust caller input.
 func (s *Store) Delete(id string) error {
 	if !validSessionID(id) {
-		return fmt.Errorf("sessions: invalid id %q", id)
+		return fmt.Errorf("%w: %q", ErrInvalidSessionID, id)
 	}
 	dir := filepath.Join(s.base, id)
 	err := os.RemoveAll(dir)
