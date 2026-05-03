@@ -15,12 +15,13 @@ public final class EngineCoordinator {
         self.composition = composition
     }
 
-    /// Best-effort warmup of the active Ollama model at app start. No-op
-    /// if the active provider isn't Ollama or no model is selected. Runs
-    /// in the background — we don't await the result here because the
-    /// load can take 5–15 s and we don't want to block coordinator
-    /// startup. Errors are silent; the next real Clean call surfaces
-    /// any persistent problem with a clearer message.
+    /// Best-effort warmup of the active Ollama model. No-op if the
+    /// active provider isn't Ollama or no model is selected. The actual
+    /// load runs in a detached task so this returns immediately — safe
+    /// to call from the hotkey hot path. Errors are silent; the next
+    /// real Clean call surfaces any persistent problem with a clearer
+    /// message. Called at app start and again on each press, since
+    /// Ollama's default keep_alive evicts the model after 5 min idle.
     private func prewarmOllamaIfActive() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
         guard settings.llmProvider == "ollama", !settings.llmModel.isEmpty else { return }
@@ -193,6 +194,10 @@ public final class EngineCoordinator {
             setTransientWarning("No microphone available — connect one and try again.")
             return
         }
+        // Kick off Ollama warmup in parallel with capture so a model
+        // that got evicted while idle is back in memory by the time
+        // Whisper hands the transcript to the LLM.
+        await prewarmOllamaIfActive()
         cueSound.playListening()
         composition.appState.engineState = .recording
         composition.overlay.show()

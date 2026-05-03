@@ -1,41 +1,43 @@
 import SwiftUI
 import AppKit
 
-// Reusable building blocks for Settings, ported from the OLED-saver
-// project so the two apps' settings UIs feel like one design family.
-// SettingsSection groups related controls into a labelled card;
-// VisualEffectBackground is the translucent sidebar/window backing
-// macOS uses on its own preference panes.
+// Reusable building blocks for Settings. Each page wraps its body in
+// `SettingsPane { … }` so spacing/padding stays consistent across the
+// six tabs; `SettingsGroupHeader` labels a logical cluster of controls
+// without the chrome of a Form Section. `VisualEffectBackground` is
+// the translucent sidebar/window backing macOS uses on its own
+// preference panes.
 
-/// A labelled card grouping a set of settings controls. Used inside
-/// each settings page's detail panel.
-struct SettingsSection<Content: View>: View {
-    let title: String
+/// Standard layout container for a Settings page. All six pages wrap
+/// their body in this so spacing, alignment, and outer padding stay
+/// consistent. Use `Divider()` between logical groups inside the
+/// container, and `SettingsGroupHeader` to label them.
+struct SettingsPane<Content: View>: View {
     let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
+    init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                content
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quinary)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.06), lineWidth: 0.5)
-            )
+            content
         }
+        .padding()
+    }
+}
+
+/// Subtle group label — `.callout` weight on `.secondary` foreground.
+/// Sits above a related cluster of controls. Use it inside
+/// `SettingsPane` to give the cluster a name without the chrome of a
+/// `Form` `Section` header.
+struct SettingsGroupHeader: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title).font(.callout).foregroundStyle(.secondary)
     }
 }
 

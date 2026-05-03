@@ -31,6 +31,12 @@ LLM_BASE_URL="${LLM_BASE_URL:-}"
 # models / enrollment aren't aligned with the active backend.
 SPEAKER="${SPEAKER:-1}"
 
+# Per-stage WAV + transcript dump. When set, vkb-cli writes one WAV per
+# pipeline stage (denoise.wav, decimate.wav, tse.wav) plus raw.txt /
+# dict.txt / cleaned.txt under this directory. Empty → no recording.
+# Example: RECORD_DIR=/tmp/tse-debug ./run-speaker.sh
+RECORD_DIR="${RECORD_DIR:-}"
+
 if [ -f "$SCRIPT_DIR/.env" ]; then
   set -a; . "$SCRIPT_DIR/.env"; set +a
 fi
@@ -57,6 +63,12 @@ if [[ "$SPEAKER" == "1" ]]; then
   SPEAKER_ARGS+=(--speaker --tse-backend "$TSE_BACKEND")
 fi
 
+RECORD_ARGS=()
+if [[ -n "$RECORD_DIR" ]]; then
+  mkdir -p "$RECORD_DIR"
+  RECORD_ARGS+=(--record audio,transcripts --record-dir "$RECORD_DIR")
+fi
+
 ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
 VKB_PROFILE_DIR="$PROFILE_DIR" \
 VKB_MODELS_DIR="$MODELS_DIR" \
@@ -65,6 +77,7 @@ VKB_MODELS_DIR="$MODELS_DIR" \
   --live \
   --latency-report \
   ${SPEAKER_ARGS[@]+"${SPEAKER_ARGS[@]}"} \
+  ${RECORD_ARGS[@]+"${RECORD_ARGS[@]}"} \
   ${LLM_PROVIDER:+--llm-provider "$LLM_PROVIDER"} \
   ${LLM_MODEL:+--llm-model "$LLM_MODEL"} \
   ${LLM_BASE_URL:+--llm-base-url "$LLM_BASE_URL"} \
@@ -79,6 +92,9 @@ else
 fi
 echo ""
 echo "🎙  Recording ($TSE_LINE, LLM provider=${LLM_PROVIDER:-default}, model=${LLM_MODEL:-default}) — press any key to stop, 'q' to cancel."
+if [[ -n "$RECORD_DIR" ]]; then
+  echo "    dumping per-stage WAVs + transcripts to: $RECORD_DIR"
+fi
 echo ""
 
 while IFS= read -rsn1 key; do

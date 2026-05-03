@@ -11,8 +11,8 @@ import VoiceKeyboardCore
 struct MenuBarMenu: View {
     let appState: AppState
     let hotkey: String
+    let openSettings: () -> Void
     let quit: () -> Void
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         // Status as a disabled Button — renders as a greyed informational
@@ -30,8 +30,7 @@ struct MenuBarMenu: View {
         Divider()
 
         Button("Settings…") {
-            openWindow(id: "settings")
-            NSApp.activate(ignoringOtherApps: true)
+            openSettings()
         }
         .keyboardShortcut(",", modifiers: [.command])
 

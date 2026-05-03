@@ -22,23 +22,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
         }
+        // Hide the dock icon again when the user closes the settings
+        // window. We flip to .regular in showSettingsWindow so the
+        // window can become key + appear in Cmd-Tab; reverting here
+        // restores the menu-bar-only presence. Selector-based observer
+        // (rather than the closure-based API) keeps us on AppDelegate's
+        // implicit MainActor isolation, sidestepping Swift 6
+        // non-Sendable Notification warnings.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsWindowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
         Task { @MainActor in
             await self.evaluateSetup()
-            self.openSettingsWindow()
+            self.showSettingsWindow()
         }
     }
 
-    private func openSettingsWindow() {
-        // Use the SwiftUI openWindow bridge when available (registered by
-        // VoiceKeyboardApp once the MenuBarExtra label appears at launch).
-        // This reliably realizes the Window scene even on first run when
-        // no saved window state exists.
+    @objc private func settingsWindowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window.identifier?.rawValue == "settings" else { return }
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Realize the Settings window, bring it to the front, and surface a
+    /// dock icon while it's open. Safe to call from any path — launch,
+    /// menu-bar Settings click, or first-run completion. The dock icon
+    /// is hidden again by the willClose observer in
+    /// applicationDidFinishLaunching.
+    func showSettingsWindow() {
+        // .regular makes the dock icon appear AND lets NSApp.activate
+        // actually pull the app to the front; on .accessory apps
+        // activate is a no-op, which is why a bare openWindow() from
+        // the menu bar didn't reliably surface an existing window.
+        NSApp.setActivationPolicy(.regular)
+
         if let bridge = openWindowBridge {
             bridge("settings")
         } else if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
             window.makeKeyAndOrderFront(nil)
         } else {
-            log.error("openSettingsWindow: no bridge and window not realized")
+            log.error("showSettingsWindow: no bridge and window not realized")
             return
         }
         // Bring the window to the front when invoked, but don't pin it
@@ -49,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) else { return }
             window.level = .normal
             window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+            if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
