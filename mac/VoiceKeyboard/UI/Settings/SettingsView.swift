@@ -225,7 +225,9 @@ private struct DetailView: View {
             PlaygroundTab(
                 appState: composition.appState,
                 hotkey: settings.hotkey,
-                coordinator: composition.coordinator
+                coordinator: composition.coordinator,
+                developerMode: settings.developerMode,
+                sessions: LibVKBSessionsClient(engine: composition.engine)
             )
         case .pipeline:
             PipelineTab(
