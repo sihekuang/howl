@@ -35,6 +35,11 @@ type Config struct {
 	TSEModelPath       string `json:"tse_model_path"`
 	SpeakerEncoderPath string `json:"speaker_encoder_path"`
 	ONNXLibPath        string `json:"onnx_lib_path"`
+	// TSEThreshold is the cosine-similarity threshold below which the
+	// SpeakerGate gates its output to zeros (silences a chunk that
+	// doesn't sound enough like the enrolled speaker). nil or 0.0
+	// disables the gate entirely (current default behavior).
+	TSEThreshold *float32 `json:"tse_threshold,omitempty"`
 }
 
 func WithDefaults(c *Config) {
