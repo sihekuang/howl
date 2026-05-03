@@ -543,6 +543,10 @@ func vkb_get_session(idC *C.char) *C.char {
 	if e == nil || e.sessions == nil {
 		return nil
 	}
+	if idC == nil {
+		e.setLastError("vkb_get_session: id is NULL")
+		return nil
+	}
 	id := C.GoString(idC)
 	m, err := e.sessions.Get(id)
 	if err != nil {
@@ -566,6 +570,10 @@ func vkb_delete_session(idC *C.char) C.int {
 	e := getEngine()
 	if e == nil || e.sessions == nil {
 		return 1
+	}
+	if idC == nil {
+		e.setLastError("vkb_delete_session: id is NULL")
+		return 5
 	}
 	id := C.GoString(idC)
 	if err := e.sessions.Delete(id); err != nil {

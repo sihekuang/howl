@@ -34,7 +34,7 @@ func writeSessionFolder(t *testing.T, base, id string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	m := sessions.Manifest{Version: 1, ID: id, Preset: "default"}
+	m := sessions.Manifest{Version: sessions.CurrentManifestVersion, ID: id, Preset: "default"}
 	if err := m.Write(dir); err != nil {
 		t.Fatal(err)
 	}
