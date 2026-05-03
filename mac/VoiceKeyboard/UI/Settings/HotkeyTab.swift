@@ -22,34 +22,30 @@ struct HotkeyTab: View {
     @State private var micGranted = false
 
     var body: some View {
-        Form {
-            LabeledContent("Accessibility") {
-                HStack(spacing: 8) {
-                    Image(systemName: isTrusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(isTrusted ? .green : .orange)
-                    Text(isTrusted ? "Granted" : "Required for paste injection")
-                        .font(.caption)
-                    Spacer()
-                    Button("Open…") { permissions.openSystemSettings() }
-                }
-            }
-            LabeledContent("Microphone") {
-                HStack(spacing: 8) {
-                    Image(systemName: micGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(micGranted ? .green : .orange)
-                    Text(micGranted ? "Granted" : "Required to record audio")
-                        .font(.caption)
-                    Spacer()
-                    Button("Open…") { audioCapture.openSystemSettings() }
-                }
-            }
-            Section {
-                Text("After granting Accessibility — or after rebuilding the app — toggle the switch **off then on** so macOS picks up the new binary. Standard hotkeys (key + modifiers) work without any permission, but paste injection still needs Accessibility.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        SettingsPane {
+            permissionRow(
+                label: "Accessibility",
+                granted: isTrusted,
+                grantedText: "Granted",
+                missingText: "Required for paste injection",
+                onOpen: { permissions.openSystemSettings() }
+            )
+            permissionRow(
+                label: "Microphone",
+                granted: micGranted,
+                grantedText: "Granted",
+                missingText: "Required to record audio",
+                onOpen: { audioCapture.openSystemSettings() }
+            )
+            Text("After granting Accessibility — or after rebuilding the app — toggle the switch **off then on** so macOS picks up the new binary. Standard hotkeys (key + modifiers) work without any permission, but paste injection still needs Accessibility.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-            LabeledContent("Push-to-talk") {
+            Divider()
+
+            HStack {
+                Text("Push-to-talk")
+                Spacer()
                 Button {
                     isRecording.toggle()
                     lastSeen = nil
@@ -98,26 +94,23 @@ struct HotkeyTab: View {
             }
 
             if !conflicts.isEmpty {
-                Section {
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("This shortcut conflicts with macOS").bold()
-                            ForEach(conflicts, id: \.id) { c in
-                                Text("• \(c.name)").font(.caption)
-                            }
-                            Text("macOS will intercept the keypress before VoiceKeyboard sees it. Disable the conflicting shortcut in System Settings → Keyboard → Keyboard Shortcuts, or pick a different binding above.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                Divider()
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This shortcut conflicts with macOS").bold()
+                        ForEach(conflicts, id: \.id) { c in
+                            Text("• \(c.name)").font(.caption)
                         }
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        Text("macOS will intercept the keypress before VoiceKeyboard sees it. Disable the conflicting shortcut in System Settings → Keyboard → Keyboard Shortcuts, or pick a different binding above.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
                 }
             }
         }
-        .formStyle(.grouped)
-        .padding()
         .task {
             refreshConflicts()
             isTrusted = permissions.isTrusted()
@@ -131,6 +124,29 @@ struct HotkeyTab: View {
 
     private func refreshConflicts() {
         conflicts = conflictChecker.conflicts(for: settings.hotkey)
+    }
+
+    /// One label-aligned permission row (Accessibility / Microphone) with
+    /// status icon, status text, and an Open… button. Replaces the
+    /// previous LabeledContent rows which only laid out cleanly inside
+    /// a `Form { … }.formStyle(.grouped)` container.
+    @ViewBuilder
+    private func permissionRow(
+        label: String,
+        granted: Bool,
+        grantedText: String,
+        missingText: String,
+        onOpen: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(granted ? .green : .orange)
+            Text(granted ? grantedText : missingText)
+                .font(.caption)
+            Spacer()
+            Button("Open…", action: onOpen)
+        }
     }
 }
 

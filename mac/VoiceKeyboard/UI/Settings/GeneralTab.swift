@@ -26,7 +26,7 @@ struct GeneralTab: View {
     private let languages = ["auto", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
 
     var body: some View {
-        Form {
+        SettingsPane {
             Picker("Microphone", selection: micBinding) {
                 Text("System Default").tag("")
                 ForEach(devices) { dev in
@@ -66,7 +66,6 @@ struct GeneralTab: View {
                 }
             ))
         }
-        .formStyle(.grouped)
         .onChange(of: settings) { _, new in onSave(new) }
         .task {
             devices = audioCapture.availableInputDevices()
@@ -81,7 +80,6 @@ struct GeneralTab: View {
             modelStatusTick += 1
             launchAtLoginEnabled = LaunchAtLogin.isEnabled
         }
-        .padding()
     }
 
     @ViewBuilder

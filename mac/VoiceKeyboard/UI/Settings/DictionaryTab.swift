@@ -53,7 +53,7 @@ struct DictionaryTab: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        SettingsPane {
             presetSection
             Divider()
             HStack {
@@ -76,7 +76,6 @@ struct DictionaryTab: View {
             Divider()
             manageSection
         }
-        .padding()
         .confirmationDialog(
             "Clear all \(settings.customDict.count) term\(settings.customDict.count == 1 ? "" : "s")?",
             isPresented: $confirmingClear,
@@ -103,7 +102,7 @@ struct DictionaryTab: View {
     @ViewBuilder
     private var presetSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Quick add from preset").font(.callout).foregroundStyle(.secondary)
+            SettingsGroupHeader("Quick add from preset")
             HStack {
                 Picker("", selection: $selectedPackID) {
                     ForEach(OccupationPacks.all) { pack in

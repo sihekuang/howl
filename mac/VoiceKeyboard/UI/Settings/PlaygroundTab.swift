@@ -14,7 +14,7 @@ struct PlaygroundTab: View {
     @State private var scratch: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        SettingsPane {
             statusBanner
 
             Text("Click into the box below, then hold \(Text(hotkey.displayString).font(.system(.body, design: .monospaced).bold())) and speak. Release to transcribe — the cleaned text appears here.")
@@ -68,7 +68,6 @@ struct PlaygroundTab: View {
                     .disabled(scratch.isEmpty)
             }
         }
-        .padding()
     }
 
     @ViewBuilder

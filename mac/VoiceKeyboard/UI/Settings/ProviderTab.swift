@@ -38,7 +38,7 @@ struct ProviderTab: View {
     }
 
     var body: some View {
-        Form {
+        SettingsPane {
             Picker("Provider", selection: Binding(
                 get: { settings.llmProvider },
                 set: { newProvider in
@@ -59,10 +59,10 @@ struct ProviderTab: View {
                 }
             }
 
+            Divider()
+
             activeSection
         }
-        .formStyle(.grouped)
-        .padding()
         .onChange(of: settings) { _, new in onSave(new) }
     }
 

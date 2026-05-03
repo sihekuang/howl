@@ -11,43 +11,40 @@ struct VoiceTab: View {
     @State private var sheetPresented = false
 
     var body: some View {
-        Form {
-            Section("Voice models") {
-                modelStatusRow(label: "Voice extraction model",
-                               url: ModelPaths.tseModel)
-                modelStatusRow(label: "Speaker encoder",
-                               url: ModelPaths.speakerEncoder)
-                if !modelsPresent {
-                    Text(modelInstructions)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        SettingsPane {
+            SettingsGroupHeader("Voice models")
+            modelStatusRow(label: "Voice extraction model",
+                           url: ModelPaths.tseModel)
+            modelStatusRow(label: "Speaker encoder",
+                           url: ModelPaths.speakerEncoder)
+            if !modelsPresent {
+                Text(modelInstructions)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            SettingsGroupHeader("Voice profile")
+            profileStatusRow
+            HStack {
+                Button(profilePresent ? "Re-record" : "Record Voice Sample") {
+                    sheetPresented = true
+                }
+                .disabled(!modelsPresent)
+                if profilePresent {
+                    Button(role: .destructive) { deleteProfile() } label: { Text("Delete") }
                 }
             }
 
-            Section("Voice profile") {
-                profileStatusRow
-                HStack {
-                    Button(profilePresent ? "Re-record" : "Record Voice Sample") {
-                        sheetPresented = true
-                    }
-                    .disabled(!modelsPresent)
-                    if profilePresent {
-                        Button(role: .destructive) { deleteProfile() } label: { Text("Delete") }
-                    }
-                }
-            }
+            Divider()
 
-            Section {
-                Toggle("Filter out background speakers (TSE)",
-                       isOn: tseToggleBinding)
-                    .disabled(!modelsPresent || !profilePresent)
-            } footer: {
-                Text("Uses your voice profile to suppress other speakers in the same recording.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Toggle("Filter out background speakers (TSE)",
+                   isOn: tseToggleBinding)
+                .disabled(!modelsPresent || !profilePresent)
+            Text("Uses your voice profile to suppress other speakers in the same recording.")
+                .font(.caption).foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
-        .padding()
         .sheet(isPresented: $sheetPresented) {
             EnrollmentSheet(
                 audioCapture: audioCapture,
