@@ -140,7 +140,16 @@ func Load() ([]Preset, error) {
 
 // defaultUserDir returns the on-disk location for user presets. Creates
 // it if missing so the first save succeeds.
+//
+// Honors VKB_PRESETS_USER_DIR for tests so they can route writes away
+// from the real ~/Library location.
 func defaultUserDir() (string, error) {
+	if dir := os.Getenv("VKB_PRESETS_USER_DIR"); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+		return dir, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

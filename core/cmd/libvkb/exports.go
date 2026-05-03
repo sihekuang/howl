@@ -21,6 +21,7 @@ import (
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/presets"
 	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/sessions"
 )
@@ -700,4 +701,123 @@ const abiVersion = "1.0.0"
 //export vkb_abi_version
 func vkb_abi_version() *C.char {
 	return C.CString(abiVersion)
+}
+
+// vkb_list_presets returns a JSON array of presets (bundled + user).
+// Caller frees via vkb_free_string. Returns NULL on engine-not-init.
+//
+//export vkb_list_presets
+func vkb_list_presets() *C.char {
+	e := getEngine()
+	if e == nil {
+		return nil
+	}
+	all, err := presets.Load()
+	if err != nil {
+		e.setLastError("vkb_list_presets: " + err.Error())
+		return nil
+	}
+	if all == nil {
+		all = []presets.Preset{}
+	}
+	buf, err := json.Marshal(all)
+	if err != nil {
+		e.setLastError("vkb_list_presets: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_get_preset returns the JSON-encoded Preset for the given name,
+// or NULL if not found. Caller frees via vkb_free_string.
+//
+//export vkb_get_preset
+func vkb_get_preset(nameC *C.char) *C.char {
+	e := getEngine()
+	if e == nil {
+		return nil
+	}
+	if nameC == nil {
+		e.setLastError("vkb_get_preset: name is NULL")
+		return nil
+	}
+	name := C.GoString(nameC)
+	all, err := presets.Load()
+	if err != nil {
+		e.setLastError("vkb_get_preset: " + err.Error())
+		return nil
+	}
+	for _, p := range all {
+		if p.Name == name {
+			buf, err := json.Marshal(p)
+			if err != nil {
+				e.setLastError("vkb_get_preset: marshal: " + err.Error())
+				return nil
+			}
+			return C.CString(string(buf))
+		}
+	}
+	return nil
+}
+
+// vkb_save_preset persists a user preset. body is a JSON-encoded
+// Preset. Returns 0 on success, 1 if engine not initialized, 5 for
+// invalid/reserved name, 6 for filesystem error, 2 for JSON parse error.
+//
+// nameC + descriptionC overwrite the body's Name/Description so callers
+// constructing JSON from an EngineConfig don't have to mirror them.
+//
+//export vkb_save_preset
+func vkb_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if nameC == nil || bodyC == nil {
+		e.setLastError("vkb_save_preset: nil argument")
+		return 5
+	}
+	body := C.GoString(bodyC)
+	var p presets.Preset
+	if err := json.Unmarshal([]byte(body), &p); err != nil {
+		e.setLastError("vkb_save_preset: parse: " + err.Error())
+		return 2
+	}
+	p.Name = C.GoString(nameC)
+	if descriptionC != nil {
+		p.Description = C.GoString(descriptionC)
+	}
+	if err := presets.SaveUser(p); err != nil {
+		e.setLastError("vkb_save_preset: " + err.Error())
+		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
+			return 5
+		}
+		return 6
+	}
+	return 0
+}
+
+// vkb_delete_preset removes a user preset. Returns 0 on success
+// (idempotent), 1 if engine not init, 5 for invalid/reserved name,
+// 6 for filesystem error.
+//
+//export vkb_delete_preset
+func vkb_delete_preset(nameC *C.char) C.int {
+	e := getEngine()
+	if e == nil {
+		return 1
+	}
+	if nameC == nil {
+		e.setLastError("vkb_delete_preset: name is NULL")
+		return 5
+	}
+	name := C.GoString(nameC)
+	if err := presets.DeleteUser(name); err != nil {
+		e.setLastError("vkb_delete_preset: " + err.Error())
+		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
+			return 5
+		}
+		return 6
+	}
+	return 0
 }

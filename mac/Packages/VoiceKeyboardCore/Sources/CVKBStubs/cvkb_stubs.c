@@ -26,3 +26,11 @@ char* vkb_list_sessions(void)            { return NULL; }
 char* vkb_get_session(const char* id)    { (void)id; return NULL; }
 int   vkb_delete_session(const char* id) { (void)id; return 0; }
 int   vkb_clear_sessions(void)           { return 0; }
+
+// Preset management — Slice 2 stubs.
+char* vkb_list_presets(void)             { return NULL; }
+char* vkb_get_preset(const char* name)   { (void)name; return NULL; }
+int   vkb_save_preset(const char* name, const char* description, const char* body) {
+    (void)name; (void)description; (void)body; return 1;
+}
+int   vkb_delete_preset(const char* name) { (void)name; return 1; }

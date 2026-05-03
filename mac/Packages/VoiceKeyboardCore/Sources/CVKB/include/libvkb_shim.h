@@ -26,4 +26,10 @@ char* vkb_get_session(const char* id);
 int   vkb_delete_session(const char* id);
 int   vkb_clear_sessions(void);
 
+// Preset management.
+char* vkb_list_presets(void);
+char* vkb_get_preset(const char* name);
+int   vkb_save_preset(const char* name, const char* description, const char* body);
+int   vkb_delete_preset(const char* name);
+
 #endif
