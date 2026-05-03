@@ -21,6 +21,7 @@ import (
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/sessions"
 )
 
 // Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
@@ -43,7 +44,10 @@ func vkb_init() C.int {
 	if getEngine() != nil {
 		return 0
 	}
-	setEngine(&engine{events: make(chan event, 32)})
+	setEngine(&engine{
+		events:   make(chan event, 32),
+		sessions: sessions.NewStore("/tmp/voicekeyboard/sessions"),
+	})
 	return 0
 }
 
