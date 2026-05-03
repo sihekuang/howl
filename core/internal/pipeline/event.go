@@ -67,6 +67,11 @@ type Event struct {
 	Reason     string
 	ElapsedMs  int
 	Text       string
+
+	// TSESimilarity, when non-nil, is the cosine similarity the TSE
+	// chunk stage computed for this chunk. Populated only on
+	// EventStageProcessed events for the "tse" stage.
+	TSESimilarity *float32
 }
 
 // Listener observes pipeline events. Callbacks may fire concurrently

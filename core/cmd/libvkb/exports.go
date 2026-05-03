@@ -276,12 +276,21 @@ func vkb_start_capture() C.int {
 					if out := st.OutputRate(); out != 0 {
 						r = out
 					}
-					stages = append(stages, sessions.StageEntry{
+					entry := sessions.StageEntry{
 						Name:   st.Name(),
 						Kind:   "chunk",
 						WavRel: st.Name() + ".wav",
 						RateHz: r,
-					})
+					}
+					// For TSE, attach the most recent cosine similarity so
+					// the Inspector can surface it without parsing events.
+					if st.Name() == "tse" {
+						if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
+							s := g.LastSimilarity()
+							entry.TSESimilarity = &s
+						}
+					}
+					stages = append(stages, entry)
 					if out := st.OutputRate(); out != 0 {
 						rate = out
 					}

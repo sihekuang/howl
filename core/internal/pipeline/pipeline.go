@@ -147,11 +147,19 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 						}
 						return
 					}
+					var tseSim *float32
+					if st.Name() == "tse" {
+						if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
+							s := g.LastSimilarity()
+							tseSim = &s
+						}
+					}
 					p.emit(Event{
-						Kind:   EventStageProcessed,
-						Stage:  st.Name(),
-						RMSIn:  rmsIn,
-						RMSOut: audio.RMS(out),
+						Kind:          EventStageProcessed,
+						Stage:         st.Name(),
+						RMSIn:         rmsIn,
+						RMSOut:        audio.RMS(out),
+						TSESimilarity: tseSim,
 					})
 					p.Recorder.AppendStage(st.Name(), out)
 					samples = out
