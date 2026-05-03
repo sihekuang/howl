@@ -16,6 +16,12 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// Requires a completed voice enrollment in
     /// ~/Library/Application Support/VoiceKeyboard/voice/.
     public var tseEnabled: Bool
+    /// When true, unlocks the Pipeline Settings tab (live inspector,
+    /// per-stage capture, A/B comparison) and tells the engine to
+    /// capture every dictation's per-stage WAVs + transcripts to
+    /// /tmp/voicekeyboard/sessions/. Default false; casual users
+    /// never see the extra surface.
+    public var developerMode: Bool
 
     public init(
         whisperModelSize: String = "small",
@@ -27,7 +33,8 @@ public struct UserSettings: Codable, Equatable, Sendable {
         customDict: [String] = [],
         hotkey: KeyboardShortcut = .defaultPTT,
         inputDeviceUID: String? = nil,
-        tseEnabled: Bool = false
+        tseEnabled: Bool = false,
+        developerMode: Bool = false
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
@@ -39,6 +46,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.hotkey = hotkey
         self.inputDeviceUID = inputDeviceUID
         self.tseEnabled = tseEnabled
+        self.developerMode = developerMode
     }
 
     public init(from decoder: any Decoder) throws {
@@ -53,11 +61,13 @@ public struct UserSettings: Codable, Equatable, Sendable {
         hotkey = try c.decodeIfPresent(KeyboardShortcut.self, forKey: .hotkey) ?? .defaultPTT
         inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
         tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
+        developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
         case whisperModelSize, language, disableNoiseSuppression
         case llmProvider, llmModel, llmBaseURL, customDict, hotkey, inputDeviceUID, tseEnabled
+        case developerMode
     }
 }
 
