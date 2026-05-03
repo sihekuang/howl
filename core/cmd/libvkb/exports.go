@@ -505,3 +505,92 @@ func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profile
 	log.Printf("[vkb] vkb_enroll_compute: success")
 	return 0
 }
+
+// vkb_list_sessions returns a JSON array of session manifests, newest
+// first. Returns NULL on engine-not-initialized; an empty array "[]"
+// on no sessions. The returned C string is heap-allocated; the caller
+// must free it via vkb_free_string.
+//
+//export vkb_list_sessions
+func vkb_list_sessions() *C.char {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return nil
+	}
+	manifests, err := e.sessions.List()
+	if err != nil {
+		e.setLastError("vkb_list_sessions: " + err.Error())
+		return nil
+	}
+	if manifests == nil {
+		manifests = []sessions.Manifest{}
+	}
+	buf, err := json.Marshal(manifests)
+	if err != nil {
+		e.setLastError("vkb_list_sessions: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_get_session returns a JSON-encoded Manifest for the given id, or
+// NULL if the session does not exist or its manifest is unreadable.
+// Caller frees via vkb_free_string.
+//
+//export vkb_get_session
+func vkb_get_session(idC *C.char) *C.char {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return nil
+	}
+	id := C.GoString(idC)
+	m, err := e.sessions.Get(id)
+	if err != nil {
+		e.setLastError("vkb_get_session: " + err.Error())
+		return nil
+	}
+	buf, err := json.Marshal(m)
+	if err != nil {
+		e.setLastError("vkb_get_session: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_delete_session removes a single session folder. Idempotent.
+// Returns 0 on success, 1 if the engine is not initialized, 5 on
+// invalid id (path traversal etc.), 6 on filesystem error.
+//
+//export vkb_delete_session
+func vkb_delete_session(idC *C.char) C.int {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return 1
+	}
+	id := C.GoString(idC)
+	if err := e.sessions.Delete(id); err != nil {
+		e.setLastError("vkb_delete_session: " + err.Error())
+		// Distinguish bad-id (validation) from disk error.
+		if errors.Is(err, sessions.ErrInvalidSessionID) {
+			return 5
+		}
+		return 6
+	}
+	return 0
+}
+
+// vkb_clear_sessions removes every session folder. Returns 0 on
+// success, 1 if engine not initialized, 6 on filesystem error.
+//
+//export vkb_clear_sessions
+func vkb_clear_sessions() C.int {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return 1
+	}
+	if err := e.sessions.Clear(); err != nil {
+		e.setLastError("vkb_clear_sessions: " + err.Error())
+		return 6
+	}
+	return 0
+}
