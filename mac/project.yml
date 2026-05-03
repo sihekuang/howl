@@ -11,7 +11,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_HARDENED_RUNTIME: YES
     # Apple-Silicon-only: libvkb.dylib (Go cgo) and the bundled Homebrew
     # dylibs are arm64-only. A universal build would need a parallel
     # x86_64 toolchain we don't have. Set ARCHS explicitly so Release
