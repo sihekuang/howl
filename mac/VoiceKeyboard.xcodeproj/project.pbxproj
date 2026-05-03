@@ -43,6 +43,7 @@
 		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
 		CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */; };
 		CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59636EC6C578038A015432EA /* OllamaSection.swift */; };
+		D160CD1F009530482DAB5637 /* WAVPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */; };
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
 		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
@@ -75,6 +76,7 @@
 		6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
 		7398A10FF69BCB846098786E /* ProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderTab.swift; sourceTree = "<group>"; };
 		8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTab.swift; sourceTree = "<group>"; };
+		8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVPlayer.swift; sourceTree = "<group>"; };
 		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
 		9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadPanel.swift; sourceTree = "<group>"; };
 		9D5234E365C4BA6093A5C613 /* GeneralTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTab.swift; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 				C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */,
 				1AFF330F571F4958FD07D880 /* StageGraph.swift */,
+				8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */,
 			);
 			path = Pipeline;
 			sourceTree = "<group>";
@@ -483,6 +486,7 @@
 				71408CEDBBAB2A6F91D3EBC4 /* StageGraph.swift in Sources */,
 				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,
 				E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */,
+				D160CD1F009530482DAB5637 /* WAVPlayer.swift in Sources */,
 				68025E317F55A3908E958FEF /* WaveformView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
