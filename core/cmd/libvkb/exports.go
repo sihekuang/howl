@@ -199,31 +199,58 @@ func vkb_start_capture() C.int {
 			pushes := e.pushCount
 			e.dropCount = 0
 			e.pushCount = 0
-			tseEnabled := e.cfg.TSEEnabled // read in the same critical section as session metadata
 			e.mu.Unlock()
 
 			// Write session.json — best-effort. A missing manifest just makes
 			// the session invisible to the Inspector; the WAVs still exist on
 			// disk for ad-hoc inspection.
 			if sessionID != "" && sessionDir != "" {
+				// Build the stage list from the captured pipeline so a non-default
+				// preset (Slice 2) doesn't lie about which stages actually ran.
+				// Mirrors pipeline.registerRecorderStages's rate-tracking logic.
+				const inputRate = 48000
+				stages := make([]sessions.StageEntry, 0, len(pipe.FrameStages)+len(pipe.ChunkStages))
+				rate := inputRate
+				for _, st := range pipe.FrameStages {
+					r := rate
+					if out := st.OutputRate(); out != 0 {
+						r = out
+					}
+					stages = append(stages, sessions.StageEntry{
+						Name:   st.Name(),
+						Kind:   "frame",
+						WavRel: st.Name() + ".wav",
+						RateHz: r,
+					})
+					if out := st.OutputRate(); out != 0 {
+						rate = out
+					}
+				}
+				for _, st := range pipe.ChunkStages {
+					r := rate
+					if out := st.OutputRate(); out != 0 {
+						r = out
+					}
+					stages = append(stages, sessions.StageEntry{
+						Name:   st.Name(),
+						Kind:   "chunk",
+						WavRel: st.Name() + ".wav",
+						RateHz: r,
+					})
+					if out := st.OutputRate(); out != 0 {
+						rate = out
+					}
+				}
+
 				m := sessions.Manifest{
 					Version:     sessions.CurrentManifestVersion,
 					ID:          sessionID,
 					Preset:      "default", // populated correctly once Slice 2 lands the presets package
 					DurationSec: 0,         // TODO: pipeline-side accounting in Slice 4 (replay needs precise duration)
-					Stages: []sessions.StageEntry{
-						{Name: "denoise", Kind: "frame", WavRel: "denoise.wav", RateHz: 48000},
-						{Name: "decimate3", Kind: "frame", WavRel: "decimate3.wav", RateHz: 16000},
-					},
+					Stages:      stages,
 					Transcripts: sessions.TranscriptEntries{
 						Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
 					},
-				}
-				// Add tse stage entry iff it was registered.
-				if tseEnabled {
-					m.Stages = append(m.Stages, sessions.StageEntry{
-						Name: "tse", Kind: "chunk", WavRel: "tse.wav", RateHz: 16000,
-					})
 				}
 				if err := m.Write(sessionDir); err != nil {
 					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
