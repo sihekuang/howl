@@ -2,38 +2,42 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Slice 2 Editor: preset dropdown + Save/Reset + per-stage detail
-/// panel showing TSE threshold + recent similarity. The drag-and-drop
-/// stage graph is Slice 3.
+/// Slice 3 Editor: preset picker → editable StageGraph + StageDetailPanel
+/// + timeout field. Edits accumulate on a PresetDraft until saved via
+/// SaveAsPresetSheet (which serializes the draft).
 struct EditorView: View {
     let presets: any PresetsClient
+    let sessions: any SessionsClient
 
     @State private var presetList: [Preset] = []
     @State private var selectedName: String = ""
+    @State private var draft: PresetDraft? = nil
     @State private var loadError: String? = nil
     @State private var saveSheetVisible = false
-
-    private var selectedPreset: Preset? {
-        presetList.first(where: { $0.name == selectedName })
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             toolbar
             Divider()
-            if let p = selectedPreset {
-                presetDetail(p)
-            } else if let err = loadError {
-                Text(err).foregroundStyle(.red).font(.callout)
-            } else {
-                Text("Loading presets…").foregroundStyle(.secondary).font(.callout)
+            ScrollView {
+                if let draft = draft {
+                    VStack(alignment: .leading, spacing: 12) {
+                        StageGraph(draft: draft)
+                        Divider()
+                        StageDetailPanel(draft: draft, sessions: sessions)
+                    }
+                } else if let err = loadError {
+                    Text(err).foregroundStyle(.red).font(.callout)
+                } else {
+                    Text("Loading presets…").foregroundStyle(.secondary).font(.callout)
+                }
             }
         }
         .task { await refresh() }
         .sheet(isPresented: $saveSheetVisible) {
-            if let p = selectedPreset {
+            if let draft = draft {
                 SaveAsPresetSheet(
-                    basePreset: p,
+                    draft: draft,
                     presets: presets,
                     onSaved: {
                         saveSheetVisible = false
@@ -41,6 +45,12 @@ struct EditorView: View {
                     },
                     onCancel: { saveSheetVisible = false }
                 )
+            }
+        }
+        .onChange(of: selectedName) { _, newName in
+            // Picker changed: rebuild the draft from the selected preset.
+            if let p = presetList.first(where: { $0.name == newName }) {
+                draft = PresetDraft(p)
             }
         }
     }
@@ -59,71 +69,46 @@ struct EditorView: View {
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 240)
+            .frame(maxWidth: 200)
+
+            if let draft = draft, draft.isDirty {
+                Text("• edited").font(.caption).foregroundStyle(.orange)
+            }
+
+            Spacer()
+
+            timeoutField
 
             Button {
                 saveSheetVisible = true
             } label: { Label("Save as…", systemImage: "square.and.arrow.down") }
             .controlSize(.small)
-            .disabled(selectedName.isEmpty)
+            .disabled(draft == nil)
 
             Button {
-                Task { await selectPreset("default") }
+                if let p = presetList.first(where: { $0.name == selectedName }) {
+                    draft?.resetTo(p)
+                }
             } label: { Label("Reset", systemImage: "arrow.uturn.backward") }
             .controlSize(.small)
-
-            Spacer()
+            .disabled(draft?.isDirty != true)
         }
     }
 
     @ViewBuilder
-    private func presetDetail(_ p: Preset) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(p.description).font(.callout).foregroundStyle(.secondary)
-
-            Divider().padding(.vertical, 4)
-
-            Text("STAGES").font(.caption).foregroundStyle(.secondary).bold()
-            ForEach(p.frameStages, id: \.name) { st in
-                stageRow(st, kind: "frame")
-            }
-            ForEach(p.chunkStages, id: \.name) { st in
-                stageRow(st, kind: "chunk")
-            }
-
-            Divider().padding(.vertical, 4)
-
-            Text("TRANSCRIBE").font(.caption).foregroundStyle(.secondary).bold()
-            HStack {
-                Text("Whisper model").font(.callout)
-                Spacer()
-                Text(p.transcribe.modelSize).font(.callout.monospaced()).foregroundStyle(.secondary)
-            }
-
-            Text("LLM").font(.caption).foregroundStyle(.secondary).bold()
-            HStack {
-                Text("Provider").font(.callout)
-                Spacer()
-                Text(p.llm.provider).font(.callout.monospaced()).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func stageRow(_ st: Preset.StageSpec, kind: String) -> some View {
-        HStack {
-            Image(systemName: st.enabled ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(st.enabled ? .green : .secondary)
-            Text(st.name).font(.callout).bold()
-            Text("(\(kind))").foregroundStyle(.secondary).font(.caption)
-            Spacer()
-            if st.name == "tse", let t = st.threshold {
-                Text("threshold: \(String(format: "%.2f", t))")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            if let backend = st.backend, !backend.isEmpty {
-                Text(backend).font(.caption.monospaced()).foregroundStyle(.secondary)
+    private var timeoutField: some View {
+        HStack(spacing: 4) {
+            Text("Timeout:").font(.callout).foregroundStyle(.secondary)
+            if let draft = draft {
+                TextField("", value: Binding(
+                    get: { draft.timeoutSec },
+                    set: { draft.timeoutSec = max(0, $0) }
+                ), format: .number)
+                .frame(width: 44)
+                .multilineTextAlignment(.trailing)
+                Text("s").font(.callout).foregroundStyle(.secondary)
+            } else {
+                Text("—").font(.callout).foregroundStyle(.tertiary)
             }
         }
     }
@@ -136,6 +121,7 @@ struct EditorView: View {
                 if self.selectedName.isEmpty || !list.contains(where: { $0.name == self.selectedName }),
                    let first = list.first {
                     self.selectedName = first.name
+                    self.draft = PresetDraft(first)
                 }
                 self.loadError = nil
             }
@@ -144,9 +130,5 @@ struct EditorView: View {
                 self.loadError = "Failed to load presets: \(error)"
             }
         }
-    }
-
-    private func selectPreset(_ name: String) async {
-        await MainActor.run { self.selectedName = name }
     }
 }

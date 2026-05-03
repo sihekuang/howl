@@ -6,7 +6,7 @@ import VoiceKeyboardCore
 /// a user preset. Validates the name client-side; the C ABI rejects
 /// invalid/reserved names with rc=5 if validation slips through.
 struct SaveAsPresetSheet: View {
-    let basePreset: Preset
+    let draft: PresetDraft
     let presets: any PresetsClient
     let onSaved: () -> Void
     let onCancel: () -> Void
@@ -70,13 +70,9 @@ struct SaveAsPresetSheet: View {
     private func save() async {
         saving = true
         defer { saving = false }
-        let p = Preset(
+        let p = draft.toPreset(
             name: name,
-            description: description.isEmpty ? "User preset" : description,
-            frameStages: basePreset.frameStages,
-            chunkStages: basePreset.chunkStages,
-            transcribe: basePreset.transcribe,
-            llm: basePreset.llm
+            description: description.isEmpty ? "User preset" : description
         )
         do {
             try await presets.save(p)
