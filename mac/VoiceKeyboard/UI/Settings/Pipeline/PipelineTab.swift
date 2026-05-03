@@ -2,17 +2,41 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Container for the Pipeline page. Today: just the Inspector (Slice 1
-/// foundation). Slice 2 adds an Editor sub-view; Slice 4 adds a Compare
-/// sub-view. The tab will gain a top-level segmented control to switch
-/// between them once there's more than one.
+/// Container for the Pipeline page. Hosts a segmented control between
+/// the Inspector (live + captured-session view) and the Editor (preset
+/// picker + per-stage detail). Slice 4 adds a Compare sub-view.
 struct PipelineTab: View {
     let engine: any CoreEngine
     let sessions: any SessionsClient
+    let presets: any PresetsClient
+
+    @State private var selectedView: SubView = .inspector
+
+    enum SubView: String, CaseIterable, Identifiable {
+        case inspector = "Inspector"
+        case editor = "Editor"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         SettingsPane {
-            InspectorView(sessions: sessions)
+            Picker("", selection: $selectedView) {
+                ForEach(SubView.allCases) { v in
+                    Text(v.rawValue).tag(v)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.bottom, 8)
+
+            Divider()
+
+            switch selectedView {
+            case .inspector:
+                InspectorView(sessions: sessions)
+            case .editor:
+                EditorView(presets: presets)
+            }
         }
     }
 }

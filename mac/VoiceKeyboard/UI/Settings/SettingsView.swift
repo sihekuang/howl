@@ -230,7 +230,8 @@ private struct DetailView: View {
         case .pipeline:
             PipelineTab(
                 engine: composition.engine,
-                sessions: LibVKBSessionsClient(engine: composition.engine)
+                sessions: LibVKBSessionsClient(engine: composition.engine),
+                presets: LibVKBPresetsClient(engine: composition.engine)
             )
         }
     }
