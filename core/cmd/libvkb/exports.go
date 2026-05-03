@@ -186,7 +186,13 @@ func vkb_start_capture() C.int {
 				log.Printf("[vkb] capture goroutine: PANIC %s", msg)
 				e.events <- event{Kind: "error", Msg: msg}
 			}
+			// Snapshot session metadata under the lock so we don't race with
+			// a concurrent vkb_configure swapping it out.
 			e.mu.Lock()
+			sessionID := e.activeSessionID
+			sessionDir := e.activeSessionDir
+			e.activeSessionID = ""
+			e.activeSessionDir = ""
 			e.pushCh = nil
 			e.cancel = nil
 			drops := e.dropCount
@@ -194,6 +200,40 @@ func vkb_start_capture() C.int {
 			e.dropCount = 0
 			e.pushCount = 0
 			e.mu.Unlock()
+
+			// Write session.json — best-effort. A missing manifest just makes
+			// the session invisible to the Inspector; the WAVs still exist on
+			// disk for ad-hoc inspection.
+			if sessionID != "" && sessionDir != "" {
+				m := sessions.Manifest{
+					Version:     sessions.CurrentManifestVersion,
+					ID:          sessionID,
+					Preset:      "default", // populated correctly once Slice 2 lands the presets package
+					DurationSec: 0,         // TODO: pipeline-side accounting in Slice 4 (replay needs precise duration)
+					Stages: []sessions.StageEntry{
+						{Name: "denoise", Kind: "frame", WavRel: "denoise.wav", RateHz: 48000},
+						{Name: "decimate3", Kind: "frame", WavRel: "decimate3.wav", RateHz: 16000},
+					},
+					Transcripts: sessions.TranscriptEntries{
+						Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
+					},
+				}
+				// Add tse stage entry iff it was registered.
+				e.mu.Lock()
+				tseEnabled := e.cfg.TSEEnabled
+				e.mu.Unlock()
+				if tseEnabled {
+					m.Stages = append(m.Stages, sessions.StageEntry{
+						Name: "tse", Kind: "chunk", WavRel: "tse.wav", RateHz: 16000,
+					})
+				}
+				if err := m.Write(sessionDir); err != nil {
+					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
+				} else {
+					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)
+				}
+			}
+
 			log.Printf("[vkb] capture goroutine: exited (pushes=%d drops=%d)", pushes, drops)
 		}()
 		res, err := pipe.Run(ctx, pushCh)
