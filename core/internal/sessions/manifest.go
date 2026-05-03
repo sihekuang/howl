@@ -16,6 +16,7 @@ package sessions
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,13 @@ import (
 // CurrentManifestVersion is the major version this build understands.
 // Reader rejects manifests with a different major version.
 const CurrentManifestVersion = 1
+
+// ErrManifestNotFound is returned (wrapped) by Read when the session
+// folder exists but session.json is absent. Callers that walk a base
+// directory (e.g. Store.List in Task 2) check errors.Is(err, ErrManifestNotFound)
+// to distinguish "in-progress / unfinished session" from "corrupt
+// manifest", and silently skip the former.
+var ErrManifestNotFound = errors.New("sessions: manifest not found")
 
 // Manifest is the on-disk session.json schema.
 type Manifest struct {
@@ -42,7 +50,12 @@ type StageEntry struct {
 	Kind          string  `json:"kind"`                     // "frame" | "chunk"
 	WavRel        string  `json:"wav"`                      // relative path inside session folder
 	RateHz        int     `json:"rate_hz"`                  // output sample rate of this stage
-	TSESimilarity float32 `json:"tse_similarity,omitempty"` // populated only for the TSE stage
+	// TSESimilarity is the cosine similarity between the extracted
+	// source's ECAPA embedding and the enrolled reference, populated
+	// only for the TSE chunk stage. nil = stage didn't run / didn't
+	// emit similarity; a non-nil zero is a legitimate value
+	// (orthogonal embeddings) and must not be confused with absent.
+	TSESimilarity *float32 `json:"tse_similarity,omitempty"`
 }
 
 // TranscriptEntries records the relative paths of the three text outputs.
@@ -75,6 +88,9 @@ func (m *Manifest) Write(dir string) error {
 func Read(dir string) (*Manifest, error) {
 	buf, err := os.ReadFile(filepath.Join(dir, "session.json"))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s", ErrManifestNotFound, dir)
+		}
 		return nil, fmt.Errorf("sessions: read manifest: %w", err)
 	}
 	var m Manifest
