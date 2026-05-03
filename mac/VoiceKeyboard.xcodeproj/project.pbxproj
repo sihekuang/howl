@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
 		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
+		0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */; };
 		0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13FD3D07C12A94326240356A /* LMStudioSection.swift */; };
 		19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */; };
 		1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */; };
@@ -78,6 +79,7 @@
 		EC04BF85399775A80EDBB0B1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPanel.swift; sourceTree = "<group>"; };
 		F79F4F0B66286CC34F9BE534 /* VoiceKeyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceKeyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRelaunch.swift; sourceTree = "<group>"; };
 		FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
 		FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -186,6 +188,7 @@
 			isa = PBXGroup;
 			children = (
 				D191FF4976526AAF109C19EB /* AppDelegate.swift */,
+				F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */,
 				6533D8DC82E66396D8BA7557 /* Assets.xcassets */,
 				9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */,
 				81A35619E8B455EC01773816 /* Composition */,
@@ -413,6 +416,7 @@
 				57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */,
 				516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */,
 				23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */,
+				0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
 				C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */,
