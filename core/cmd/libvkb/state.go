@@ -112,6 +112,14 @@ func (e *engine) setLastError(msg string) {
 // returned pipeline to e.pipeline under e.mu. This avoids a TSAN-visible
 // race between vkb_configure (writer) and vkb_start_capture (reader).
 func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
+	// Clear any stale per-dictation session metadata from a previous
+	// Developer-mode capture. The DeveloperMode block below populates
+	// these fields when active; clearing here ensures a non-DeveloperMode
+	// reconfigure leaves no leftover that would mislead Task 7's manifest
+	// writer.
+	e.activeSessionID = ""
+	e.activeSessionDir = ""
+
 	tr, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 		ModelPath: e.cfg.WhisperModelPath,
 		Language:  e.cfg.Language,
@@ -196,7 +204,10 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 		if err := e.sessions.Prune(10); err != nil {
 			log.Printf("[vkb] buildPipeline: session prune failed (continuing): %v", err)
 		}
-		id := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		// Sub-second precision avoids collision when two captures start in the
+		// same second (manual double-tap, CI test loops). Lexical sort still
+		// matches chronological order; validSessionID accepts the period.
+		id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 		dir := e.sessions.SessionDir(id)
 		rec, err := recorder.Open(recorder.Options{
 			Dir:         dir,
@@ -213,9 +224,14 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 
 			// Stash the session id + dir so the post-run hook (Task 7) can
 			// write the manifest from the capture goroutine in exports.go.
+			//
+			// Safe without e.mu: vkb_configure rejects reconfigure while a
+			// capture is in flight (exports.go: rc=4), so no concurrent
+			// reader exists at this point. The capture goroutine will
+			// observe these writes via the e.mu lock acquired in
+			// vkb_start_capture's defer.
 			e.activeSessionID = id
 			e.activeSessionDir = dir
-			_ = filepath.Separator // keep filepath import live until Task 7 references it
 		}
 	}
 
