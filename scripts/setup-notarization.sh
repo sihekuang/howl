@@ -141,13 +141,17 @@ ok "notarytool credentials authenticated"
 
 set_secret() {
   local name=$1 value=$2
-  printf '%s' "$value" | gh secret set "$name" --repo "$REPO" --body -
+  # `gh secret set` reads from stdin when no --body is given. Older
+  # workarounds used `--body -` but on some gh versions that stores the
+  # literal string "-" instead of consuming stdin, which silently breaks
+  # everything downstream. Pipe-to-stdin is the documented form.
+  printf '%s' "$value" | gh secret set "$name" --repo "$REPO"
   ok "set $name"
 }
 
 set_secret_from_file() {
   local name=$1 path=$2
-  base64 -i "$path" | gh secret set "$name" --repo "$REPO" --body -
+  base64 -i "$path" | gh secret set "$name" --repo "$REPO"
   ok "set $name (base64 of $(basename "$path"))"
 }
 

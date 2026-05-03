@@ -89,7 +89,13 @@ jobs:
           KC="$RUNNER_TEMP/build.keychain-db"
           P12="$RUNNER_TEMP/cert.p12"
 
-          echo "$P12_BASE64" | base64 --decode > "$P12"
+          # Diagnostic: print the length only (not the value, which is
+          # masked anyway). Distinguishes "secret not set" (0) from
+          # "secret holds the literal string -" (1 char) from "secret
+          # holds something base64-shaped" (thousands).
+          echo "MACOS_CERT_P12_BASE64 length: ${#P12_BASE64}"
+          echo "$P12_BASE64" | base64 --decode > "$P12" 2>/dev/null || true
+          echo "Decoded p12 size: $(wc -c < "$P12") bytes"
           # Sanity check size — catches a missing/empty secret early.
           [ -s "$P12" ] || { echo "::error::decoded p12 is empty"; exit 1; }
 
