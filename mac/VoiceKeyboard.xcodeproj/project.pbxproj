@@ -49,6 +49,7 @@
 		D160CD1F009530482DAB5637 /* WAVPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */; };
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
+		E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D15493CA03941D9F207F9F /* CompareView.swift */; };
 		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
 		EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */; };
 		EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 088375E753FFBEF3194F73E6 /* PresetDraft.swift */; };
@@ -93,6 +94,7 @@
 		C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTab.swift; sourceTree = "<group>"; };
 		C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageDetailPanel.swift; sourceTree = "<group>"; };
 		D191FF4976526AAF109C19EB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		D1D15493CA03941D9F207F9F /* CompareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareView.swift; sourceTree = "<group>"; };
 		D89C9EC21971FDD8AB9937B2 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OccupationPacks.swift; sourceTree = "<group>"; };
 		E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 			isa = PBXGroup;
 			children = (
 				9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */,
+				D1D15493CA03941D9F207F9F /* CompareView.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
 				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
@@ -463,6 +466,7 @@
 				0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
 				BC318555C2211AD96DFA6C0B /* CompareCard.swift in Sources */,
+				E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
 				C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */,
 				1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */,
