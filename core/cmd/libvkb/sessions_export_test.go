@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/sessions"
 )
@@ -138,5 +139,45 @@ func TestExport_AbiVersion_ReturnsExpectedSemver(t *testing.T) {
 	got := abiVersionGo()
 	if got != "1.0.0" {
 		t.Errorf("version = %q, want 1.0.0", got)
+	}
+}
+
+func TestOpenSessionRecorder_TwoCallsProduceTwoFolders(t *testing.T) {
+	dir := withTempSessionsStore(t)
+	getEngine().cfg.DeveloperMode = true
+	t.Cleanup(func() {
+		getEngine().cfg.DeveloperMode = false
+		getEngine().activeSessionID = ""
+		getEngine().activeSessionDir = ""
+		getEngine().activeRecorder = nil
+	})
+
+	// Two calls in sequence must produce two distinct session folders.
+	if err := openSessionRecorder(getEngine()); err != nil {
+		t.Fatalf("first openSessionRecorder: %v", err)
+	}
+	id1 := getEngine().activeSessionID
+	getEngine().activeSessionID = ""
+	getEngine().activeSessionDir = ""
+	getEngine().activeRecorder = nil
+
+	// Sleep 1 ms to ensure RFC3339-nanos timestamps differ.
+	time.Sleep(time.Millisecond)
+
+	if err := openSessionRecorder(getEngine()); err != nil {
+		t.Fatalf("second openSessionRecorder: %v", err)
+	}
+	id2 := getEngine().activeSessionID
+
+	if id1 == "" || id2 == "" {
+		t.Fatalf("session IDs not set: id1=%q id2=%q", id1, id2)
+	}
+	if id1 == id2 {
+		t.Errorf("two calls produced the same id %q", id1)
+	}
+	for _, id := range []string{id1, id2} {
+		if _, err := os.Stat(filepath.Join(dir, id)); err != nil {
+			t.Errorf("session folder %q missing: %v", id, err)
+		}
 	}
 }

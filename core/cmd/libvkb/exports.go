@@ -21,8 +21,43 @@ import (
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/sessions"
 )
+
+// openSessionRecorder constructs a recorder.Session for the next capture
+// cycle when DeveloperMode is on. Called from vkb_start_capture before
+// the capture goroutine is launched, so the engine is single-threaded
+// at this point and lock-free access to e.cfg / e.sessions is fine.
+// The capture goroutine's defer reads e.activeRecorder, writes the
+// manifest, then closes + nils it.
+//
+// All errors are non-fatal — capture proceeds without recording if the
+// session can't be opened. Returns the error only so tests can assert
+// on it; callers should log and continue.
+func openSessionRecorder(e *engine) error {
+	if !e.cfg.DeveloperMode || e.sessions == nil {
+		return nil
+	}
+	if err := e.sessions.Prune(10); err != nil {
+		log.Printf("[vkb] openSessionRecorder: prune failed (continuing): %v", err)
+	}
+	id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
+	dir := e.sessions.SessionDir(id)
+	rec, err := recorder.Open(recorder.Options{
+		Dir:         dir,
+		AudioStages: true,
+		Transcripts: true,
+	})
+	if err != nil {
+		log.Printf("[vkb] openSessionRecorder: recorder.Open failed (continuing without capture): %v", err)
+		return err
+	}
+	e.activeSessionID = id
+	e.activeSessionDir = dir
+	e.activeRecorder = rec
+	return nil
+}
 
 // Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
 // how the app was launched (stderr is invisible when launched from
@@ -130,6 +165,13 @@ func vkb_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancel := context.WithCancel(context.Background())
 	pipe := e.pipeline
+	// Open a per-capture session recorder under DeveloperMode. Errors are
+	// non-fatal; we proceed without recording in that case. Safe under
+	// e.mu — no concurrent reader can observe the engine in this state.
+	_ = openSessionRecorder(e)
+	if e.activeRecorder != nil {
+		pipe.Recorder = e.activeRecorder
+	}
 	e.pushCh = pushCh
 	e.cancel = cancel
 	e.dropCount = 0
