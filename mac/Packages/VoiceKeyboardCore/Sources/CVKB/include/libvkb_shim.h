@@ -32,4 +32,7 @@ char* vkb_get_preset(const char* name);
 int   vkb_save_preset(const char* name, const char* description, const char* body);
 int   vkb_delete_preset(const char* name);
 
+// Compare / replay.
+char* vkb_replay(const char* source_id, const char* presets_csv);
+
 #endif

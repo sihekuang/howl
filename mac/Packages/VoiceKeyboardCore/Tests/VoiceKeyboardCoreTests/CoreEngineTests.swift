@@ -18,6 +18,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     var stubPresetGetJSON: [String: String] = [:]
     var stubPresetSaveRC: Int32 = 0
     var stubPresetDeleteRC: Int32 = 0
+    var stubReplayJSON: String? = "[]"
 
     func configure(_ config: EngineConfig) async throws {
         configureCalls.append(config)
@@ -42,6 +43,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     func presetGetJSON(_ name: String) -> String? { stubPresetGetJSON[name] }
     func presetSaveJSON(name: String, description: String, body: String) -> Int32 { stubPresetSaveRC }
     func presetDelete(_ name: String) -> Int32 { stubPresetDeleteRC }
+    func replayJSON(sourceID: String, presetsCSV: String) -> String? { stubReplayJSON }
 }
 
 @Suite("CoreEngine protocol")

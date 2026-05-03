@@ -84,4 +84,9 @@ public protocol CoreEngine: Sendable {
 
     /// Removes a user preset. Idempotent. Returns the C ABI return code.
     func presetDelete(_ name: String) async -> Int32
+
+    /// Drive a Compare run. Returns the JSON array body from
+    /// vkb_replay (or {"error": "..."} envelope on top-level failure),
+    /// or nil if the engine is not initialized.
+    func replayJSON(sourceID: String, presetsCSV: String) async -> String?
 }
