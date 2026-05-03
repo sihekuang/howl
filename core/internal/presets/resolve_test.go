@@ -76,6 +76,26 @@ func findPreset(t *testing.T, all []Preset, name string) Preset {
 // Compile-time check: Resolve produces a config.Config.
 var _ = config.Config{}
 
+func TestResolve_DefaultTimeoutPropagates(t *testing.T) {
+	all, _ := loadBundled()
+	def := findPreset(t, all, "default")
+	got := Resolve(def, EngineSecrets{})
+	if got.PipelineTimeoutSec != 10 {
+		t.Errorf("PipelineTimeoutSec = %d, want 10", got.PipelineTimeoutSec)
+	}
+}
+
+func TestMatch_DivergedTimeoutReturnsCustom(t *testing.T) {
+	all, _ := loadBundled()
+	def := findPreset(t, all, "default")
+	cfg := Resolve(def, EngineSecrets{})
+	cfg.PipelineTimeoutSec = 99 // diverge
+
+	if got := Match(cfg, all); got != "custom" {
+		t.Errorf("Match(divergent timeout) = %q, want \"custom\"", got)
+	}
+}
+
 func TestMatch_AllBundledPresetsAreSelfMatching(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {

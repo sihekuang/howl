@@ -35,7 +35,7 @@ struct PipelineTab: View {
             case .inspector:
                 InspectorView(sessions: sessions)
             case .editor:
-                EditorView(presets: presets)
+                EditorView(presets: presets, sessions: sessions)
             }
         }
     }

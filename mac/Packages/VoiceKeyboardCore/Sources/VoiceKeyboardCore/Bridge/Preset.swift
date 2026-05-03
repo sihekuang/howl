@@ -10,6 +10,7 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
     public let chunkStages: [StageSpec]
     public let transcribe: TranscribeSpec
     public let llm: LLMSpec
+    public let timeoutSec: Int?
 
     public var id: String { name }
 
@@ -19,7 +20,8 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
         frameStages: [StageSpec],
         chunkStages: [StageSpec],
         transcribe: TranscribeSpec,
-        llm: LLMSpec
+        llm: LLMSpec,
+        timeoutSec: Int? = nil
     ) {
         self.name = name
         self.description = description
@@ -27,6 +29,7 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
         self.chunkStages = chunkStages
         self.transcribe = transcribe
         self.llm = llm
+        self.timeoutSec = timeoutSec
     }
 
     public struct StageSpec: Codable, Equatable, Sendable {
@@ -58,5 +61,6 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
         case name, description, transcribe, llm
         case frameStages = "frame_stages"
         case chunkStages = "chunk_stages"
+        case timeoutSec = "timeout_sec"
     }
 }
