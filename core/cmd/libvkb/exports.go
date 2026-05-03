@@ -166,6 +166,7 @@ func vkb_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancel := context.WithCancel(context.Background())
 	pipe := e.pipeline
+	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
 	// non-fatal; we proceed without recording in that case. Safe under
 	// e.mu — no concurrent reader can observe the engine in this state.
@@ -177,6 +178,15 @@ func vkb_start_capture() C.int {
 	e.cancel = cancel
 	e.dropCount = 0
 	e.mu.Unlock()
+
+	// Wrap ctx with the per-preset timeout. The timeout-cancel is
+	// captured by the capture goroutine's defer (below) so it's always
+	// cleaned up when the goroutine exits — independently of whether
+	// vkb_cancel_capture fired the parent cancel first.
+	var cancelTimeout context.CancelFunc
+	if timeout > 0 {
+		ctx, cancelTimeout = context.WithTimeout(ctx, timeout)
+	}
 
 	// Throttle level events to ~30Hz, taking max RMS in each window.
 	// Stream LLM cleaned-text deltas to Swift as they arrive via EventLLMDelta.
@@ -224,6 +234,9 @@ func vkb_start_capture() C.int {
 	go func() {
 		log.Printf("[vkb] capture goroutine: started")
 		defer func() {
+			if cancelTimeout != nil {
+				cancelTimeout()
+			}
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("panic: %v", r)
 				log.Printf("[vkb] capture goroutine: PANIC %s", msg)
@@ -330,7 +343,15 @@ func vkb_start_capture() C.int {
 		// blocking here — by the time we're stopping, level emission
 		// is over and the channel will drain quickly.
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("[vkb] capture goroutine: pipeline timed out (>%s)", timeout)
+				e.events <- event{Kind: "warning", Msg: fmt.Sprintf("pipeline timed out after %s", timeout)}
+				// pipe.Run returns (Result{}, err) on context error, not partial
+				// state. Emit an empty result so Swift transitions back to idle.
+				e.events <- event{Kind: "result", Text: ""}
+				return
+			}
+			if errors.Is(err, context.Canceled) {
 				log.Printf("[vkb] capture goroutine: pipeline cancelled")
 				e.events <- event{Kind: "cancelled"}
 				return
