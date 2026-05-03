@@ -71,3 +71,65 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 	}
 	return cfg
 }
+
+// Match returns the name of the preset whose Resolve(...) would produce
+// `cfg`'s preset-relevant fields, or "custom" if no preset matches.
+//
+// Preset-relevant fields: those Resolve actually sets from the preset
+// (TSEEnabled, TSEBackend, TSEThreshold, DisableNoiseSuppression,
+// LLMProvider, WhisperModelSize). Fields populated only from secrets
+// (LLMAPIKey, WhisperModelPath, etc.) are intentionally ignored —
+// changing your API key doesn't make your config "custom."
+func Match(cfg config.Config, all []Preset) string {
+	for _, p := range all {
+		if presetMatchesConfig(p, cfg) {
+			return p.Name
+		}
+	}
+	return "custom"
+}
+
+func presetMatchesConfig(p Preset, cfg config.Config) bool {
+	if cfg.LLMProvider != p.LLM.Provider {
+		return false
+	}
+	if cfg.WhisperModelSize != p.Transcribe.ModelSize {
+		return false
+	}
+	for _, st := range p.FrameStages {
+		switch st.Name {
+		case "denoise":
+			wantOff := !st.Enabled
+			if cfg.DisableNoiseSuppression != wantOff {
+				return false
+			}
+		}
+	}
+	for _, st := range p.ChunkStages {
+		if st.Name != "tse" {
+			continue
+		}
+		if cfg.TSEEnabled != st.Enabled {
+			return false
+		}
+		if cfg.TSEEnabled {
+			if cfg.TSEBackend != st.Backend {
+				return false
+			}
+			// Threshold compare: nil-or-0 are treated as equivalent
+			// ("no gating"); explicit non-zero must match.
+			cfgThr := float32(0)
+			if cfg.TSEThreshold != nil {
+				cfgThr = *cfg.TSEThreshold
+			}
+			presetThr := float32(0)
+			if st.Threshold != nil {
+				presetThr = *st.Threshold
+			}
+			if cfgThr != presetThr {
+				return false
+			}
+		}
+	}
+	return true
+}

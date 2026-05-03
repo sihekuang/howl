@@ -75,3 +75,31 @@ func findPreset(t *testing.T, all []Preset, name string) Preset {
 
 // Compile-time check: Resolve produces a config.Config.
 var _ = config.Config{}
+
+func TestMatch_AllBundledPresetsAreSelfMatching(t *testing.T) {
+	all, _ := loadBundled()
+	for _, p := range all {
+		cfg := Resolve(p, EngineSecrets{})
+		got := Match(cfg, all)
+		if got != p.Name {
+			t.Errorf("Match(Resolve(%q)) = %q, want %q", p.Name, got, p.Name)
+		}
+	}
+}
+
+func TestMatch_DivergedConfigReturnsCustom(t *testing.T) {
+	all, _ := loadBundled()
+	def := findPreset(t, all, "default")
+	cfg := Resolve(def, EngineSecrets{})
+	cfg.DisableNoiseSuppression = !cfg.DisableNoiseSuppression // diverge
+
+	if got := Match(cfg, all); got != "custom" {
+		t.Errorf("Match(divergent) = %q, want \"custom\"", got)
+	}
+}
+
+func TestMatch_EmptyPresetListReturnsCustom(t *testing.T) {
+	if got := Match(config.Config{}, nil); got != "custom" {
+		t.Errorf("Match(empty list) = %q, want \"custom\"", got)
+	}
+}
