@@ -54,3 +54,13 @@ func sessionDeleteGo(id string) int {
 	defer C.free(unsafe.Pointer(idC))
 	return int(vkb_delete_session(idC))
 }
+
+// abiVersionGo is a test-friendly wrapper around vkb_abi_version that
+// returns a Go string. Avoids the "import \"C\" not allowed in test
+// files" rule by living in a non-_test.go file alongside the other
+// session helpers.
+func abiVersionGo() string {
+	cstr := vkb_abi_version()
+	defer vkb_free_string(cstr)
+	return C.GoString(cstr)
+}

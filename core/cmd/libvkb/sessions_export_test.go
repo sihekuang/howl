@@ -131,3 +131,12 @@ func TestExport_ClearSessions_RemovesAll(t *testing.T) {
 		t.Errorf("entries left after clear: %d", len(entries))
 	}
 }
+
+func TestExport_AbiVersion_ReturnsExpectedSemver(t *testing.T) {
+	// vkb_init not required for the version probe — versioning is a
+	// library-level constant.
+	got := abiVersionGo()
+	if got != "1.0.0" {
+		t.Errorf("version = %q, want 1.0.0", got)
+	}
+}

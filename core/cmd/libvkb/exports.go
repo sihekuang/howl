@@ -602,3 +602,22 @@ func vkb_clear_sessions() C.int {
 	}
 	return 0
 }
+
+// abiVersion is the semver of the libvkb C ABI surface. Bumped when:
+//   - major: a function signature changes, or one is removed
+//   - minor: a new function is added (additive, back-compat)
+//   - patch: a fix that doesn't change the surface (rare)
+//
+// The Mac app reads this via vkb_abi_version() at startup and asserts
+// it matches the major version it was built against. This catches
+// dev-build vs. shipped-dylib mismatches that would otherwise crash
+// at first call to the new function.
+const abiVersion = "1.0.0"
+
+// vkb_abi_version returns the libvkb ABI semver. Caller frees via
+// vkb_free_string. Never returns NULL.
+//
+//export vkb_abi_version
+func vkb_abi_version() *C.char {
+	return C.CString(abiVersion)
+}
