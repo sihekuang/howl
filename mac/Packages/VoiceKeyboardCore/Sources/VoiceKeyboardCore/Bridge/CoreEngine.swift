@@ -52,4 +52,20 @@ public protocol CoreEngine: Sendable {
 
     /// Tear down the engine (idempotent).
     func shutdown()
+
+    /// Returns the JSON array of session manifests from libvkb, or nil
+    /// when the engine is not initialized. nil is distinct from the
+    /// empty list case (which returns "[]").
+    func sessionsListJSON() async -> String?
+
+    /// Returns the JSON manifest for a single session, or nil when the
+    /// session does not exist or its manifest is unreadable.
+    func sessionGetJSON(_ id: String) async -> String?
+
+    /// Deletes a session folder. Returns the C ABI return code
+    /// (0 = success, 1 = engine not init, 5 = invalid id, 6 = fs err).
+    func sessionDelete(_ id: String) async -> Int32
+
+    /// Clears every session folder. Same return-code convention.
+    func sessionsClear() async -> Int32
 }

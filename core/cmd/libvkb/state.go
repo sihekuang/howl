@@ -7,6 +7,7 @@ import (
 	"log"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/config"
@@ -14,7 +15,9 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/resample"
+	"github.com/voice-keyboard/core/internal/sessions"
 	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
@@ -29,6 +32,18 @@ type engine struct {
 	mu       sync.Mutex
 	cfg      config.Config
 	pipeline *pipeline.Pipeline
+
+	// sessions stores captured per-dictation folders under
+	// /tmp/voicekeyboard/sessions/. Initialized once in vkb_init;
+	// the Pipeline tab + C ABI exports read from this Store.
+	sessions *sessions.Store
+
+	// activeSessionID + activeSessionDir hold the currently-recording
+	// session metadata between vkb_start_capture (where the recorder
+	// is constructed) and the capture goroutine's defer (where the
+	// session.json manifest is written, in Task 7).
+	activeSessionID  string
+	activeSessionDir string
 
 	// pushCh is the audio frame channel for the current capture cycle.
 	// vkb_push_audio sends into it; the pipeline goroutine drains it;
@@ -97,6 +112,14 @@ func (e *engine) setLastError(msg string) {
 // returned pipeline to e.pipeline under e.mu. This avoids a TSAN-visible
 // race between vkb_configure (writer) and vkb_start_capture (reader).
 func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
+	// Clear any stale per-dictation session metadata from a previous
+	// Developer-mode capture. The DeveloperMode block below populates
+	// these fields when active; clearing here ensures a non-DeveloperMode
+	// reconfigure leaves no leftover that would mislead Task 7's manifest
+	// writer.
+	e.activeSessionID = ""
+	e.activeSessionDir = ""
+
 	tr, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 		ModelPath: e.cfg.WhisperModelPath,
 		Language:  e.cfg.Language,
@@ -172,6 +195,43 @@ func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
 			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
 		} else {
 			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)
+		}
+	}
+
+	if e.cfg.DeveloperMode && e.sessions != nil {
+		// Prune to the last 10 sessions before opening a new one — keeps
+		// /tmp from accumulating dictation history forever.
+		if err := e.sessions.Prune(10); err != nil {
+			log.Printf("[vkb] buildPipeline: session prune failed (continuing): %v", err)
+		}
+		// Sub-second precision avoids collision when two captures start in the
+		// same second (manual double-tap, CI test loops). Lexical sort still
+		// matches chronological order; validSessionID accepts the period.
+		id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
+		dir := e.sessions.SessionDir(id)
+		rec, err := recorder.Open(recorder.Options{
+			Dir:         dir,
+			AudioStages: true,
+			Transcripts: true,
+		})
+		if err != nil {
+			log.Printf("[vkb] buildPipeline: recorder open failed (continuing without capture): %v", err)
+		} else {
+			// p.Recorder is consumed by pipeline.Run → registerRecorderStages,
+			// which walks FrameStages and ChunkStages and calls AddStage for us.
+			// We must not call AddStage here or Run will see duplicate registrations.
+			p.Recorder = rec
+
+			// Stash the session id + dir so the post-run hook (Task 7) can
+			// write the manifest from the capture goroutine in exports.go.
+			//
+			// Safe without e.mu: vkb_configure rejects reconfigure while a
+			// capture is in flight (exports.go: rc=4), so no concurrent
+			// reader exists at this point. The capture goroutine will
+			// observe these writes via the e.mu lock acquired in
+			// vkb_start_capture's defer.
+			e.activeSessionID = id
+			e.activeSessionDir = dir
 		}
 	}
 

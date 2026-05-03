@@ -65,6 +65,13 @@ struct GeneralTab: View {
                     launchAtLoginEnabled = LaunchAtLogin.isEnabled
                 }
             ))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Developer mode", isOn: $settings.developerMode)
+                Text("Show the Pipeline tab — captures per-stage audio + transcripts to /tmp on every dictation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .onChange(of: settings) { _, new in onSave(new) }
         .task {

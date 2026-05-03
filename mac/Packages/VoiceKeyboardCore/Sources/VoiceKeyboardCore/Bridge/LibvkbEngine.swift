@@ -124,6 +124,28 @@ public actor LibvkbEngine: CoreEngine {
         }
     }
 
+    public func sessionsListJSON() -> String? {
+        guard let cstr = vkb_list_sessions() else { return nil }
+        defer { vkb_free_string(cstr) }
+        return String(cString: cstr)
+    }
+
+    public func sessionGetJSON(_ id: String) -> String? {
+        return id.withCString { cid -> String? in
+            guard let cstr = vkb_get_session(cid) else { return nil }
+            defer { vkb_free_string(cstr) }
+            return String(cString: cstr)
+        }
+    }
+
+    public func sessionDelete(_ id: String) -> Int32 {
+        return id.withCString { cid in vkb_delete_session(cid) }
+    }
+
+    public func sessionsClear() -> Int32 {
+        return vkb_clear_sessions()
+    }
+
     private nonisolated func readLastError() -> String? {
         guard let cstr = vkb_last_error() else { return nil }
         defer { vkb_free_string(cstr) }

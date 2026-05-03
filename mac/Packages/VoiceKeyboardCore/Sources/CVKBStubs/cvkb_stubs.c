@@ -22,3 +22,7 @@ void vkb_destroy(void)        {}
 char* vkb_last_error(void)    { return NULL; }
 void vkb_free_string(char* s) { (void)s; }
 int vkb_enroll_compute(const float* samples, int count, int sample_rate, const char* profile_dir) { (void)samples; (void)count; (void)sample_rate; (void)profile_dir; return 0; }
+char* vkb_list_sessions(void)            { return NULL; }
+char* vkb_get_session(const char* id)    { (void)id; return NULL; }
+int   vkb_delete_session(const char* id) { (void)id; return 0; }
+int   vkb_clear_sessions(void)           { return 0; }

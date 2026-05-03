@@ -67,4 +67,25 @@ struct SettingsStoreTests {
         let decoded = try JSONDecoder().decode(UserSettings.self, from: data)
         #expect(decoded.llmBaseURL == "")
     }
+
+    @Test func userSettings_developerMode_defaultsFalse() {
+        let s = UserSettings()
+        #expect(s.developerMode == false)
+    }
+
+    @Test func userSettings_developerMode_jsonRoundTrip() throws {
+        var s = UserSettings()
+        s.developerMode = true
+        let data = try JSONEncoder().encode(s)
+        let back = try JSONDecoder().decode(UserSettings.self, from: data)
+        #expect(back.developerMode == true)
+    }
+
+    @Test func userSettings_developerMode_decodesMissingAsFalse() throws {
+        // Forward compat: a v1 blob (no developerMode key) decodes fine
+        // with the new field defaulting to false.
+        let json = #"{"whisperModelSize":"small","language":"en"}"#.data(using: .utf8)!
+        let s = try JSONDecoder().decode(UserSettings.self, from: json)
+        #expect(s.developerMode == false)
+    }
 }

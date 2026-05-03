@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/voice-keyboard/core/internal/sessions"
 )
 
 // TestEvent_ChunkJSONEncoding pins the wire format Swift decodes —
@@ -133,4 +137,20 @@ func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
 		c()
 	}
 	// If we got here without panic, the no-op path is safe.
+}
+
+// TestCapture_WritesSessionManifest_WhenDeveloperMode runs a fake
+// capture cycle with DeveloperMode=true and asserts a session.json
+// landed under /tmp/voicekeyboard/sessions/<id>/.
+func TestCapture_WritesSessionManifest_WhenDeveloperMode(t *testing.T) {
+	t.Skip("end-to-end — requires whisper model; covered by manual smoke + e2e suite")
+	// Documentation of intent: when configured with DeveloperMode=true
+	// and a real audio buffer pushed via vkb_push_audio, after
+	// vkb_stop_capture returns and a result event is observed,
+	// e.activeSessionDir must contain a valid session.json whose ID
+	// matches e.activeSessionID and whose Preset is the active preset
+	// name (or "default" until the presets package lands in Slice 2).
+	_ = sessions.Manifest{}
+	_ = os.Stat
+	_ = filepath.Join
 }

@@ -13,6 +13,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case provider
     case dictionary
     case playground
+    case pipeline   // NEW
 
     var id: Self { self }
 
@@ -24,6 +25,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return "Provider"
         case .dictionary: return "Dictionary"
         case .playground: return "Playground"
+        case .pipeline:   return "Pipeline"   // NEW
         }
     }
 
@@ -38,6 +40,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return "key"
         case .dictionary: return "books.vertical"
         case .playground: return "waveform"
+        case .pipeline:   return "rectangle.connected.to.line.below"   // NEW
         }
     }
 
@@ -52,6 +55,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return .orange
         case .dictionary: return .green
         case .playground: return .pink
+        case .pipeline:   return .indigo   // NEW
         }
     }
 }
@@ -66,7 +70,7 @@ struct SettingsView: View {
             // Sidebar — Apple-style colored icon rows.
             List(selection: $selectedPage) {
                 Section("Voice Keyboard") {
-                    ForEach(SettingsPage.allCases) { page in
+                    ForEach(visiblePages) { page in
                         SidebarRow(page: page).tag(page)
                     }
                 }
@@ -91,6 +95,20 @@ struct SettingsView: View {
         .frame(minWidth: 720, minHeight: 520)
         .task {
             settings = (try? composition.settings.get()) ?? UserSettings()
+        }
+        .onChange(of: settings.developerMode) { _, on in
+            if !on, selectedPage == .pipeline {
+                selectedPage = .general
+            }
+        }
+    }
+
+    private var visiblePages: [SettingsPage] {
+        SettingsPage.allCases.filter { page in
+            switch page {
+            case .pipeline: return settings.developerMode
+            default:        return true
+            }
         }
     }
 
@@ -208,6 +226,11 @@ private struct DetailView: View {
                 appState: composition.appState,
                 hotkey: settings.hotkey,
                 coordinator: composition.coordinator
+            )
+        case .pipeline:
+            PipelineTab(
+                engine: composition.engine,
+                sessions: LibVKBSessionsClient(engine: composition.engine)
             )
         }
     }

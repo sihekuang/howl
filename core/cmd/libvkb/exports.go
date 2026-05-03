@@ -21,6 +21,7 @@ import (
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/sessions"
 )
 
 // Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
@@ -43,7 +44,10 @@ func vkb_init() C.int {
 	if getEngine() != nil {
 		return 0
 	}
-	setEngine(&engine{events: make(chan event, 32)})
+	setEngine(&engine{
+		events:   make(chan event, 32),
+		sessions: sessions.NewStore("/tmp/voicekeyboard/sessions"),
+	})
 	return 0
 }
 
@@ -182,14 +186,52 @@ func vkb_start_capture() C.int {
 				log.Printf("[vkb] capture goroutine: PANIC %s", msg)
 				e.events <- event{Kind: "error", Msg: msg}
 			}
+			// Snapshot session metadata under the lock so we don't race with
+			// a concurrent vkb_configure swapping it out.
 			e.mu.Lock()
+			sessionID := e.activeSessionID
+			sessionDir := e.activeSessionDir
+			e.activeSessionID = ""
+			e.activeSessionDir = ""
 			e.pushCh = nil
 			e.cancel = nil
 			drops := e.dropCount
 			pushes := e.pushCount
 			e.dropCount = 0
 			e.pushCount = 0
+			tseEnabled := e.cfg.TSEEnabled // read in the same critical section as session metadata
 			e.mu.Unlock()
+
+			// Write session.json — best-effort. A missing manifest just makes
+			// the session invisible to the Inspector; the WAVs still exist on
+			// disk for ad-hoc inspection.
+			if sessionID != "" && sessionDir != "" {
+				m := sessions.Manifest{
+					Version:     sessions.CurrentManifestVersion,
+					ID:          sessionID,
+					Preset:      "default", // populated correctly once Slice 2 lands the presets package
+					DurationSec: 0,         // TODO: pipeline-side accounting in Slice 4 (replay needs precise duration)
+					Stages: []sessions.StageEntry{
+						{Name: "denoise", Kind: "frame", WavRel: "denoise.wav", RateHz: 48000},
+						{Name: "decimate3", Kind: "frame", WavRel: "decimate3.wav", RateHz: 16000},
+					},
+					Transcripts: sessions.TranscriptEntries{
+						Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
+					},
+				}
+				// Add tse stage entry iff it was registered.
+				if tseEnabled {
+					m.Stages = append(m.Stages, sessions.StageEntry{
+						Name: "tse", Kind: "chunk", WavRel: "tse.wav", RateHz: 16000,
+					})
+				}
+				if err := m.Write(sessionDir); err != nil {
+					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
+				} else {
+					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)
+				}
+			}
+
 			log.Printf("[vkb] capture goroutine: exited (pushes=%d drops=%d)", pushes, drops)
 		}()
 		res, err := pipe.Run(ctx, pushCh)
@@ -462,4 +504,120 @@ func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profile
 	}
 	log.Printf("[vkb] vkb_enroll_compute: success")
 	return 0
+}
+
+// vkb_list_sessions returns a JSON array of session manifests, newest
+// first. Returns NULL on engine-not-initialized; an empty array "[]"
+// on no sessions. The returned C string is heap-allocated; the caller
+// must free it via vkb_free_string.
+//
+//export vkb_list_sessions
+func vkb_list_sessions() *C.char {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return nil
+	}
+	manifests, err := e.sessions.List()
+	if err != nil {
+		e.setLastError("vkb_list_sessions: " + err.Error())
+		return nil
+	}
+	if manifests == nil {
+		manifests = []sessions.Manifest{}
+	}
+	buf, err := json.Marshal(manifests)
+	if err != nil {
+		e.setLastError("vkb_list_sessions: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_get_session returns a JSON-encoded Manifest for the given id, or
+// NULL if the session does not exist or its manifest is unreadable.
+// Caller frees via vkb_free_string.
+//
+//export vkb_get_session
+func vkb_get_session(idC *C.char) *C.char {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return nil
+	}
+	if idC == nil {
+		e.setLastError("vkb_get_session: id is NULL")
+		return nil
+	}
+	id := C.GoString(idC)
+	m, err := e.sessions.Get(id)
+	if err != nil {
+		e.setLastError("vkb_get_session: " + err.Error())
+		return nil
+	}
+	buf, err := json.Marshal(m)
+	if err != nil {
+		e.setLastError("vkb_get_session: marshal: " + err.Error())
+		return nil
+	}
+	return C.CString(string(buf))
+}
+
+// vkb_delete_session removes a single session folder. Idempotent.
+// Returns 0 on success, 1 if the engine is not initialized, 5 on
+// invalid id (path traversal etc.), 6 on filesystem error.
+//
+//export vkb_delete_session
+func vkb_delete_session(idC *C.char) C.int {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return 1
+	}
+	if idC == nil {
+		e.setLastError("vkb_delete_session: id is NULL")
+		return 5
+	}
+	id := C.GoString(idC)
+	if err := e.sessions.Delete(id); err != nil {
+		e.setLastError("vkb_delete_session: " + err.Error())
+		// Distinguish bad-id (validation) from disk error.
+		if errors.Is(err, sessions.ErrInvalidSessionID) {
+			return 5
+		}
+		return 6
+	}
+	return 0
+}
+
+// vkb_clear_sessions removes every session folder. Returns 0 on
+// success, 1 if engine not initialized, 6 on filesystem error.
+//
+//export vkb_clear_sessions
+func vkb_clear_sessions() C.int {
+	e := getEngine()
+	if e == nil || e.sessions == nil {
+		return 1
+	}
+	if err := e.sessions.Clear(); err != nil {
+		e.setLastError("vkb_clear_sessions: " + err.Error())
+		return 6
+	}
+	return 0
+}
+
+// abiVersion is the semver of the libvkb C ABI surface. Bumped when:
+//   - major: a function signature changes, or one is removed
+//   - minor: a new function is added (additive, back-compat)
+//   - patch: a fix that doesn't change the surface (rare)
+//
+// The Mac app reads this via vkb_abi_version() at startup and asserts
+// it matches the major version it was built against. This catches
+// dev-build vs. shipped-dylib mismatches that would otherwise crash
+// at first call to the new function.
+const abiVersion = "1.0.0"
+
+// vkb_abi_version returns the libvkb ABI semver. Caller frees via
+// vkb_free_string. Never returns NULL.
+//
+//export vkb_abi_version
+func vkb_abi_version() *C.char {
+	return C.CString(abiVersion)
 }
