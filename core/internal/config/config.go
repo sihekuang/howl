@@ -7,6 +7,11 @@ type Config struct {
 	WhisperModelSize        string   `json:"whisper_model_size"`
 	Language                string   `json:"language"`
 	DisableNoiseSuppression bool     `json:"disable_noise_suppression"`
+	// DeveloperMode gates power-user features (always-on per-stage
+	// session capture, the Pipeline tab in the Mac app). Casual users
+	// keep DeveloperMode == false (the default) and never see the
+	// extra UI surface or the temp-folder writes.
+	DeveloperMode           bool     `json:"developer_mode"`
 	DeepFilterModelPath     string   `json:"deep_filter_model_path"` // path to DeepFilterNet model archive (.tar.gz)
 	LLMProvider             string   `json:"llm_provider"`
 	LLMModel                string   `json:"llm_model"`

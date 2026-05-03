@@ -93,3 +93,26 @@ func TestWithDefaults_TSEFieldsLeftEmpty(t *testing.T) {
 		t.Errorf("ONNXLibPath default should be empty, got %q", c.ONNXLibPath)
 	}
 }
+
+func TestConfig_DeveloperMode_DefaultFalse(t *testing.T) {
+	var c Config
+	WithDefaults(&c)
+	if c.DeveloperMode {
+		t.Error("DeveloperMode default should be false")
+	}
+}
+
+func TestConfig_DeveloperMode_JSONRoundTrip(t *testing.T) {
+	in := Config{DeveloperMode: true}
+	buf, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var out Config
+	if err := json.Unmarshal(buf, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !out.DeveloperMode {
+		t.Errorf("DeveloperMode lost in round-trip; JSON was: %s", buf)
+	}
+}
