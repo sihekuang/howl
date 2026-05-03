@@ -52,7 +52,10 @@ struct PlaygroundTab: View {
                 Text("Select a session on the left.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
