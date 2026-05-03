@@ -102,7 +102,13 @@ func secretsFromEngineCfg(e *engine) presets.EngineSecrets {
 		ONNXLibPath:         e.cfg.ONNXLibPath,
 		CustomDict:          append([]string{}, e.cfg.CustomDict...),
 		Language:            e.cfg.Language,
-		LLMBaseURL:          e.cfg.LLMBaseURL,
-		LLMModel:            e.cfg.LLMModel,
+		// Compare keeps LLM constant across replays: audio pipeline
+		// is the variable being compared. Override the preset's
+		// llm.provider with the engine's current choice so the user's
+		// configured Ollama/LMStudio/etc. is honored, not the preset's
+		// default of anthropic.
+		LLMProvider: e.cfg.LLMProvider,
+		LLMBaseURL:  e.cfg.LLMBaseURL,
+		LLMModel:    e.cfg.LLMModel,
 	}
 }
