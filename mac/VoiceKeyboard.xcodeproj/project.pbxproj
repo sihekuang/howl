@@ -45,12 +45,14 @@
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
 		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
 		EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */; };
+		EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 088375E753FFBEF3194F73E6 /* PresetDraft.swift */; };
 		F0FB30D506A0C389662232B1 /* GeneralTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D5234E365C4BA6093A5C613 /* GeneralTab.swift */; };
 		F68C7C74F80910D38629B127 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC04BF85399775A80EDBB0B1 /* AppState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
+		088375E753FFBEF3194F73E6 /* PresetDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDraft.swift; sourceTree = "<group>"; };
 		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
 		13FD3D07C12A94326240356A /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				FB29BB613B981351CFED403B /* EditorView.swift */,
 				C9F6485D9460F04878BB6B91 /* InspectorView.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
+				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
 				FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */,
 				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 			);
@@ -462,6 +465,7 @@
 				C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */,
 				0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */,
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
+				EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */,
 				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
 				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
