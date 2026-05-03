@@ -4,8 +4,7 @@
 //
 //	<base>/<id>/
 //	├── session.json            (Manifest)
-//	├── frame-stages/<stage>.wav
-//	├── chunk-stages/<stage>.wav
+//	├── <stage>.wav             one per pipeline stage (frame + chunk, flat)
 //	└── transcripts/{raw,dict,cleaned}.txt
 //
 // The manifest is the contract between writers (Go pipeline + recorder)
@@ -44,7 +43,7 @@ type Manifest struct {
 }
 
 // StageEntry describes one captured stage. WavRel is the path of the
-// stage's WAV relative to the session folder (e.g. "frame-stages/denoise.wav").
+// stage's WAV relative to the session folder (e.g. "denoise.wav").
 type StageEntry struct {
 	Name          string  `json:"name"`
 	Kind          string  `json:"kind"`                     // "frame" | "chunk"
