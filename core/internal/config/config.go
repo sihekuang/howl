@@ -2,6 +2,8 @@
 // as JSON. Defaults are applied by WithDefaults, never inside JSON tags.
 package config
 
+import "time"
+
 type Config struct {
 	WhisperModelPath        string   `json:"whisper_model_path"`
 	WhisperModelSize        string   `json:"whisper_model_size"`
@@ -40,6 +42,13 @@ type Config struct {
 	// doesn't sound enough like the enrolled speaker). nil or 0.0
 	// disables the gate entirely (current default behavior).
 	TSEThreshold *float32 `json:"tse_threshold,omitempty"`
+
+	// PipelineTimeoutSec bounds total pipeline runtime per dictation.
+	// 0 disables the bound (legacy behavior). Wired into engine via
+	// context.WithTimeout(pipe.Run ctx). On expiry the pipeline returns
+	// whatever cleaned text streamed so far (or dict-corrected raw if no
+	// LLM output yet).
+	PipelineTimeoutSec int `json:"pipeline_timeout_sec,omitempty"`
 }
 
 // TSEThresholdValue returns the configured TSE threshold or 0 if unset.
@@ -49,6 +58,15 @@ func (c *Config) TSEThresholdValue() float32 {
 		return 0
 	}
 	return *c.TSEThreshold
+}
+
+// PipelineTimeoutValue returns cfg.PipelineTimeoutSec as a Duration,
+// or 0 (no timeout) if unset.
+func (c *Config) PipelineTimeoutValue() time.Duration {
+	if c == nil || c.PipelineTimeoutSec <= 0 {
+		return 0
+	}
+	return time.Duration(c.PipelineTimeoutSec) * time.Second
 }
 
 func WithDefaults(c *Config) {
