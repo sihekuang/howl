@@ -199,6 +199,7 @@ func vkb_start_capture() C.int {
 			pushes := e.pushCount
 			e.dropCount = 0
 			e.pushCount = 0
+			tseEnabled := e.cfg.TSEEnabled // read in the same critical section as session metadata
 			e.mu.Unlock()
 
 			// Write session.json — best-effort. A missing manifest just makes
@@ -219,9 +220,6 @@ func vkb_start_capture() C.int {
 					},
 				}
 				// Add tse stage entry iff it was registered.
-				e.mu.Lock()
-				tseEnabled := e.cfg.TSEEnabled
-				e.mu.Unlock()
 				if tseEnabled {
 					m.Stages = append(m.Stages, sessions.StageEntry{
 						Name: "tse", Kind: "chunk", WavRel: "tse.wav", RateHz: 16000,
