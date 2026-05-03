@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/voice-keyboard/core/internal/sessions"
 )
 
 func TestSessionWritesPerStageWAV(t *testing.T) {
@@ -59,6 +61,43 @@ func TestSessionDisabledIsNoOp(t *testing.T) {
 	s.AppendStage("anything", []float32{1, 2, 3})
 	_ = s.WriteTranscript("raw.txt", "x")
 	_ = s.Close()
+}
+
+func TestSession_WriteManifest(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(Options{Dir: dir, AudioStages: true, Transcripts: true})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	m := sessions.Manifest{
+		ID:          "2026-05-02T14:32:11Z",
+		Preset:      "default",
+		DurationSec: 1.5,
+		Stages: []sessions.StageEntry{
+			{Name: "denoise", Kind: "frame", WavRel: "denoise.wav", RateHz: 48000},
+		},
+		Transcripts: sessions.TranscriptEntries{Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt"},
+	}
+	if err := s.WriteManifest(&m); err != nil {
+		t.Fatalf("WriteManifest: %v", err)
+	}
+	got, err := sessions.Read(dir)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got.ID != m.ID || got.Preset != "default" || len(got.Stages) != 1 {
+		t.Errorf("manifest mismatch: got %+v", got)
+	}
+}
+
+func TestSession_WriteManifest_NilSession_NoOp(t *testing.T) {
+	// Recorder methods on nil are no-ops by contract.
+	var s *Session
+	if err := s.WriteManifest(&sessions.Manifest{ID: "x"}); err != nil {
+		t.Errorf("WriteManifest on nil should be no-op, got: %v", err)
+	}
 }
 
 func assertWavDataLen(t *testing.T, path string, wantBytes int) {

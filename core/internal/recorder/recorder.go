@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/voice-keyboard/core/internal/sessions"
 )
 
 // Options selects which taps are enabled and where files land.
@@ -103,6 +105,19 @@ func (s *Session) WriteTranscript(name, text string) error {
 		return nil
 	}
 	return os.WriteFile(filepath.Join(s.dir, name), []byte(text), 0o644)
+}
+
+// WriteManifest serializes a session manifest to <dir>/session.json so
+// readers (Inspector, vkb-cli) can discover what each WAV represents.
+// Caller fills the Manifest with metadata; recorder is the writer
+// because it owns the directory the WAVs live in.
+//
+// No-op when called on a nil *Session.
+func (s *Session) WriteManifest(m *sessions.Manifest) error {
+	if s == nil {
+		return nil
+	}
+	return m.Write(s.dir)
 }
 
 // Close patches the header of every WAV writer and closes the file.
