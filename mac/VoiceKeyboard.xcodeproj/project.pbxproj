@@ -20,6 +20,7 @@
 		516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */; };
 		57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */; };
 		5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */; };
+		60F1DF9AAB2879C591F9D2F7 /* SessionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1AFD5018290EDF499A42FB /* SessionDetail.swift */; };
 		60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6533D8DC82E66396D8BA7557 /* Assets.xcassets */; };
 		64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */; };
 		68025E317F55A3908E958FEF /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B5C020D95C44A45E9A2DCA /* WaveformView.swift */; };
@@ -71,6 +72,7 @@
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
 		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
+		4B1AFD5018290EDF499A42FB /* SessionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetail.swift; sourceTree = "<group>"; };
 		4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
 		59636EC6C578038A015432EA /* OllamaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaSection.swift; sourceTree = "<group>"; };
 		6533D8DC82E66396D8BA7557 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -174,6 +176,7 @@
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
 				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
 				FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */,
+				4B1AFD5018290EDF499A42FB /* SessionDetail.swift */,
 				09FD3D63EFED70E41C68EC4B /* SessionList.swift */,
 				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 				F79C5E25016E8619AC316CFD /* SessionPreview.swift */,
@@ -485,6 +488,7 @@
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
 				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
 				EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */,
+				60F1DF9AAB2879C591F9D2F7 /* SessionDetail.swift in Sources */,
 				AE4B9E3BD833AFBE5AA9719D /* SessionList.swift in Sources */,
 				CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */,
 				B94B7539DDA1680F9B9566B0 /* SessionPreview.swift in Sources */,
