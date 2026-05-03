@@ -69,6 +69,9 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 			cfg.TSEThreshold = &t
 		}
 	}
+	if p.TimeoutSec != nil {
+		cfg.PipelineTimeoutSec = *p.TimeoutSec
+	}
 	return cfg
 }
 
@@ -130,6 +133,14 @@ func presetMatchesConfig(p Preset, cfg config.Config) bool {
 				return false
 			}
 		}
+	}
+	// Timeout: nil-or-0 are equivalent ("no bound"); explicit non-zero must match.
+	presetTimeout := 0
+	if p.TimeoutSec != nil {
+		presetTimeout = *p.TimeoutSec
+	}
+	if cfg.PipelineTimeoutSec != presetTimeout {
+		return false
 	}
 	return true
 }
