@@ -124,3 +124,108 @@ func TestStore_List_MissingBase_ReturnsEmpty(t *testing.T) {
 		t.Errorf("len = %d, want 0", len(got))
 	}
 }
+
+func TestStore_Get_RejectsTraversal(t *testing.T) {
+	s := NewStore(t.TempDir())
+	for _, bad := range []string{"../escape", "foo/bar", ".."} {
+		if _, err := s.Get(bad); err == nil {
+			t.Errorf("Get(%q) should reject path traversal", bad)
+		}
+	}
+}
+
+func TestStore_Delete_RemovesFolder(t *testing.T) {
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:45Z", "default")
+	writeFakeSession(t, base, "2026-05-02T14:32:11Z", "minimal")
+
+	s := NewStore(base)
+	if err := s.Delete("2026-05-02T14:30:45Z"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "2026-05-02T14:30:45Z")); !os.IsNotExist(err) {
+		t.Errorf("folder not deleted: %v", err)
+	}
+	// Other session untouched.
+	if _, err := os.Stat(filepath.Join(base, "2026-05-02T14:32:11Z")); err != nil {
+		t.Errorf("other session affected: %v", err)
+	}
+}
+
+func TestStore_Delete_UnknownID_NoError(t *testing.T) {
+	// Idempotent: deleting a nonexistent session is a no-op, not an error.
+	s := NewStore(t.TempDir())
+	if err := s.Delete("nope"); err != nil {
+		t.Errorf("Delete on missing ID should be no-op, got: %v", err)
+	}
+}
+
+func TestStore_Delete_RejectsTraversal(t *testing.T) {
+	// Defense-in-depth: never let a malicious id escape base.
+	s := NewStore(t.TempDir())
+	for _, bad := range []string{"../escape", "foo/bar", ".."} {
+		if err := s.Delete(bad); err == nil {
+			t.Errorf("Delete(%q) should reject path traversal", bad)
+		}
+	}
+}
+
+func TestStore_Clear_RemovesAll(t *testing.T) {
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:45Z", "default")
+	writeFakeSession(t, base, "2026-05-02T14:32:11Z", "minimal")
+
+	s := NewStore(base)
+	if err := s.Clear(); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	got, err := s.List()
+	if err != nil {
+		t.Fatalf("List after clear: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len after clear = %d, want 0", len(got))
+	}
+}
+
+func TestStore_Prune_KeepsNMostRecent(t *testing.T) {
+	base := t.TempDir()
+	for _, id := range []string{
+		"2026-05-02T14:28:00Z",
+		"2026-05-02T14:29:00Z",
+		"2026-05-02T14:30:00Z",
+		"2026-05-02T14:31:00Z",
+		"2026-05-02T14:32:00Z",
+	} {
+		writeFakeSession(t, base, id, "default")
+	}
+
+	s := NewStore(base)
+	if err := s.Prune(3); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 3 {
+		t.Fatalf("len after prune = %d, want 3", len(got))
+	}
+	// Three newest survived.
+	want := []string{"2026-05-02T14:32:00Z", "2026-05-02T14:31:00Z", "2026-05-02T14:30:00Z"}
+	for i, w := range want {
+		if got[i].ID != w {
+			t.Errorf("got[%d].ID = %q, want %q", i, got[i].ID, w)
+		}
+	}
+}
+
+func TestStore_Prune_BelowKeep_NoOp(t *testing.T) {
+	base := t.TempDir()
+	writeFakeSession(t, base, "2026-05-02T14:30:00Z", "default")
+	s := NewStore(base)
+	if err := s.Prune(10); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	got, _ := s.List()
+	if len(got) != 1 {
+		t.Errorf("len = %d, want 1 (Prune below threshold should be no-op)", len(got))
+	}
+}
