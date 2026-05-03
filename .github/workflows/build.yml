@@ -25,6 +25,12 @@ jobs:
     name: Build, sign, notarize, upload
     runs-on: macos-15
     timeout-minutes: 60
+    # softprops/action-gh-release needs contents:write to create/update the
+    # Release and call the generate-release-notes API. Without this the job
+    # falls back to the repo's default read-only GITHUB_TOKEN and the
+    # "Attach to GitHub Release" step 403s.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
