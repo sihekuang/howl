@@ -38,6 +38,7 @@
 		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
 		C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */; };
 		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
+		CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */; };
 		CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59636EC6C578038A015432EA /* OllamaSection.swift */; };
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
@@ -55,6 +56,7 @@
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
+		28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
 		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 			children = (
 				C9F6485D9460F04878BB6B91 /* InspectorView.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
+				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 			);
 			path = Pipeline;
 			sourceTree = "<group>";
@@ -455,6 +458,7 @@
 				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
 				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
+				CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */,
 				4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */,
 				5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */,
 				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,

@@ -130,19 +130,15 @@ struct InspectorView: View {
         }
     }
 
-    private func sessionURL(_ id: String, _ rel: String) -> URL {
-        URL(fileURLWithPath: "/tmp/voicekeyboard/sessions/\(id)/\(rel)")
-    }
-
     private func openInPlayer(sessionID: String, relPath: String) {
-        let url = sessionURL(sessionID, relPath)
+        let url = SessionPaths.file(in: sessionID, rel: relPath)
         #if canImport(AppKit)
         NSWorkspace.shared.open(url)
         #endif
     }
 
     private func revealInFinder(_ s: SessionManifest) {
-        let url = URL(fileURLWithPath: "/tmp/voicekeyboard/sessions/\(s.id)")
+        let url = SessionPaths.dir(for: s.id)
         #if canImport(AppKit)
         NSWorkspace.shared.activateFileViewerSelecting([url])
         #endif
