@@ -23,6 +23,8 @@ func main() {
 		os.Exit(runBackends(os.Args[2:]))
 	case "providers":
 		os.Exit(runProviders(os.Args[2:]))
+	case "presets":
+		os.Exit(runPresets(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -48,6 +50,8 @@ Usage:
                                          (--models-dir DIR also checks
                                          that each backend's files exist)
   vkb-cli providers                      list registered LLM providers
+  vkb-cli presets {list|show|save|delete}
+                                         manage bundled + user pipeline presets
 
 Environment:
   ANTHROPIC_API_KEY   required for cleanup (anthropic provider only)
