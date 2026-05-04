@@ -2,7 +2,6 @@
 import Foundation
 import Observation
 import CoreTransferable
-import UniformTypeIdentifiers
 import VoiceKeyboardCore
 
 /// Observable working copy of a Preset that the Editor mutates in
@@ -124,19 +123,32 @@ final class PresetDraft {
 
 /// Lane + stage name pair — the editor's identifier for "this stage in
 /// this lane". Stage names are unique within a lane today.
+///
+/// Transferable representation uses a base64-encoded JSON string over
+/// the public utf8-plain-text UTI. Custom UTTypes need an
+/// `UTExportedTypeDeclarations` entry in Info.plist before the system
+/// will route a drop typed `for: StageRef.self`; using a public UTI
+/// avoids that registration step entirely. The encoded form
+/// round-trips exactly through `JSONEncoder` / `JSONDecoder`, so
+/// in-app drag-drop is lossless.
 struct StageRef: Hashable, Equatable, Codable, Transferable {
     enum Lane: String, Hashable, Codable { case frame, chunk }
     let lane: Lane
     let name: String
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .vkbStageRef)
+        ProxyRepresentation(exporting: { (ref: StageRef) -> String in
+            guard let data = try? JSONEncoder().encode(ref) else { return "" }
+            return data.base64EncodedString()
+        }, importing: { (s: String) -> StageRef in
+            guard let data = Data(base64Encoded: s) else {
+                throw NSError(
+                    domain: "StageRef",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "invalid base64"]
+                )
+            }
+            return try JSONDecoder().decode(StageRef.self, from: data)
+        })
     }
-}
-
-extension UTType {
-    /// Custom drag-drop type for reordering pipeline stages within a
-    /// lane. Anchored to the bundle id to avoid clashing with any
-    /// other app's UTType registry.
-    static let vkbStageRef = UTType(exportedAs: "com.voicekeyboard.stage-ref")
 }
