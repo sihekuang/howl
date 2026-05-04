@@ -233,7 +233,8 @@ private struct DetailView: View {
             PipelineTab(
                 engine: composition.engine,
                 sessions: LibVKBSessionsClient(engine: composition.engine),
-                presets: LibVKBPresetsClient(engine: composition.engine)
+                presets: LibVKBPresetsClient(engine: composition.engine),
+                replay: LibVKBReplayClient(engine: composition.engine)
             )
         }
     }

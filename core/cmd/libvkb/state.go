@@ -4,21 +4,13 @@ package main
 
 import (
 	"context"
-	"log"
-	"path/filepath"
 	"sync"
 
-	"github.com/voice-keyboard/core/internal/audio"
 	"github.com/voice-keyboard/core/internal/config"
-	"github.com/voice-keyboard/core/internal/denoise"
-	"github.com/voice-keyboard/core/internal/dict"
-	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
+	pipelinebuild "github.com/voice-keyboard/core/internal/pipeline/build"
 	"github.com/voice-keyboard/core/internal/recorder"
-	"github.com/voice-keyboard/core/internal/resample"
 	"github.com/voice-keyboard/core/internal/sessions"
-	"github.com/voice-keyboard/core/internal/speaker"
-	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 // pushBufferFrames bounds the audio push channel. At 48kHz/480-sample
@@ -120,84 +112,9 @@ func (e *engine) setLastError(msg string) {
 // that's done by openSessionRecorder, called per vkb_start_capture, so
 // each dictation gets its own session folder.
 func (e *engine) buildPipeline() (*pipeline.Pipeline, error) {
-	tr, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
-		ModelPath: e.cfg.WhisperModelPath,
-		Language:  e.cfg.Language,
+	return pipelinebuild.FromOptions(pipelinebuild.Options{
+		Config:        e.cfg,
+		NewDeepFilter: newDeepFilterOrPassthrough,
+		SetLastError:  func(msg string) { e.setLastError(msg) },
 	})
-	if err != nil {
-		return nil, err
-	}
-	provider, err := llm.ProviderByName(e.cfg.LLMProvider)
-	if err != nil {
-		_ = tr.Close()
-		return nil, err
-	}
-	// Mirror vkb-cli/pipe.go's gating: only forward the configured API
-	// key to providers that declare they need one. Defense-in-depth —
-	// today's only NeedsAPIKey=false provider (Ollama) ignores the
-	// field anyway, but a future "self-hosted gateway with optional
-	// bearer token" provider could otherwise silently leak the user's
-	// Anthropic key. The Swift layer also empties LLMAPIKey when the
-	// active provider isn't Anthropic, so this is belt-and-braces.
-	opts := llm.Options{
-		Model:   e.cfg.LLMModel,
-		BaseURL: e.cfg.LLMBaseURL,
-	}
-	if provider.NeedsAPIKey {
-		opts.APIKey = e.cfg.LLMAPIKey
-	}
-	cleaner, err := provider.New(opts)
-	if err != nil {
-		_ = tr.Close()
-		return nil, err
-	}
-	dy := dict.NewFuzzy(e.cfg.CustomDict, 1)
-
-	var d denoise.Denoiser
-	if !e.cfg.DisableNoiseSuppression {
-		d = newDeepFilterOrPassthrough(e.cfg.DeepFilterModelPath)
-	} else {
-		d = denoise.NewPassthrough()
-	}
-
-	p := pipeline.New(tr, dy, cleaner)
-	p.FrameStages = []audio.Stage{
-		denoise.NewStage(d),
-		resample.NewDecimate3(),
-	}
-
-	if e.cfg.TSEEnabled {
-		backend, beErr := speaker.BackendByName(e.cfg.TSEBackend)
-		if beErr != nil {
-			// Same policy as tseErr below: don't fail the whole configure;
-			// surface via vkb_last_error and run without TSE.
-			log.Printf("[vkb] buildPipeline: TSE backend lookup failed, continuing without TSE: %v", beErr)
-			e.setLastError("tse: " + beErr.Error())
-			return p, nil
-		}
-		// TSEModelPath is the back-compat per-file path; we use its parent
-		// directory as the modelsDir and let the backend resolve filenames.
-		modelsDir := filepath.Dir(e.cfg.TSEModelPath)
-		tse, tseErr := pipeline.LoadTSE(
-			backend,
-			e.cfg.TSEProfileDir,
-			modelsDir,
-			e.cfg.ONNXLibPath,
-			e.cfg.TSEThresholdValue(),
-		)
-		if tseErr != nil {
-			log.Printf("[vkb] buildPipeline: TSE load failed, continuing without TSE: %v", tseErr)
-			// Note: we deliberately don't fail the whole configure call.
-			// User keeps a working pipeline; the warning surfaces via
-			// vkb_last_error and the next configure attempt can fix it.
-			e.setLastError("tse: " + tseErr.Error())
-		} else if tse != nil {
-			p.ChunkStages = []audio.Stage{tse}
-			log.Printf("[vkb] buildPipeline: TSE loaded (profile=%s)", e.cfg.TSEProfileDir)
-		} else {
-			log.Printf("[vkb] buildPipeline: TSE enabled but no enrollment found at %s", e.cfg.TSEProfileDir)
-		}
-	}
-
-	return p, nil
 }

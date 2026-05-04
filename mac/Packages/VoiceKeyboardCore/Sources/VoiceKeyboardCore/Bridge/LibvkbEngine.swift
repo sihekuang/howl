@@ -174,6 +174,16 @@ public actor LibvkbEngine: CoreEngine {
         return name.withCString { cn in vkb_delete_preset(cn) }
     }
 
+    public func replayJSON(sourceID: String, presetsCSV: String) -> String? {
+        return sourceID.withCString { csid -> String? in
+            presetsCSV.withCString { ccsv -> String? in
+                guard let cstr = vkb_replay(csid, ccsv) else { return nil }
+                defer { vkb_free_string(cstr) }
+                return String(cString: cstr)
+            }
+        }
+    }
+
     private nonisolated func readLastError() -> String? {
         guard let cstr = vkb_last_error() else { return nil }
         defer { vkb_free_string(cstr) }

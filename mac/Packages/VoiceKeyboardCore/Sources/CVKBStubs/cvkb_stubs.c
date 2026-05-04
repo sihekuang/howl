@@ -34,3 +34,8 @@ int   vkb_save_preset(const char* name, const char* description, const char* bod
     (void)name; (void)description; (void)body; return 1;
 }
 int   vkb_delete_preset(const char* name) { (void)name; return 1; }
+
+// Compare / replay — Slice 4 stub.
+char* vkb_replay(const char* source_id, const char* presets_csv) {
+    (void)source_id; (void)presets_csv; return NULL;
+}

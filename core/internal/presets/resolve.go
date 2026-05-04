@@ -7,6 +7,12 @@ import (
 // EngineSecrets carries values that don't live in preset JSON because
 // they're per-installation (API keys) or per-machine (model paths).
 // The Resolve caller fills these in from settings storage.
+//
+// LLMProvider is intentionally part of "secrets" (broadly, runtime
+// state) rather than a preset field: presets describe the audio
+// pipeline + Whisper model; the user's LLM choice is independent.
+// When LLMProvider is non-empty, Resolve uses it instead of the
+// preset's `llm.provider` value.
 type EngineSecrets struct {
 	LLMAPIKey           string
 	WhisperModelPath    string
@@ -17,8 +23,20 @@ type EngineSecrets struct {
 	ONNXLibPath         string
 	CustomDict          []string
 	Language            string
+	LLMProvider         string
 	LLMBaseURL          string
 	LLMModel            string
+}
+
+// resolveLLMProvider returns the engine's current LLM provider when set,
+// otherwise falls back to the preset's declared default. Compare runs
+// pass the engine's provider via secrets so all replays of one source
+// use the same LLM — making the audio pipeline the only variable.
+func resolveLLMProvider(p Preset, secrets EngineSecrets) string {
+	if secrets.LLMProvider != "" {
+		return secrets.LLMProvider
+	}
+	return p.LLM.Provider
 }
 
 // Resolve produces a config.Config equivalent to running this preset.
@@ -34,7 +52,7 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 		WhisperModelSize:    p.Transcribe.ModelSize,
 		Language:            secrets.Language,
 		DeepFilterModelPath: secrets.DeepFilterModelPath,
-		LLMProvider:         p.LLM.Provider,
+		LLMProvider:         resolveLLMProvider(p, secrets),
 		LLMModel:            secrets.LLMModel,
 		LLMAPIKey:           secrets.LLMAPIKey,
 		LLMBaseURL:          secrets.LLMBaseURL,

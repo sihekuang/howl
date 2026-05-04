@@ -1,5 +1,6 @@
-# Build outputs
-build/
+# Build outputs (top-level only — `internal/pipeline/build/` is a real
+# package directory, not artifact output).
+/build/
 *.dylib
 *.so
 *.dll

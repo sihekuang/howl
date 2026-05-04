@@ -105,3 +105,17 @@ func presetDeleteGo(name string) int {
 	defer C.free(unsafe.Pointer(cn))
 	return int(vkb_delete_preset(cn))
 }
+
+// replayGo wraps vkb_replay and returns the JSON string.
+func replayGo(sourceID, presetsCSV string) string {
+	csid := C.CString(sourceID)
+	ccsv := C.CString(presetsCSV)
+	defer C.free(unsafe.Pointer(csid))
+	defer C.free(unsafe.Pointer(ccsv))
+	cstr := vkb_replay(csid, ccsv)
+	if cstr == nil {
+		return ""
+	}
+	defer vkb_free_string(cstr)
+	return C.GoString(cstr)
+}
