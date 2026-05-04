@@ -52,12 +52,49 @@ func runPipe(args []string) int {
 	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
 	recordDir := fs.String("record-dir", "", "directory to write per-stage WAVs and transcripts")
 	recordSpec := fs.String("record", "", "comma-separated taps: audio,transcripts (e.g. --record audio,transcripts). Requires --record-dir.")
+	presetName := fs.String("preset", "", "named preset applied before per-flag overrides (see `vkb-cli presets list`)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if (*live || *persistent) && len(fs.Args()) > 0 {
 		fmt.Fprintln(os.Stderr, "usage: --live/--persistent and FILE.wav are mutually exclusive")
 		return 2
+	}
+
+	// Apply --preset before flag-override resolution. Per-flag values
+	// the user passed explicitly win; preset fills in the rest.
+	if *presetName != "" {
+		p, err := lookupPreset(*presetName)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		explicit := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+
+		if !explicit["llm-provider"] && p.LLM.Provider != "" {
+			*llmProvider = p.LLM.Provider
+		}
+		// Preset's chunk-stage list drives speaker mode + tse backend.
+		// First enabled `tse` entry wins (the spec only allows one today).
+		for _, st := range p.ChunkStages {
+			if st.Name != "tse" || !st.Enabled {
+				continue
+			}
+			if !explicit["speaker"] {
+				*speakerMode = true
+			}
+			if !explicit["tse-backend"] && st.Backend != "" {
+				*tseBackend = st.Backend
+			}
+			break
+		}
+		// p.Transcribe.ModelSize and p.TimeoutSec are intentionally
+		// *not* applied here — vkb-cli reads VKB_MODEL_PATH directly
+		// (no model-size→path resolver) and runs a one-shot pipeline
+		// without the libvkb engine's context.WithTimeout wrapping.
+		// Both queued as Slice 5.5 follow-ups.
+		fmt.Fprintf(os.Stderr, "[vkb] preset %q applied (overrides on top take precedence)\n", p.Name)
 	}
 
 	modelPath := os.Getenv("VKB_MODEL_PATH")
