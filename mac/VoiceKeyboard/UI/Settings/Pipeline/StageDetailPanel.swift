@@ -23,11 +23,13 @@ struct StageDetailPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 header(ref: ref, stage: stage)
                 Divider()
-                enabledRow(ref: ref, stage: stage)
                 if stage.name == "tse" {
                     backendRow(ref: ref, stage: stage)
                     thresholdRow(ref: ref, stage: stage)
                     recentSimilarityRow(stage: stage)
+                } else {
+                    Text("No tunables — toggle this stage on or off via the checkbox in the row.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(8)
@@ -51,16 +53,6 @@ struct StageDetailPanel: View {
             Spacer()
             Button("Deselect") { draft.selectedStage = nil }
                 .controlSize(.small)
-        }
-    }
-
-    @ViewBuilder
-    private func enabledRow(ref: StageRef, stage: Preset.StageSpec) -> some View {
-        Toggle(isOn: Binding(
-            get: { stage.enabled },
-            set: { draft.setEnabled($0, for: ref) }
-        )) {
-            Text("Enabled")
         }
     }
 
