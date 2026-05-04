@@ -8,12 +8,17 @@ import VoiceKeyboardCore
 /// - Chunk lane (tse) — reorderable within lane.
 /// - Fixed terminal (whisper → dict → llm) — rendered, not draggable.
 ///
-/// Cross-lane drags are structurally blocked by SwiftUI: each List has
-/// its own drop target.
+/// Built on `.draggable(_:)` + `.dropDestination(for:)` for first-class
+/// macOS drag affordances: a leading hamburger handle on each row,
+/// a custom drag preview that names the stage, and pre-drop validation
+/// that highlights invalid targets in red rather than accepting and
+/// reverting after the fact.
 struct StageGraph: View {
     @Bindable var draft: PresetDraft
 
-    @State private var frameValidationErrors: [StageConstraintValidator.ValidationError] = []
+    /// Stage currently being hovered as a drop target.
+    @State private var hoverTarget: StageRef? = nil
+    /// Inline error surfaced when an invalid drop is rejected.
     @State private var lastInvalidMoveMessage: String? = nil
 
     var body: some View {
@@ -63,64 +68,26 @@ struct StageGraph: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Frame lane
+    // MARK: - Lanes
 
     @ViewBuilder
     private var frameLane: some View {
-        List {
-            ForEach(Array(draft.frameStages.enumerated()), id: \.element.name) { i, stage in
-                stageRow(stage,
-                         lane: .frame,
-                         hasError: frameValidationErrors.contains(where: { $0.index == i }))
-            }
-            .onMove { source, destination in
-                attemptFrameMove(from: source, to: destination)
+        VStack(spacing: 4) {
+            ForEach(draft.frameStages, id: \.name) { stage in
+                draggableRow(stage, lane: .frame)
             }
         }
-        .listStyle(.plain)
-        .frame(minHeight: laneMinHeight(rowCount: draft.frameStages.count))
+        .padding(.vertical, 2)
     }
-
-    private func attemptFrameMove(from source: IndexSet, to destination: Int) {
-        // Snapshot, apply, validate, revert if invalid.
-        let snapshot = draft.frameStages
-        draft.moveFrameStage(from: source, to: destination)
-        let errs = StageConstraintValidator.validate(frameStages: draft.frameStages)
-        if !errs.isEmpty {
-            // Revert + surface the first error inline.
-            draft.frameStages = snapshot
-            lastInvalidMoveMessage = errs[0].message
-            frameValidationErrors = []
-            // Auto-clear the error after a few seconds so the lane
-            // doesn't carry a stale red tooltip forever.
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                if lastInvalidMoveMessage == errs[0].message {
-                    lastInvalidMoveMessage = nil
-                }
-            }
-        } else {
-            lastInvalidMoveMessage = nil
-            frameValidationErrors = []
-        }
-    }
-
-    // MARK: - Chunk lane
 
     @ViewBuilder
     private var chunkLane: some View {
-        List {
-            ForEach(Array(draft.chunkStages.enumerated()), id: \.element.name) { _, stage in
-                stageRow(stage, lane: .chunk, hasError: false)
-            }
-            .onMove { source, destination in
-                draft.moveChunkStage(from: source, to: destination)
-                // No rate validation today — the chunk lane has only
-                // tse, which is rate-preserving.
+        VStack(spacing: 4) {
+            ForEach(draft.chunkStages, id: \.name) { stage in
+                draggableRow(stage, lane: .chunk)
             }
         }
-        .listStyle(.plain)
-        .frame(minHeight: laneMinHeight(rowCount: draft.chunkStages.count))
+        .padding(.vertical, 2)
     }
 
     // MARK: - Fixed terminal
@@ -138,45 +105,149 @@ struct StageGraph: View {
     @ViewBuilder
     private func terminalRow(name: String, subtitle: String) -> some View {
         HStack {
-            Image(systemName: "lock.fill").foregroundStyle(.tertiary).font(.caption)
+            Image(systemName: "lock.fill")
+                .foregroundStyle(.tertiary).font(.caption)
+                .frame(width: 14)
             Text(name).font(.callout).bold()
             Text(subtitle).font(.caption.monospaced()).foregroundStyle(.secondary)
             Spacer()
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
-    // MARK: - Stage row (frame + chunk)
+    // MARK: - Draggable row
 
     @ViewBuilder
-    private func stageRow(_ stage: Preset.StageSpec, lane: StageRef.Lane, hasError: Bool) -> some View {
+    private func draggableRow(_ stage: Preset.StageSpec, lane: StageRef.Lane) -> some View {
         let ref = StageRef(lane: lane, name: stage.name)
-        HStack {
+        let isSelected = draft.selectedStage == ref
+        let isHovered = hoverTarget == ref
+
+        rowBody(stage, ref: ref, isSelected: isSelected, dragHandleVisible: true)
+            .background(rowBackground(isSelected: isSelected, isHovered: isHovered))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                draft.selectedStage = (draft.selectedStage == ref) ? nil : ref
+            }
+            .draggable(ref) {
+                rowBody(stage, ref: ref, isSelected: false, dragHandleVisible: false)
+                    .padding(.horizontal, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(nsColor: .windowBackgroundColor))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.accentColor, lineWidth: 1.5)
+                    )
+                    .shadow(radius: 4)
+            }
+            .dropDestination(for: StageRef.self) { items, _ in
+                guard let dropped = items.first else { return false }
+                return performDrop(source: dropped, dest: ref)
+            } isTargeted: { targeted in
+                if targeted {
+                    hoverTarget = ref
+                } else if hoverTarget == ref {
+                    hoverTarget = nil
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func rowBody(_ stage: Preset.StageSpec, ref: StageRef, isSelected: Bool, dragHandleVisible: Bool) -> some View {
+        HStack(spacing: 6) {
+            if dragHandleVisible {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help("Drag to reorder within lane")
+            }
             Image(systemName: stage.enabled ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(stage.enabled ? .green : .secondary)
             Text(stage.name).font(.callout).bold()
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
             if let backend = stage.backend, !backend.isEmpty {
-                Text(backend).font(.caption.monospaced()).foregroundStyle(.secondary)
+                Text(backend)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.white.opacity(0.85)) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
             }
             Spacer()
-            if hasError {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .font(.caption)
-            }
+            Text(ref.lane == .frame ? "frame" : "chunk")
+                .font(.caption2)
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.white.opacity(0.7)) : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .background(draft.selectedStage == ref ? Color.accentColor.opacity(0.15) : Color.clear)
-        .onTapGesture {
-            draft.selectedStage = (draft.selectedStage == ref) ? nil : ref
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func rowBackground(isSelected: Bool, isHovered: Bool) -> some View {
+        if isHovered {
+            Color.accentColor.opacity(0.18)
+        } else if isSelected {
+            Color.accentColor
+        } else {
+            Color.clear
         }
     }
 
-    private func laneMinHeight(rowCount: Int) -> CGFloat {
-        // SwiftUI List in a constrained Settings pane needs an explicit
-        // min height or rows squash. ~28pt per row + a little breathing
-        // room; minimum 1 row's worth so an empty lane still shows.
-        let perRow: CGFloat = 28
-        return CGFloat(max(1, rowCount)) * perRow + 8
+    // MARK: - Drop logic
+
+    /// Apply a frame-lane move + run the constraint validator. Returns
+    /// false (and surfaces an inline message) when the resulting order
+    /// would be sample-rate-incompatible — drop is refused, the row
+    /// stays where it was. Compare with the Slice 3 behavior, which
+    /// applied + reverted; refusing on drop keeps the visual stable.
+    @discardableResult
+    private func tryFrameMove(source: StageRef, dest: StageRef) -> Bool {
+        let stages = draft.frameStages
+        guard let s = stages.firstIndex(where: { $0.name == source.name }),
+              let d = stages.firstIndex(where: { $0.name == dest.name }),
+              s != d else { return false }
+        var test = stages
+        let item = test.remove(at: s)
+        let insertAt = d > s ? d - 1 : d
+        test.insert(item, at: insertAt)
+        let errs = StageConstraintValidator.validate(frameStages: test)
+        if !errs.isEmpty {
+            lastInvalidMoveMessage = errs[0].message
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if lastInvalidMoveMessage == errs[0].message {
+                    lastInvalidMoveMessage = nil
+                }
+            }
+            return false
+        }
+        draft.frameStages = test
+        lastInvalidMoveMessage = nil
+        return true
+    }
+
+    private func tryChunkMove(source: StageRef, dest: StageRef) -> Bool {
+        let stages = draft.chunkStages
+        guard let s = stages.firstIndex(where: { $0.name == source.name }),
+              let d = stages.firstIndex(where: { $0.name == dest.name }),
+              s != d else { return false }
+        var next = stages
+        let item = next.remove(at: s)
+        let insertAt = d > s ? d - 1 : d
+        next.insert(item, at: insertAt)
+        draft.chunkStages = next
+        return true
+    }
+
+    private func performDrop(source: StageRef, dest: StageRef) -> Bool {
+        defer { hoverTarget = nil }
+        if source == dest { return true }
+        if source.lane != dest.lane { return false } // cross-lane blocked
+        switch dest.lane {
+        case .frame: return tryFrameMove(source: source, dest: dest)
+        case .chunk: return tryChunkMove(source: source, dest: dest)
+        }
     }
 }
