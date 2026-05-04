@@ -120,10 +120,6 @@ final class PresetDraft {
     }
 }
 
-/// Lane + stage name pair — the editor's identifier for "this stage in
-/// this lane". Stage names are unique within a lane today.
-struct StageRef: Hashable, Equatable {
-    enum Lane: Hashable { case frame, chunk }
-    let lane: Lane
-    let name: String
-}
+// StageRef + Transferable conformance live in VoiceKeyboardCore so
+// the SwiftPM test target can reach them (drag-drop logic +
+// round-trip tests live alongside StageDropPlanner).
