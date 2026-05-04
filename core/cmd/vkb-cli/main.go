@@ -27,6 +27,8 @@ func main() {
 		os.Exit(runPresets(os.Args[2:]))
 	case "sessions":
 		os.Exit(runSessions(os.Args[2:]))
+	case "compare":
+		os.Exit(runCompare(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -56,6 +58,8 @@ Usage:
                                          manage bundled + user pipeline presets
   vkb-cli sessions {list|show|delete|clear}
                                          inspect captured per-stage sessions
+  vkb-cli compare ID --presets a,b,c     A/B replay a captured session
+                                         through one or more presets
 
 Environment:
   ANTHROPIC_API_KEY   required for cleanup (anthropic provider only)
