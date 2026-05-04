@@ -195,59 +195,49 @@ struct StageGraph: View {
         }
     }
 
-    // MARK: - Drop logic
-
-    /// Apply a frame-lane move + run the constraint validator. Returns
-    /// false (and surfaces an inline message) when the resulting order
-    /// would be sample-rate-incompatible — drop is refused, the row
-    /// stays where it was. Compare with the Slice 3 behavior, which
-    /// applied + reverted; refusing on drop keeps the visual stable.
-    @discardableResult
-    private func tryFrameMove(source: StageRef, dest: StageRef) -> Bool {
-        let stages = draft.frameStages
-        guard let s = stages.firstIndex(where: { $0.name == source.name }),
-              let d = stages.firstIndex(where: { $0.name == dest.name }),
-              s != d else { return false }
-        var test = stages
-        let item = test.remove(at: s)
-        let insertAt = d > s ? d - 1 : d
-        test.insert(item, at: insertAt)
-        let errs = StageConstraintValidator.validate(frameStages: test)
-        if !errs.isEmpty {
-            lastInvalidMoveMessage = errs[0].message
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                if lastInvalidMoveMessage == errs[0].message {
-                    lastInvalidMoveMessage = nil
-                }
-            }
-            return false
-        }
-        draft.frameStages = test
-        lastInvalidMoveMessage = nil
-        return true
-    }
-
-    private func tryChunkMove(source: StageRef, dest: StageRef) -> Bool {
-        let stages = draft.chunkStages
-        guard let s = stages.firstIndex(where: { $0.name == source.name }),
-              let d = stages.firstIndex(where: { $0.name == dest.name }),
-              s != d else { return false }
-        var next = stages
-        let item = next.remove(at: s)
-        let insertAt = d > s ? d - 1 : d
-        next.insert(item, at: insertAt)
-        draft.chunkStages = next
-        return true
-    }
+    // MARK: - Drop logic — delegates to StageDropPlanner so the
+    // semantics are unit-tested (tests live in VoiceKeyboardCore;
+    // see StageDropPlannerTests).
 
     private func performDrop(source: StageRef, dest: StageRef) -> Bool {
         defer { hoverTarget = nil }
         if source == dest { return true }
         if source.lane != dest.lane { return false } // cross-lane blocked
         switch dest.lane {
-        case .frame: return tryFrameMove(source: source, dest: dest)
-        case .chunk: return tryChunkMove(source: source, dest: dest)
+        case .frame:
+            let result = StageDropPlanner.planMove(
+                in: draft.frameStages,
+                sourceName: source.name,
+                destName: dest.name,
+                validate: { StageConstraintValidator.validate(frameStages: $0) }
+            )
+            if result.accepted {
+                draft.frameStages = result.newStages
+                lastInvalidMoveMessage = nil
+                return true
+            }
+            if let msg = result.validationError {
+                lastInvalidMoveMessage = msg
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    if lastInvalidMoveMessage == msg {
+                        lastInvalidMoveMessage = nil
+                    }
+                }
+            }
+            return false
+        case .chunk:
+            let result = StageDropPlanner.planMove(
+                in: draft.chunkStages,
+                sourceName: source.name,
+                destName: dest.name,
+                validate: nil
+            )
+            if result.accepted {
+                draft.chunkStages = result.newStages
+                return true
+            }
+            return false
         }
     }
 }
