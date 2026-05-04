@@ -25,6 +25,8 @@ func main() {
 		os.Exit(runProviders(os.Args[2:]))
 	case "presets":
 		os.Exit(runPresets(os.Args[2:]))
+	case "sessions":
+		os.Exit(runSessions(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -52,6 +54,8 @@ Usage:
   vkb-cli providers                      list registered LLM providers
   vkb-cli presets {list|show|save|delete}
                                          manage bundled + user pipeline presets
+  vkb-cli sessions {list|show|delete|clear}
+                                         inspect captured per-stage sessions
 
 Environment:
   ANTHROPIC_API_KEY   required for cleanup (anthropic provider only)
