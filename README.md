@@ -67,6 +67,32 @@ The Go core has its own targets in `core/Makefile`. CI runs both
 sides on push/PR; release builds attach a signed `.app` artifact
 to a GitHub Release on tag push.
 
+## CLI
+
+`vkb-cli` is the headless equivalent of the Mac app — useful for CI,
+scripting, and reproducing issues without launching the GUI. Same Go
+primitives, no SwiftUI.
+
+```bash
+# List + inspect presets
+vkb-cli presets list
+vkb-cli presets show default
+
+# Run dictation with a specific preset
+vkb-cli pipe --preset minimal --live
+vkb-cli pipe --preset default FILE.wav
+
+# Inspect captured sessions
+vkb-cli sessions list
+vkb-cli sessions show <id>
+vkb-cli sessions delete <id>
+
+# A/B compare presets against the same captured audio
+vkb-cli compare <session-id> --presets default,minimal,paranoid
+```
+
+See `core/cmd/vkb-cli/README.md` for the full subcommand reference.
+
 ## Releases
 
 This is a monorepo, but each platform releases on its own cadence
