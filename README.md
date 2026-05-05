@@ -1,5 +1,7 @@
 # Voice Keyboard
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Voice dictation app for macOS (Linux/Windows planned). Hold a hotkey, speak,
 release — Whisper transcribes locally, Claude or a local LLM cleans up the
 text, the result types into the focused field.
