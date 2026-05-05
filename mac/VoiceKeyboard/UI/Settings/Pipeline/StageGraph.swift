@@ -112,8 +112,15 @@ struct StageGraph: View {
         let ref = StageRef(lane: lane, name: stage.name)
         let isSelected = draft.selectedStage == ref
         HStack(spacing: 6) {
-            Image(systemName: stage.enabled ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(stage.enabled ? .green : .secondary)
+            // Inline enable/disable toggle in place of the static
+            // checkmark. Toggle handles its own gesture so tapping
+            // the checkbox doesn't trigger the row's select behavior.
+            Toggle("", isOn: Binding(
+                get: { stage.enabled },
+                set: { draft.setEnabled($0, for: ref) }
+            ))
+            .toggleStyle(.checkbox)
+            .labelsHidden()
             Text(stage.name).font(.callout).bold()
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
             if let backend = stage.backend, !backend.isEmpty {
