@@ -1,4 +1,4 @@
-// mac/VoiceKeyboard/UI/Settings/Pipeline/StageGraph.swift
+// mac/VoiceKeyboard/UI/Settings/Pipeline/StageList.swift
 import SwiftUI
 import VoiceKeyboardCore
 
@@ -13,7 +13,7 @@ import VoiceKeyboardCore
 /// - Chunker boundary — visual separator.
 /// - Chunk (tse) — runs once per utterance chunk.
 /// - Terminal (whisper, dict, llm) — fixed.
-struct StageGraph: View {
+struct StageList: View {
     @Bindable var draft: PresetDraft
 
     var body: some View {

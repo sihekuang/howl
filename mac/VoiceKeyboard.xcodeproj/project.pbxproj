@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
 		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
+		03F7F37742368064BBB5B75A /* StageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FB8F17C8D38AF596BCE09D1 /* StageList.swift */; };
 		09599C79C42E022362D8ED46 /* ComparePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4A574AD3273776A3CF5697 /* ComparePane.swift */; };
 		0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */; };
 		0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEB6360C931EC47097D3762 /* PipelineTab.swift */; };
@@ -28,7 +29,6 @@
 		6786F310982575927E5ED6F6 /* LLMProviderTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E3BE5A0619E9E244C319436 /* LLMProviderTab.swift */; };
 		68025E317F55A3908E958FEF /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B5C020D95C44A45E9A2DCA /* WaveformView.swift */; };
 		6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */; };
-		71408CEDBBAB2A6F91D3EBC4 /* StageGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFF330F571F4958FD07D880 /* StageGraph.swift */; };
 		789F2C4BF7718DD124B97B43 /* EngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */; };
 		87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */; };
 		8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */; };
@@ -68,13 +68,13 @@
 		13FD3D07C12A94326240356A /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
 		169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareSourceLoader.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
-		1AFF330F571F4958FD07D880 /* StageGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageGraph.swift; sourceTree = "<group>"; };
 		1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
 		28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
+		2FB8F17C8D38AF596BCE09D1 /* StageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageList.swift; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
 		373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageElsewhereButton.swift; sourceTree = "<group>"; };
 		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
@@ -193,7 +193,7 @@
 				28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */,
 				F79C5E25016E8619AC316CFD /* SessionPreview.swift */,
 				C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */,
-				1AFF330F571F4958FD07D880 /* StageGraph.swift */,
+				2FB8F17C8D38AF596BCE09D1 /* StageList.swift */,
 				8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */,
 			);
 			path = Pipeline;
@@ -511,7 +511,7 @@
 				4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */,
 				5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */,
 				AC4FDB35E31B0D9BBC97E6B7 /* StageDetailPanel.swift in Sources */,
-				71408CEDBBAB2A6F91D3EBC4 /* StageGraph.swift in Sources */,
+				03F7F37742368064BBB5B75A /* StageList.swift in Sources */,
 				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,
 				E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */,
 				D160CD1F009530482DAB5637 /* WAVPlayer.swift in Sources */,

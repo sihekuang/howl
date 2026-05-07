@@ -24,7 +24,7 @@ struct EditorView: View {
             ScrollView {
                 if let draft = draft {
                     VStack(alignment: .leading, spacing: 12) {
-                        StageGraph(draft: draft)
+                        StageList(draft: draft)
                         Divider()
                         StageDetailPanel(draft: draft, sessions: sessions)
                     }
