@@ -9,7 +9,7 @@ import Foundation
 /// drag-drop reorder; the editor is now read-only-ordering, so the
 /// Transferable conformance was dropped.
 public struct StageRef: Hashable, Equatable, Codable, Sendable {
-    public enum Lane: String, Hashable, Codable, Sendable { case frame, chunk }
+    public enum Lane: String, Hashable, Codable, Sendable { case frame, chunk, terminal }
     public let lane: Lane
     public let name: String
 

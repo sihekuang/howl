@@ -110,6 +110,8 @@ final class PresetDraft {
             guard let idx = chunkStages.firstIndex(where: { $0.name == ref.name }) else { return }
             let st = chunkStages[idx]
             chunkStages[idx] = Preset.StageSpec(name: st.name, enabled: enabled, backend: st.backend, threshold: st.threshold)
+        case .terminal:
+            return  // terminal stages don't have toggles
         }
     }
 
@@ -147,6 +149,7 @@ final class PresetDraft {
         switch ref.lane {
         case .frame: return frameStages.first(where: { $0.name == ref.name })
         case .chunk: return chunkStages.first(where: { $0.name == ref.name })
+        case .terminal: return nil  // terminal stages don't have a StageSpec entry
         }
     }
 }
