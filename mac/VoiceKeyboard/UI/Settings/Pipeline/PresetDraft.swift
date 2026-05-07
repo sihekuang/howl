@@ -36,8 +36,16 @@ final class PresetDraft {
         self.chunkStages = source.chunkStages
         self.transcribeModelSize = source.transcribe.modelSize
         self.llmProvider = source.llm.provider
-        self.llmModel = source.llm.model ?? LLMProviderCatalog.defaultModel(for: source.llm.provider)
+        self.llmModel = Self.resolvedLLMModel(from: source)
         self.timeoutSec = source.timeoutSec ?? 10
+    }
+
+    /// Returns the model `Preset` would resolve to at this moment: the
+    /// preset's pinned `llm.model` when set, otherwise the catalog's
+    /// default for the preset's provider. Centralises the fallback so
+    /// `init`, `isDirty`, and `resetTo` agree on a single rule.
+    private static func resolvedLLMModel(from preset: Preset) -> String {
+        preset.llm.model ?? LLMProviderCatalog.defaultModel(for: preset.llm.provider)
     }
 
     /// True when any draft field diverges from the source. Drives the
@@ -47,7 +55,7 @@ final class PresetDraft {
         if chunkStages != source.chunkStages { return true }
         if transcribeModelSize != source.transcribe.modelSize { return true }
         if llmProvider != source.llm.provider { return true }
-        if llmModel != (source.llm.model ?? LLMProviderCatalog.defaultModel(for: source.llm.provider)) { return true }
+        if llmModel != Self.resolvedLLMModel(from: source) { return true }
         if timeoutSec != (source.timeoutSec ?? 10) { return true }
         return false
     }
@@ -59,7 +67,7 @@ final class PresetDraft {
         chunkStages = preset.chunkStages
         transcribeModelSize = preset.transcribe.modelSize
         llmProvider = preset.llm.provider
-        llmModel = preset.llm.model ?? LLMProviderCatalog.defaultModel(for: preset.llm.provider)
+        llmModel = Self.resolvedLLMModel(from: preset)
         timeoutSec = preset.timeoutSec ?? 10
         selectedStage = nil
     }
