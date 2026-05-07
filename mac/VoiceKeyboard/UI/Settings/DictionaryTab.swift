@@ -161,17 +161,8 @@ struct DictionaryTab: View {
         .help("Approximate token count of the joined dictionary as it ships to the LLM. The prompt template adds another ~60 tokens regardless. Token estimate is char-count / 4; actual cost will vary slightly with the model's tokenizer.")
     }
 
-    private func dictStats() -> (words: Int, chars: Int, tokens: Int) {
-        let terms = settings.customDict
-        guard !terms.isEmpty else { return (0, 0, 0) }
-        // Same shape as Go's strings.Join(terms, ", ").
-        let payload = terms.joined(separator: ", ")
-        let chars = payload.count
-        // Heuristic: Claude averages ~3.5–4 chars per token for English;
-        // technical jargon and acronyms compress slightly less. Dividing
-        // by 4 biases a touch conservative (overcount > undercount).
-        let tokens = Int((Double(chars) / 4.0).rounded(.up))
-        return (terms.count, chars, tokens)
+    private func dictStats() -> DictStats.Snapshot {
+        DictStats.compute(from: settings.customDict)
     }
 
     // MARK: - Actions
