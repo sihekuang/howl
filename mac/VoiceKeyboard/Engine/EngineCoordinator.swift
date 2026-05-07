@@ -299,10 +299,25 @@ public final class EngineCoordinator {
         // engine ignores LLMAPIKey for providers whose NeedsAPIKey is false.
         let needsKey = (settings.llmProvider == "anthropic" || settings.llmProvider == "openai")
         let key = needsKey ? (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? "" : ""
+        let paths = resolveEnginePaths(for: settings)
+        let cfg = EngineConfig(settings: settings, apiKey: key, paths: paths)
+        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
+        do {
+            try await composition.engine.configure(cfg)
+            log.info("applyConfig: engine configured cleanly")
+        } catch {
+            log.error("applyConfig: configure FAILED: \(String(describing: error), privacy: .public)")
+            setTransientWarning("configure: \(error)")
+        }
+    }
+
+    /// Walk the on-disk locations the engine needs and assemble an
+    /// `EnginePaths` for the factory. Falls the Whisper size back to
+    /// any other downloaded size if the configured one is missing —
+    /// better than failing configure entirely.
+    private func resolveEnginePaths(for settings: UserSettings) -> EnginePaths {
         var resolvedSize = settings.whisperModelSize
         var modelPath = ModelPaths.whisperModel(size: resolvedSize).path
-        // If the configured size isn't downloaded but another size is,
-        // fall back to that — better than failing configure entirely.
         if !FileManager.default.fileExists(atPath: modelPath) {
             for fallback in ["tiny", "base", "small", "medium", "large"]
             where FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: fallback).path) {
@@ -312,36 +327,16 @@ public final class EngineCoordinator {
                 break
             }
         }
-        let dfModelPath = "" // engine falls back to passthrough if empty
-        let cfg = EngineConfig(
+        return EnginePaths(
             whisperModelPath: modelPath,
-            whisperModelSize: resolvedSize,
-            language: settings.language,
-            disableNoiseSuppression: settings.disableNoiseSuppression,
-            deepFilterModelPath: dfModelPath,
-            llmProvider: settings.llmProvider,
-            llmModel: settings.llmModel,
-            llmAPIKey: key,
-            customDict: settings.customDict,
-            llmBaseURL: settings.llmBaseURL,
-            developerMode: settings.developerMode,
-            tseEnabled: settings.tseEnabled && tseAssetsPresent(),
-            tseProfileDir: ModelPaths.voiceProfileDir.path,
+            resolvedWhisperSize: resolvedSize,
+            deepFilterModelPath: "", // engine falls back to passthrough if empty
+            voiceProfileDir: ModelPaths.voiceProfileDir.path,
             tseModelPath: ModelPaths.tseModel.path,
             speakerEncoderPath: ModelPaths.speakerEncoder.path,
             onnxLibPath: ModelPaths.onnxLib.path,
-            tseThreshold: settings.tseThreshold,
-            tseBackend: settings.tseBackend,
-            pipelineTimeoutSec: settings.pipelineTimeoutSec
+            tseAssetsPresent: tseAssetsPresent()
         )
-        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
-        do {
-            try await composition.engine.configure(cfg)
-            log.info("applyConfig: engine configured cleanly")
-        } catch {
-            log.error("applyConfig: configure FAILED: \(String(describing: error), privacy: .public)")
-            setTransientWarning("configure: \(error)")
-        }
     }
 
     /// True when both TSE models and the enrollment profile exist on disk.
