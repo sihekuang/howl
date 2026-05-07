@@ -31,22 +31,23 @@ struct PresetBanner: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 8) {
             Image(systemName: "slider.horizontal.3")
                 .foregroundStyle(.tint)
-                .font(.title3)
+                .font(.callout)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("PRESET").font(.caption2).bold().foregroundStyle(.secondary)
-                presetPicker
-            }
+            Text("Preset")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            presetPicker
 
             if let active = activePreset {
-                Divider().frame(height: 24)
                 Text(summary(for: active))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .layoutPriority(-1)
             } else if let err = loadError {
                 Text(err).font(.caption).foregroundStyle(.red).lineLimit(1)
             }
@@ -60,10 +61,10 @@ struct PresetBanner: View {
             }
             .controlSize(.small)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .task { await refresh() }
     }
 
@@ -91,7 +92,8 @@ struct PresetBanner: View {
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 200)
+            .controlSize(.small)
+            .fixedSize()
         }
     }
 
