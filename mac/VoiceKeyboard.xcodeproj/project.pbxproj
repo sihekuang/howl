@@ -16,6 +16,7 @@
 		19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */; };
 		1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */; };
 		23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D191FF4976526AAF109C19EB /* AppDelegate.swift */; };
+		387CBBDCD304A9269BCB3151 /* ManageElsewhereButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */; };
 		4102BD8E2579447BA75C2865 /* EnrollmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */; };
 		4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */; };
 		516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */; };
@@ -75,6 +76,7 @@
 		28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
+		373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageElsewhereButton.swift; sourceTree = "<group>"; };
 		3945B1FA01BC8077164E634C /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
 		4B1AFD5018290EDF499A42FB /* SessionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetail.swift; sourceTree = "<group>"; };
 		4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
@@ -182,6 +184,7 @@
 				169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */,
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
+				373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
 				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
 				FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */,
@@ -486,6 +489,7 @@
 				6786F310982575927E5ED6F6 /* LLMProviderTab.swift in Sources */,
 				0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */,
 				967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */,
+				387CBBDCD304A9269BCB3151 /* ManageElsewhereButton.swift in Sources */,
 				9AB5252581905E6AA95725A5 /* MenuBarController.swift in Sources */,
 				ADB3FB4CC6D0D1A5B6E6605A /* MenuBarMenu.swift in Sources */,
 				64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */,
