@@ -17,6 +17,11 @@ struct CompareView: View {
     @State private var running = false
     @State private var loadError: String? = nil
     @State private var runError: String? = nil
+    @State private var showSourceDetail = false
+    /// Shared player. Source-session playback (via SessionDetail) and
+    /// per-card TSE playback go through the same instance so only one
+    /// audio source is heard at a time — switching sources stops the
+    /// prior one cleanly.
     @State private var player = WAVPlayer()
 
     private var canRun: Bool {
@@ -34,6 +39,7 @@ struct CompareView: View {
         VStack(alignment: .leading, spacing: 12) {
             toolbar
             Divider()
+            sourceDetailSection
             if let err = loadError {
                 Text(err).font(.callout).foregroundStyle(.red)
             } else if results.isEmpty && runError == nil {
@@ -58,6 +64,45 @@ struct CompareView: View {
             }
         }
         .task { await refresh() }
+        .onChange(of: selectedSourceID) { _, _ in
+            // Switching sources invalidates any in-flight playback,
+            // since cards' replayDir paths and the source's stage WAVs
+            // both belong to the prior selection.
+            player.stop()
+        }
+    }
+
+    /// Collapsible reuse of the Inspector's per-session detail view —
+    /// lets the user hear the source's audio (denoise.wav, decimate.wav,
+    /// tse.wav if present) and read its transcripts before/while
+    /// reviewing the replay cards. Same WAVPlayer as the cards, so
+    /// only one audio source plays at a time.
+    @ViewBuilder
+    private var sourceDetailSection: some View {
+        if let source = sourceManifest {
+            DisclosureGroup(isExpanded: $showSourceDetail) {
+                SessionDetail(manifest: source, player: player)
+                    .padding(.top, 6)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.secondary)
+                    Text("Source audio").font(.callout)
+                    Text("(\(source.preset.isEmpty ? "—" : source.preset))")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(relativeTime(source.id))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Manifest for the selected source. Pulled from sessionList
+    /// (already loaded by refresh()) — no extra fetch.
+    private var sourceManifest: SessionManifest? {
+        guard let id = selectedSourceID else { return nil }
+        return sessionList.first(where: { $0.id == id })
     }
 
     @ViewBuilder
