@@ -133,9 +133,14 @@ do the full bundle for self-contained `.app`s.
   exist.** It always does because the file is tracked, but if you ever
   delete it during a refactor, `make project` will fail until you put
   it back.
-- **TSE models** (`core/build/models/*.onnx`) aren't in git. Run
-  `./enroll.sh` once from the repo root to generate them; Debug builds
-  don't need them, Release builds do.
+- **TSE models** (`core/build/models/*.onnx`) aren't in git. Release
+  builds bundle them into the .app's Resources via the postCompile
+  phase in `project.yml`. Debug builds expect them at
+  `~/Library/Application Support/VoiceKeyboard/models/`. Build them
+  once via `./enroll.sh` from the repo root (the script also records
+  voice for enrollment — Ctrl+C that step if you only want the
+  models). Voice enrollment itself is now in-app via Settings →
+  Voice → Enroll, which calls `vkb_enroll_compute` on the C ABI.
 - **libvkb.dylib not built / cgo errors during `make build`.** The
   Xcode preBuild phase rebuilds `core/build/libvkb.dylib` on every
   build, but it can fail with opaque linker errors if Homebrew cgo
