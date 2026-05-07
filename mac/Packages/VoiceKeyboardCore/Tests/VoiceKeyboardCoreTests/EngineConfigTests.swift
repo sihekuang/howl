@@ -129,4 +129,93 @@ struct EngineConfigTests {
         )
         #expect(cfg.developerMode == false)
     }
+
+    // MARK: - TSE threshold + backend + global pipeline timeout
+    //
+    // These three fields must reach the Go engine as JSON keys whose
+    // names match `core/internal/config/config.go`'s json tags exactly.
+    // A typo in the Coding key here is invisible until you notice that
+    // picking "paranoid" doesn't actually gate.
+
+    @Test func engineConfig_tseThreshold_omitsKeyWhenNil() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            tseEnabled: true,
+            tseThreshold: nil
+        )
+        let json = String(data: try JSONEncoder().encode(cfg), encoding: .utf8) ?? ""
+        // Mirrors Go's `omitempty` on TSEThreshold *float32 so nil
+        // round-trips cleanly to no gating, not to 0 explicitly.
+        #expect(!json.contains("tse_threshold"))
+    }
+
+    @Test func engineConfig_tseThreshold_emitsValueWhenSet() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            tseEnabled: true,
+            tseThreshold: 0.7
+        )
+        let json = String(data: try JSONEncoder().encode(cfg), encoding: .utf8) ?? ""
+        #expect(json.contains("\"tse_threshold\":0.7"))
+    }
+
+    @Test func engineConfig_tseBackend_emitsKey() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            tseBackend: "ecapa"
+        )
+        let json = String(data: try JSONEncoder().encode(cfg), encoding: .utf8) ?? ""
+        #expect(json.contains("\"tse_backend\":\"ecapa\""))
+    }
+
+    @Test func engineConfig_pipelineTimeout_emitsValueWhenSet() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            pipelineTimeoutSec: 12
+        )
+        let json = String(data: try JSONEncoder().encode(cfg), encoding: .utf8) ?? ""
+        #expect(json.contains("\"pipeline_timeout_sec\":12"))
+    }
+
+    @Test func engineConfig_pipelineTimeout_omitsKeyWhenZero() throws {
+        let cfg = EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "",
+            customDict: [],
+            pipelineTimeoutSec: 0
+        )
+        let json = String(data: try JSONEncoder().encode(cfg), encoding: .utf8) ?? ""
+        #expect(!json.contains("pipeline_timeout_sec"))
+    }
+
+    @Test func engineConfig_newFields_roundTrip() throws {
+        let original = EngineConfig(
+            whisperModelPath: "/m.bin", whisperModelSize: "small", language: "en",
+            disableNoiseSuppression: false, deepFilterModelPath: "",
+            llmProvider: "anthropic", llmModel: "claude", llmAPIKey: "k",
+            customDict: [],
+            tseEnabled: true,
+            tseThreshold: 0.7,
+            tseBackend: "ecapa",
+            pipelineTimeoutSec: 10
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(EngineConfig.self, from: data)
+        #expect(decoded.tseThreshold == 0.7)
+        #expect(decoded.tseBackend == "ecapa")
+        #expect(decoded.pipelineTimeoutSec == 10)
+    }
 }

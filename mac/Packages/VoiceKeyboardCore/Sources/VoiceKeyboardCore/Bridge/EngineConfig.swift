@@ -22,6 +22,18 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var tseModelPath: String
     public var speakerEncoderPath: String
     public var onnxLibPath: String
+    /// Cosine-similarity threshold for the post-extract speaker gate.
+    /// nil omits the JSON key (Go reads as no gating). Set non-zero to
+    /// silence chunks that don't sound enough like the enrolled speaker.
+    public var tseThreshold: Float?
+    /// TSE backend identifier (e.g. "ecapa"). Empty falls back to
+    /// `speaker.Default` on the Go side.
+    public var tseBackend: String
+
+    /// Pipeline run timeout in seconds. 0 disables the bound. Global —
+    /// not preset-driven. The Go pipeline wraps `Run` with a context
+    /// timeout when this is > 0.
+    public var pipelineTimeoutSec: Int
 
     public init(
         whisperModelPath: String,
@@ -39,7 +51,10 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         tseProfileDir: String = "",
         tseModelPath: String = "",
         speakerEncoderPath: String = "",
-        onnxLibPath: String = ""
+        onnxLibPath: String = "",
+        tseThreshold: Float? = nil,
+        tseBackend: String = "",
+        pipelineTimeoutSec: Int = 0
     ) {
         self.whisperModelPath = whisperModelPath
         self.whisperModelSize = whisperModelSize
@@ -57,6 +72,60 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.tseModelPath = tseModelPath
         self.speakerEncoderPath = speakerEncoderPath
         self.onnxLibPath = onnxLibPath
+        self.tseThreshold = tseThreshold
+        self.tseBackend = tseBackend
+        self.pipelineTimeoutSec = pipelineTimeoutSec
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(whisperModelPath, forKey: .whisperModelPath)
+        try c.encode(whisperModelSize, forKey: .whisperModelSize)
+        try c.encode(language, forKey: .language)
+        try c.encode(disableNoiseSuppression, forKey: .disableNoiseSuppression)
+        try c.encode(deepFilterModelPath, forKey: .deepFilterModelPath)
+        try c.encode(llmProvider, forKey: .llmProvider)
+        try c.encode(llmModel, forKey: .llmModel)
+        try c.encode(llmAPIKey, forKey: .llmAPIKey)
+        try c.encode(llmBaseURL, forKey: .llmBaseURL)
+        try c.encode(developerMode, forKey: .developerMode)
+        try c.encode(customDict, forKey: .customDict)
+        try c.encode(tseEnabled, forKey: .tseEnabled)
+        try c.encode(tseProfileDir, forKey: .tseProfileDir)
+        try c.encode(tseModelPath, forKey: .tseModelPath)
+        try c.encode(speakerEncoderPath, forKey: .speakerEncoderPath)
+        try c.encode(onnxLibPath, forKey: .onnxLibPath)
+        // Match the Go-side `omitempty` on tse_threshold: omit when nil
+        // so the round trip with `*float32` stays clean.
+        try c.encodeIfPresent(tseThreshold, forKey: .tseThreshold)
+        try c.encode(tseBackend, forKey: .tseBackend)
+        // pipeline_timeout_sec also has Go `omitempty`; omit when zero.
+        if pipelineTimeoutSec != 0 {
+            try c.encode(pipelineTimeoutSec, forKey: .pipelineTimeoutSec)
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.whisperModelPath = try c.decode(String.self, forKey: .whisperModelPath)
+        self.whisperModelSize = try c.decode(String.self, forKey: .whisperModelSize)
+        self.language = try c.decode(String.self, forKey: .language)
+        self.disableNoiseSuppression = try c.decode(Bool.self, forKey: .disableNoiseSuppression)
+        self.deepFilterModelPath = try c.decode(String.self, forKey: .deepFilterModelPath)
+        self.llmProvider = try c.decode(String.self, forKey: .llmProvider)
+        self.llmModel = try c.decode(String.self, forKey: .llmModel)
+        self.llmAPIKey = try c.decode(String.self, forKey: .llmAPIKey)
+        self.llmBaseURL = try c.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
+        self.developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
+        self.customDict = try c.decode([String].self, forKey: .customDict)
+        self.tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
+        self.tseProfileDir = try c.decodeIfPresent(String.self, forKey: .tseProfileDir) ?? ""
+        self.tseModelPath = try c.decodeIfPresent(String.self, forKey: .tseModelPath) ?? ""
+        self.speakerEncoderPath = try c.decodeIfPresent(String.self, forKey: .speakerEncoderPath) ?? ""
+        self.onnxLibPath = try c.decodeIfPresent(String.self, forKey: .onnxLibPath) ?? ""
+        self.tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
+        self.tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
+        self.pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 0
     }
 
     enum CodingKeys: String, CodingKey {
@@ -76,5 +145,8 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case tseModelPath = "tse_model_path"
         case speakerEncoderPath = "speaker_encoder_path"
         case onnxLibPath = "onnx_lib_path"
+        case tseThreshold = "tse_threshold"
+        case tseBackend = "tse_backend"
+        case pipelineTimeoutSec = "pipeline_timeout_sec"
     }
 }

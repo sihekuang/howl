@@ -329,9 +329,12 @@ public final class EngineCoordinator {
             tseProfileDir: ModelPaths.voiceProfileDir.path,
             tseModelPath: ModelPaths.tseModel.path,
             speakerEncoderPath: ModelPaths.speakerEncoder.path,
-            onnxLibPath: ModelPaths.onnxLib.path
+            onnxLibPath: ModelPaths.onnxLib.path,
+            tseThreshold: settings.tseThreshold,
+            tseBackend: settings.tseBackend,
+            pipelineTimeoutSec: settings.pipelineTimeoutSec
         )
-        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
+        log.info("applyConfig: whisper=\(resolvedSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")

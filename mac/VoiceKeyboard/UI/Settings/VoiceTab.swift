@@ -44,6 +44,21 @@ struct VoiceTab: View {
                 .disabled(!modelsPresent || !profilePresent)
             Text("Uses your voice profile to suppress other speakers in the same recording.")
                 .font(.caption).foregroundStyle(.secondary)
+
+            Divider()
+
+            SettingsGroupHeader("Pipeline timeout")
+            HStack(spacing: 6) {
+                Text("Stop after")
+                TextField("", value: timeoutBinding, format: .number)
+                    .frame(width: 48)
+                    .multilineTextAlignment(.trailing)
+                Text("seconds")
+                Spacer()
+            }
+            .font(.callout)
+            Text("Maximum time the pipeline runs after you release the hotkey. Whatever cleanup output streamed before the timeout still gets pasted. 0 disables the bound.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .sheet(isPresented: $sheetPresented) {
             EnrollmentSheet(
@@ -120,6 +135,18 @@ struct VoiceTab: View {
             get: { settings.tseEnabled },
             set: { newValue in
                 var s = settings; s.tseEnabled = newValue; settings = s; onSave(s)
+            }
+        )
+    }
+
+    private var timeoutBinding: Binding<Int> {
+        Binding(
+            get: { settings.pipelineTimeoutSec },
+            set: { newValue in
+                var s = settings
+                s.pipelineTimeoutSec = max(0, newValue)
+                settings = s
+                onSave(s)
             }
         )
     }
