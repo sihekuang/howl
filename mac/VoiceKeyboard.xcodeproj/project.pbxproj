@@ -23,6 +23,7 @@
 		5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */; };
 		60F1DF9AAB2879C591F9D2F7 /* SessionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1AFD5018290EDF499A42FB /* SessionDetail.swift */; };
 		60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6533D8DC82E66396D8BA7557 /* Assets.xcassets */; };
+		622622960552F01D93DDA077 /* TSELabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285119D243E63164DD0E6DD6 /* TSELabView.swift */; };
 		64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */; };
 		68025E317F55A3908E958FEF /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B5C020D95C44A45E9A2DCA /* WaveformView.swift */; };
 		6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */; };
@@ -72,6 +73,7 @@
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
+		285119D243E63164DD0E6DD6 /* TSELabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TSELabView.swift; sourceTree = "<group>"; };
 		28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				F79C5E25016E8619AC316CFD /* SessionPreview.swift */,
 				C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */,
 				1AFF330F571F4958FD07D880 /* StageGraph.swift */,
+				285119D243E63164DD0E6DD6 /* TSELabView.swift */,
 				8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */,
 			);
 			path = Pipeline;
@@ -508,6 +511,7 @@
 				5A4DFD56ACC6B2CCC97550FE /* SettingsView.swift in Sources */,
 				AC4FDB35E31B0D9BBC97E6B7 /* StageDetailPanel.swift in Sources */,
 				71408CEDBBAB2A6F91D3EBC4 /* StageGraph.swift in Sources */,
+				622622960552F01D93DDA077 /* TSELabView.swift in Sources */,
 				19ADF3F71EF2E64E2C32E4A0 /* VoiceKeyboardApp.swift in Sources */,
 				E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */,
 				D160CD1F009530482DAB5637 /* WAVPlayer.swift in Sources */,
