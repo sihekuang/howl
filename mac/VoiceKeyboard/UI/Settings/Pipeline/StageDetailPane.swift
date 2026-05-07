@@ -1,41 +1,43 @@
-// mac/VoiceKeyboard/UI/Settings/Pipeline/StageDetailPanel.swift
+// mac/VoiceKeyboard/UI/Settings/Pipeline/StageDetailPane.swift
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Per-stage detail panel shown below the StageGraph when a stage is
-/// selected. Tunables vary by stage:
-///   - All stages: Enabled toggle.
-///   - tse only:   Backend dropdown, Threshold slider, Recent similarity.
-struct StageDetailPanel: View {
+/// Right-pane detail view. Switches on the selected stage:
+///   - nil:                   placeholder
+///   - .frame:                "no tunables" hint + Enabled is on the row
+///   - .chunk(tse):           backend / threshold / recent similarity
+///   - .terminal(whisper):    model-size picker + "Manage in General →"
+///   - .terminal(dict):       N-terms + "Edit in Dictionary →"
+///   - .terminal(llm):        provider + model + "Manage in LLM Provider →"
+///
+/// All editable controls dim when `editingDisabled` is true. Bodies for
+/// the three terminal stages live in TerminalStageBodies.swift.
+struct StageDetailPane: View {
     @Bindable var draft: PresetDraft
     let sessions: any SessionsClient
+    @Binding var settings: UserSettings
+    let editingDisabled: Bool
+    let navigateTo: (SettingsPage) -> Void
 
     @State private var recentSimilarities: [Float] = []
     @State private var loadError: String? = nil
 
-    private var selected: Preset.StageSpec? {
-        guard let ref = draft.selectedStage else { return nil }
-        return draft.stage(for: ref)
-    }
-
     var body: some View {
-        if let ref = draft.selectedStage, let stage = selected {
+        if let ref = draft.selectedStage {
             VStack(alignment: .leading, spacing: 10) {
-                header(ref: ref, stage: stage)
+                header(ref: ref)
                 Divider()
-                if stage.name == "tse" {
-                    backendRow(ref: ref, stage: stage)
-                    thresholdRow(ref: ref, stage: stage)
-                    recentSimilarityRow(stage: stage)
-                } else {
-                    Text("No tunables — toggle this stage on or off via the checkbox in the row.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                content(for: ref)
             }
             .padding(8)
             .background(Color.secondary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .task(id: ref) { await refreshSimilarity() }
+            .task(id: ref) {
+                if ref.lane == .chunk && ref.name == "tse" {
+                    await refreshSimilarity()
+                }
+            }
+            .disabled(editingDisabled)
         } else {
             Text("Select a stage to edit its tunables.")
                 .font(.caption)
@@ -45,15 +47,59 @@ struct StageDetailPanel: View {
     }
 
     @ViewBuilder
-    private func header(ref: StageRef, stage: Preset.StageSpec) -> some View {
+    private func header(ref: StageRef) -> some View {
         HStack {
-            Text(stage.name).font(.callout).bold()
-            Text("(\(ref.lane == .frame ? "frame" : "chunk"))")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(ref.name).font(.callout).bold()
+            Text("(\(laneLabel(ref.lane)))").font(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Deselect") { draft.selectedStage = nil }
                 .controlSize(.small)
         }
+    }
+
+    private func laneLabel(_ lane: StageRef.Lane) -> String {
+        switch lane {
+        case .frame:    return "frame"
+        case .chunk:    return "chunk"
+        case .terminal: return "terminal"
+        }
+    }
+
+    @ViewBuilder
+    private func content(for ref: StageRef) -> some View {
+        switch ref.lane {
+        case .frame:
+            Text("No tunables — toggle this stage on or off via the checkbox in the row.")
+                .font(.caption).foregroundStyle(.secondary)
+        case .chunk:
+            if ref.name == "tse", let stage = draft.stage(for: ref) {
+                tseBody(ref: ref, stage: stage)
+            } else {
+                Text("No tunables.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .terminal:
+            switch ref.name {
+            case "whisper":
+                WhisperStageBody(draft: draft, navigateTo: navigateTo)
+            case "dict":
+                DictStageBody(settings: $settings, navigateTo: navigateTo)
+            case "llm":
+                LLMStageBody(draft: draft, navigateTo: navigateTo)
+            default:
+                Text("Unknown terminal stage \(ref.name)")
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    // MARK: - Existing tse body (unchanged from StageDetailPanel)
+
+    @ViewBuilder
+    private func tseBody(ref: StageRef, stage: Preset.StageSpec) -> some View {
+        backendRow(ref: ref, stage: stage)
+        thresholdRow(ref: ref, stage: stage)
+        recentSimilarityRow(stage: stage)
     }
 
     @ViewBuilder
@@ -65,7 +111,6 @@ struct StageDetailPanel: View {
                 set: { draft.setBackend($0, for: ref) }
             )) {
                 Text("ecapa").tag("ecapa")
-                // Future backends append here as they land.
             }
             .labelsHidden()
             .frame(maxWidth: 160)

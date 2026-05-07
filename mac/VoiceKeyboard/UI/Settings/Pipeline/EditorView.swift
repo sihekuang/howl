@@ -2,7 +2,7 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Slice 3 Editor: preset picker → editable StageList + StageDetailPanel
+/// Slice 3 Editor: preset picker → editable StageList + StageDetailPane
 /// + timeout field. Edits accumulate on a PresetDraft until saved via
 /// SaveAsPresetSheet (which serializes the draft).
 struct EditorView: View {
@@ -26,7 +26,7 @@ struct EditorView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         StageList(draft: draft, editingDisabled: false, nudgeSaveAs: {})
                         Divider()
-                        StageDetailPanel(draft: draft, sessions: sessions)
+                        StageDetailPane(draft: draft, sessions: sessions, settings: $settings, editingDisabled: false, navigateTo: navigateTo)
                     }
                 } else if let err = loadError {
                     Text(err).foregroundStyle(.red).font(.callout)
