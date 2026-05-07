@@ -257,6 +257,14 @@ def build_models():
             self.ecapa = ecapa
 
         def _embed(self, wav):
+            # Peak-normalise to [-1, 1] before the embedded Kaldi Fbank.
+            # The JorisCos ConvTasNet separator is trained with SI-SDR
+            # (scale-invariant) loss → its output can be at arbitrary
+            # amplitude (observed ~1e5). KaldiFbank expects audio in
+            # the [-1, 1] range; without this normalisation the
+            # embeddings are noise and speaker selection always picks
+            # src0 regardless of which reference is supplied.
+            wav = wav / (wav.abs().amax(dim=-1, keepdim=True) + 1e-9)
             feats = self.fbank(wav)
             emb = self.ecapa(feats)
             return emb / torch.norm(emb, dim=1, keepdim=True)
