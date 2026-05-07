@@ -123,3 +123,27 @@ func TestMatch_EmptyPresetListReturnsCustom(t *testing.T) {
 		t.Errorf("Match(empty list) = %q, want \"custom\"", got)
 	}
 }
+
+func TestResolveStampsLLMModelFromPreset(t *testing.T) {
+	p := Preset{
+		Name:        "test",
+		Transcribe:  TranscribeSpec{ModelSize: "small"},
+		LLM:         LLMSpec{Provider: "anthropic", Model: "claude-haiku-4-5"},
+	}
+	cfg := Resolve(p, EngineSecrets{LLMModel: "ignored-from-secrets"})
+	if cfg.LLMModel != "claude-haiku-4-5" {
+		t.Errorf("LLMModel = %q, want %q", cfg.LLMModel, "claude-haiku-4-5")
+	}
+}
+
+func TestResolveLeavesLLMModelWhenPresetEmpty(t *testing.T) {
+	p := Preset{
+		Name:       "test",
+		Transcribe: TranscribeSpec{ModelSize: "small"},
+		LLM:        LLMSpec{Provider: "anthropic"}, // no Model
+	}
+	cfg := Resolve(p, EngineSecrets{LLMModel: "from-secrets"})
+	if cfg.LLMModel != "from-secrets" {
+		t.Errorf("LLMModel = %q, want %q (preset-empty should preserve secrets)", cfg.LLMModel, "from-secrets")
+	}
+}
