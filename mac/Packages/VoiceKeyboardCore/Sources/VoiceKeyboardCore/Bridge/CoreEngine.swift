@@ -89,4 +89,11 @@ public protocol CoreEngine: Sendable {
     /// vkb_replay (or {"error": "..."} envelope on top-level failure),
     /// or nil if the engine is not initialized.
     func replayJSON(sourceID: String, presetsCSV: String) async -> String?
+
+    /// Run Target Speaker Extraction on `inputPath` (a 16 kHz mono WAV)
+    /// and write the extracted output to `outputPath`. Used by the TSE
+    /// Lab debug surface to exercise extraction outside the live capture
+    /// pipeline. Returns the C ABI return code (0 = success); on failure
+    /// callers should consult `lastError()` for the description.
+    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) async -> Int32
 }

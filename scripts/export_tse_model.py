@@ -257,6 +257,25 @@ def build_models():
             self.ecapa = ecapa
 
         def _embed(self, wav):
+            # Peak-normalise to [-1, 1] before the embedded Kaldi Fbank.
+            # The JorisCos ConvTasNet separator is trained with SI-SDR
+            # (scale-invariant) loss → its output can be at arbitrary
+            # amplitude (observed ~1e5). KaldiFbank expects audio in
+            # the [-1, 1] range; without this normalisation the
+            # embeddings are noise and speaker selection always picks
+            # src0 regardless of which reference is supplied.
+            #
+            # The +1e-9 is purely a divide-by-zero guard for a fully
+            # zero-input source (in which case the resulting embedding
+            # is meaningless but won't be picked by the cosine-max
+            # selection anyway). It is NOT a meaningful clamp on
+            # near-silent inputs — a source at amplitude 1e-7 would
+            # still get amplified to ~unit scale. That edge case
+            # would mean one separated channel is essentially silence
+            # and the other carries both speakers — which would be a
+            # separator failure to flag separately, not something the
+            # encoder normalisation should hide.
+            wav = wav / (wav.abs().amax(dim=-1, keepdim=True) + 1e-9)
             feats = self.fbank(wav)
             emb = self.ecapa(feats)
             return emb / torch.norm(emb, dim=1, keepdim=True)
