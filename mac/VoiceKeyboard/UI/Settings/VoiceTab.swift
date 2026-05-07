@@ -105,9 +105,12 @@ struct VoiceTab: View {
 
     private var modelInstructions: String {
         """
-        Voice extraction models are not yet bundled with the app. To install \
-        them, run ./enroll.sh once in Terminal (it will build the models and \
-        place them under core/build/models/), then copy tse_model.onnx and \
+        Voice extraction models ship inside Release builds (the .app you \
+        download from GitHub Releases). This Debug build doesn't bundle them — \
+        from the repo root, run ./enroll.sh once to build the models into \
+        core/build/models/ (Ctrl+C the recording prompt if you only want the \
+        models — voice enrollment itself happens via the Enroll button \
+        below, not the script). Then copy tse_model.onnx and \
         speaker_encoder.onnx into ~/Library/Application Support/VoiceKeyboard/models/.
         """
     }
