@@ -54,6 +54,11 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
 
     public struct LLMSpec: Codable, Equatable, Sendable {
         public let provider: String
+        /// Optional per-preset LLM model override. `nil` means "fall back
+        /// to the engine's current LLMModel" (the user's global default
+        /// from the LLM Provider tab). Bundled presets always pin a
+        /// model. Encoded with omit-when-nil so old preset JSON without
+        /// this key round-trips cleanly.
         public let model: String?
 
         public init(provider: String, model: String? = nil) {
