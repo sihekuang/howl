@@ -21,6 +21,25 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-06-tse-real-voice-test-design.md`
 
+## Contingency: 3-strikes rule
+
+If any task's approach fails three times in a row — e.g. Task 5
+assertions keep failing even after threshold tuning, or extracted
+audio comes out degenerate, or you can't get the encoder/TSE pair
+to agree on shapes — **stop iterating on the same approach**.
+
+Instead, dispatch a research subagent to investigate how others
+actually get ConvTasNet + ECAPA TSE working in practice. Likely
+angles: input preprocessing differences (Kaldi Fbank vs raw audio),
+mixing levels and SNR, reference embedding shape and normalisation,
+ONNX export gotchas, Wespeaker-vs-Libri2Mix model-pair calibration
+mismatches, missing pre-emphasis or normalisation steps. Reconcile
+findings against our pipeline before continuing — adjust the spec
+and plan if the underlying approach needs revising.
+
+The goal is to avoid burning iterations on a fundamentally wrong
+setup. Research is cheaper than blind retries.
+
 ---
 
 ### Task 1: LibriSpeech fixture script and bundled WAVs
