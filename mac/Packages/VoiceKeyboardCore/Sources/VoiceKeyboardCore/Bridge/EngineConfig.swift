@@ -150,3 +150,77 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case pipelineTimeoutSec = "pipeline_timeout_sec"
     }
 }
+
+/// On-disk paths the engine needs at configure time. Resolved by the
+/// app target (FileManager checks, ModelPaths lookups) and handed to
+/// the `EngineConfig` factory below — keeping the factory itself pure
+/// so it's reachable from the package's test target.
+public struct EnginePaths: Sendable, Equatable {
+    public var whisperModelPath: String
+    /// Whisper model size after the "is the configured size on disk?
+    /// fall back to anything else that is" sweep. May differ from
+    /// `UserSettings.whisperModelSize` when the configured size isn't
+    /// downloaded.
+    public var resolvedWhisperSize: String
+    public var deepFilterModelPath: String
+    public var voiceProfileDir: String
+    public var tseModelPath: String
+    public var speakerEncoderPath: String
+    public var onnxLibPath: String
+    /// True when both TSE models AND the enrollment profile are on disk.
+    /// When false the factory forces `tseEnabled = false` regardless of
+    /// the user's preference, so the engine doesn't log "TSE missing"
+    /// every configure.
+    public var tseAssetsPresent: Bool
+
+    public init(
+        whisperModelPath: String,
+        resolvedWhisperSize: String,
+        deepFilterModelPath: String,
+        voiceProfileDir: String,
+        tseModelPath: String,
+        speakerEncoderPath: String,
+        onnxLibPath: String,
+        tseAssetsPresent: Bool
+    ) {
+        self.whisperModelPath = whisperModelPath
+        self.resolvedWhisperSize = resolvedWhisperSize
+        self.deepFilterModelPath = deepFilterModelPath
+        self.voiceProfileDir = voiceProfileDir
+        self.tseModelPath = tseModelPath
+        self.speakerEncoderPath = speakerEncoderPath
+        self.onnxLibPath = onnxLibPath
+        self.tseAssetsPresent = tseAssetsPresent
+    }
+}
+
+public extension EngineConfig {
+    /// Pure factory: build the config the engine sees from `UserSettings`,
+    /// the LLM API key, and the resolved on-disk paths. Lives in the
+    /// package so package tests (with a `SpyCoreEngine`) can exercise
+    /// the full preset → settings → engine.configure path without
+    /// touching FileManager, ModelPaths, or the real C ABI.
+    init(settings: UserSettings, apiKey: String, paths: EnginePaths) {
+        self.init(
+            whisperModelPath: paths.whisperModelPath,
+            whisperModelSize: paths.resolvedWhisperSize,
+            language: settings.language,
+            disableNoiseSuppression: settings.disableNoiseSuppression,
+            deepFilterModelPath: paths.deepFilterModelPath,
+            llmProvider: settings.llmProvider,
+            llmModel: settings.llmModel,
+            llmAPIKey: apiKey,
+            customDict: settings.customDict,
+            llmBaseURL: settings.llmBaseURL,
+            developerMode: settings.developerMode,
+            tseEnabled: settings.tseEnabled && paths.tseAssetsPresent,
+            tseProfileDir: paths.voiceProfileDir,
+            tseModelPath: paths.tseModelPath,
+            speakerEncoderPath: paths.speakerEncoderPath,
+            onnxLibPath: paths.onnxLibPath,
+            tseThreshold: settings.tseThreshold,
+            tseBackend: settings.tseBackend,
+            pipelineTimeoutSec: settings.pipelineTimeoutSec
+        )
+    }
+}
