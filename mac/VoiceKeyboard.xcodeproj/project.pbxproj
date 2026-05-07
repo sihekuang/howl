@@ -42,7 +42,6 @@
 		B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */; };
 		B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */; };
 		B94B7539DDA1680F9B9566B0 /* SessionPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F79C5E25016E8619AC316CFD /* SessionPreview.swift */; };
-		BC318555C2211AD96DFA6C0B /* CompareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */; };
 		C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */; };
 		C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA1218DF9D8268E17C4E2F /* CueSound.swift */; };
 		CD5A2924CCCBF90E4387021F /* SessionPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */; };
@@ -89,7 +88,6 @@
 		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
 		9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadPanel.swift; sourceTree = "<group>"; };
 		9D5234E365C4BA6093A5C613 /* GeneralTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTab.swift; sourceTree = "<group>"; };
-		9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareCard.swift; sourceTree = "<group>"; };
 		A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		AC49053786E5F4980978B90A /* listen-cue.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "listen-cue.mp3"; sourceTree = "<group>"; };
 		B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentSheet.swift; sourceTree = "<group>"; };
@@ -177,7 +175,6 @@
 		432C234A1F1AA6CFD86FAC5E /* Pipeline */ = {
 			isa = PBXGroup;
 			children = (
-				9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */,
 				CB4A574AD3273776A3CF5697 /* ComparePane.swift */,
 				169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */,
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
@@ -471,7 +468,6 @@
 				23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */,
 				0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
-				BC318555C2211AD96DFA6C0B /* CompareCard.swift in Sources */,
 				09599C79C42E022362D8ED46 /* ComparePane.swift in Sources */,
 				E7661B4FBC295A0DAFD40531 /* CompareSourceLoader.swift in Sources */,
 				E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */,
