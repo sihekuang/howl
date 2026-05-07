@@ -261,65 +261,10 @@ func vkb_start_capture() C.int {
 
 			// Write session.json — best-effort. A missing manifest just makes
 			// the session invisible to the Inspector; the WAVs still exist on
-			// disk for ad-hoc inspection.
+			// disk for ad-hoc inspection. Delegated to pipe.WriteSessionManifest
+			// so the live engine and the replay package share one writer.
 			if sessionID != "" && sessionDir != "" {
-				// Build the stage list from the captured pipeline so a non-default
-				// preset (Slice 2) doesn't lie about which stages actually ran.
-				// Mirrors pipeline.registerRecorderStages's rate-tracking logic.
-				const inputRate = 48000
-				stages := make([]sessions.StageEntry, 0, len(pipe.FrameStages)+len(pipe.ChunkStages))
-				rate := inputRate
-				for _, st := range pipe.FrameStages {
-					r := rate
-					if out := st.OutputRate(); out != 0 {
-						r = out
-					}
-					stages = append(stages, sessions.StageEntry{
-						Name:   st.Name(),
-						Kind:   "frame",
-						WavRel: st.Name() + ".wav",
-						RateHz: r,
-					})
-					if out := st.OutputRate(); out != 0 {
-						rate = out
-					}
-				}
-				for _, st := range pipe.ChunkStages {
-					r := rate
-					if out := st.OutputRate(); out != 0 {
-						r = out
-					}
-					entry := sessions.StageEntry{
-						Name:   st.Name(),
-						Kind:   "chunk",
-						WavRel: st.Name() + ".wav",
-						RateHz: r,
-					}
-					// For TSE, attach the most recent cosine similarity so
-					// the Inspector can surface it without parsing events.
-					if st.Name() == "tse" {
-						if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
-							s := g.LastSimilarity()
-							entry.TSESimilarity = &s
-						}
-					}
-					stages = append(stages, entry)
-					if out := st.OutputRate(); out != 0 {
-						rate = out
-					}
-				}
-
-				m := sessions.Manifest{
-					Version:     sessions.CurrentManifestVersion,
-					ID:          sessionID,
-					Preset:      "default", // populated correctly once Slice 2 lands the presets package
-					DurationSec: 0,         // TODO: pipeline-side accounting in Slice 4 (replay needs precise duration)
-					Stages:      stages,
-					Transcripts: sessions.TranscriptEntries{
-						Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
-					},
-				}
-				if err := m.Write(sessionDir); err != nil {
+				if err := pipe.WriteSessionManifest(sessionDir, sessionID, "default"); err != nil {
 					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
 				} else {
 					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)

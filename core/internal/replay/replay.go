@@ -9,6 +9,7 @@ package replay
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -170,6 +171,16 @@ func runOne(ctx context.Context, p presets.Preset, cfg config.Config, tr transcr
 	if err != nil {
 		return Result{ReplaySessionDir: destDir}, err
 	}
+
+	// Write session.json so the Mac Compare view can load this replay
+	// via SessionDetail. Use a path-style id ("<sourceID>/replay-<preset>")
+	// so SessionPaths.dir(for: id) on the Swift side resolves to the
+	// same destDir.
+	manifestID := filepath.Join(opts.SourceID, "replay-"+p.Name)
+	if err := pipe.WriteSessionManifest(destDir, manifestID, p.Name); err != nil {
+		log.Printf("[replay] WriteSessionManifest failed (continuing): %v", err)
+	}
+
 	// pipeline.Result doesn't separately expose the dict-corrected
 	// intermediate; we approximate Dict with Cleaned. The recorder
 	// wrote dict.txt to disk so callers that need the intermediate
