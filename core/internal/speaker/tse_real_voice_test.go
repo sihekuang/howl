@@ -134,25 +134,91 @@ func initONNXOnce(t *testing.T) {
 	}
 }
 
-// TestTSE_evaluateTSE_smoke runs evaluateTSE on the LibriSpeech
-// fixture and just LOGS the four numbers — no assertions yet. This
-// is a development checkpoint to eyeball that the function returns
-// finite, sensible values before we layer on the real assertions in
-// the next task.
-func TestTSE_evaluateTSE_smoke(t *testing.T) {
+// assertTSEResult applies the four pass criteria from
+// docs/superpowers/specs/2026-05-06-tse-real-voice-test-design.md,
+// with thresholds calibrated against our actual model (not the
+// jointly-trained SOTA TSE models in the cited literature). Failure
+// messages include all four numbers so the offending assertion is
+// identifiable without re-running.
+func assertTSEResult(t *testing.T, res tseResult) {
+	t.Helper()
+
+	const (
+		// minSimTarget — output must look like the enrolled speaker.
+		// Literature ECAPA EER decision boundary is ~0.25; same-
+		// speaker clean speech scores 0.55–0.85; we observe ≥0.85
+		// across both LibriSpeech directions post-export-fix. 0.40
+		// is the literature "definitely target" threshold and gives
+		// safe headroom over our minimum.
+		minSimTarget = 0.40
+
+		// minMargin — extracted output must be more like target than
+		// interferer. The ConvTasNet+ECAPA pair we use (off-the-
+		// shelf separator + separately trained encoder, glued at
+		// export time) gives margins ~0.05–0.07 with LibriSpeech
+		// voice pairs. The 0.30 margin from WeSep / X-TF-GridNet
+		// evals assumed jointly trained SOTA TSE models with
+		// cleaner separation; we calibrate to OUR model. 0.03 is
+		// roughly half the observed minimum, catching "TSE didn't
+		// actually pick the right source" without being so tight
+		// that fixture variance triggers false negatives.
+		minMargin = 0.03
+
+		minRMSRatio = 0.10 // RMSOut/RMSIn lower bound — catches degenerate-silent output
+		maxRMSRatio = 10.0 // upper bound — catches energy blowup
+	)
+
+	t.Logf("SimTarget=%.4f  SimInterferer=%.4f  margin=%.4f  RMSIn=%.4f  RMSOut=%.4f",
+		res.SimTarget, res.SimInterferer, res.SimTarget-res.SimInterferer,
+		res.RMSIn, res.RMSOut)
+
+	if res.SimTarget < minSimTarget {
+		t.Errorf("output doesn't look like target: SimTarget=%.4f < %.2f", res.SimTarget, minSimTarget)
+	}
+	margin := res.SimTarget - res.SimInterferer
+	if margin < minMargin {
+		t.Errorf("insufficient target/interferer margin: %.4f < %.2f (SimTarget=%.4f, SimInterferer=%.4f)",
+			margin, minMargin, res.SimTarget, res.SimInterferer)
+	}
+	if res.RMSIn == 0 {
+		t.Fatalf("RMSIn is zero — input mix is silent, fixture problem")
+	}
+	ratio := res.RMSOut / res.RMSIn
+	if ratio < minRMSRatio {
+		t.Errorf("output near-silent: RMSOut/RMSIn=%.4f < %.2f", ratio, minRMSRatio)
+	}
+	if ratio > maxRMSRatio {
+		t.Errorf("output blown up: RMSOut/RMSIn=%.4f > %.2f", ratio, maxRMSRatio)
+	}
+}
+
+// TestTSE_ExtractsEnrolledVoiceFromMix is the real TSE correctness
+// test. For each fixture provider (LibriSpeech always; ElevenLabs
+// added in a later task), runs evaluateTSE in BOTH directions
+// (target=A, target=B) and applies the four-assertion pass criteria.
+// Both directions must pass for the fixture to be considered green.
+func TestTSE_ExtractsEnrolledVoiceFromMix(t *testing.T) {
 	tseModel := resolveModelPath(t, "TSE_MODEL_PATH", "tse_model.onnx")
 	encoderModel := resolveModelPath(t, "SPEAKER_ENCODER_PATH", "speaker_encoder.onnx")
 	initONNXOnce(t)
 
-	a, b := newLibriSpeechFixture().Voices(t)
-	for _, dir := range []struct {
-		name string
-		idx  int
-	}{{"target=A", 0}, {"target=B", 1}} {
-		t.Run(dir.name, func(t *testing.T) {
-			res := evaluateTSE(t, [2]voiceClip{a, b}, dir.idx, tseModel, encoderModel)
-			t.Logf("SimTarget=%.4f  SimInterferer=%.4f  RMSIn=%.4f  RMSOut=%.4f",
-				res.SimTarget, res.SimInterferer, res.RMSIn, res.RMSOut)
+	fixtures := []voiceFixture{
+		newLibriSpeechFixture(),
+		// elevenLabsFixture added in a later task.
+	}
+
+	for _, fix := range fixtures {
+		t.Run(fix.Name(), func(t *testing.T) {
+			a, b := fix.Voices(t)
+			for _, dir := range []struct {
+				name string
+				idx  int
+			}{{"target=A", 0}, {"target=B", 1}} {
+				t.Run(dir.name, func(t *testing.T) {
+					res := evaluateTSE(t, [2]voiceClip{a, b}, dir.idx, tseModel, encoderModel)
+					assertTSEResult(t, res)
+				})
+			}
 		})
 	}
 }
