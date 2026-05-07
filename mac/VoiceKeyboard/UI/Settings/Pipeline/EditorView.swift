@@ -184,8 +184,12 @@ struct EditorView: View {
                    let first = list.first {
                     self.selectedName = first.name
                     self.draft = PresetDraft(first)
-                } else if let p = list.first(where: { $0.name == self.selectedName }) {
-                    // Refreshed after a Save: re-anchor the draft so isDirty resets.
+                } else if let p = list.first(where: { $0.name == self.selectedName }),
+                          !(self.draft?.isDirty ?? false) {
+                    // Refreshed while clean (e.g. just after a successful Save):
+                    // re-anchor the draft so isDirty resets. Skip if the user has
+                    // unsaved edits — preserves work-in-progress against any
+                    // external refresh trigger.
                     self.draft = PresetDraft(p)
                 }
                 self.loadError = nil
@@ -200,17 +204,18 @@ struct EditorView: View {
     private func performOverwrite() async {
         guard let draft = draft else { return }
         await MainActor.run { saving = true; saveError = nil }
-        defer { Task { @MainActor in saving = false } }
         let p = draft.toPreset(name: draft.source.name, description: draft.source.description)
         do {
             try await presets.save(p)
             await MainActor.run {
                 overwriteConfirmVisible = false
+                saving = false
             }
             await refresh()
         } catch {
             await MainActor.run {
                 saveError = "Save failed: \(error)"
+                saving = false
             }
         }
     }
