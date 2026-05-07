@@ -24,11 +24,11 @@
 		60F1DF9AAB2879C591F9D2F7 /* SessionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1AFD5018290EDF499A42FB /* SessionDetail.swift */; };
 		60F701D05E9D3A28DD7D5B24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6533D8DC82E66396D8BA7557 /* Assets.xcassets */; };
 		64561CF42DC2BE72C101E32E /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD6304BEA092461A06BCAFF /* ModelDownloadPanel.swift */; };
+		6786F310982575927E5ED6F6 /* LLMProviderTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E3BE5A0619E9E244C319436 /* LLMProviderTab.swift */; };
 		68025E317F55A3908E958FEF /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B5C020D95C44A45E9A2DCA /* WaveformView.swift */; };
 		6B7C520AB36E2CBA3AB6472E /* APIKeyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */; };
 		71408CEDBBAB2A6F91D3EBC4 /* StageGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFF330F571F4958FD07D880 /* StageGraph.swift */; };
 		789F2C4BF7718DD124B97B43 /* EngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */; };
-		81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7398A10FF69BCB846098786E /* ProviderTab.swift */; };
 		87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */; };
 		8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */; };
 		940157F87EA2AAC4BBC809B6 /* PresetBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */; };
@@ -79,12 +79,12 @@
 		4B1AFD5018290EDF499A42FB /* SessionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetail.swift; sourceTree = "<group>"; };
 		4E68AF4BB0309D0D29024639 /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
 		59636EC6C578038A015432EA /* OllamaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaSection.swift; sourceTree = "<group>"; };
+		5E3BE5A0619E9E244C319436 /* LLMProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTab.swift; sourceTree = "<group>"; };
 		6533D8DC82E66396D8BA7557 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		67B5C020D95C44A45E9A2DCA /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWindow.swift; sourceTree = "<group>"; };
 		6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
 		701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetBanner.swift; sourceTree = "<group>"; };
-		7398A10FF69BCB846098786E /* ProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderTab.swift; sourceTree = "<group>"; };
 		8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTab.swift; sourceTree = "<group>"; };
 		8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVPlayer.swift; sourceTree = "<group>"; };
 		9AC6DD146B85C78BAF2196EB /* VoiceKeyboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceKeyboardApp.swift; sourceTree = "<group>"; };
@@ -144,13 +144,13 @@
 				B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */,
 				9D5234E365C4BA6093A5C613 /* GeneralTab.swift */,
 				3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */,
+				5E3BE5A0619E9E244C319436 /* LLMProviderTab.swift */,
 				13FD3D07C12A94326240356A /* LMStudioSection.swift */,
 				DF970D3D20CC2ECD6ED639A7 /* OccupationPacks.swift */,
 				59636EC6C578038A015432EA /* OllamaSection.swift */,
 				A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */,
 				0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */,
 				701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */,
-				7398A10FF69BCB846098786E /* ProviderTab.swift */,
 				FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */,
 				E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */,
 				C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */,
@@ -483,6 +483,7 @@
 				DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */,
 				F0FB30D506A0C389662232B1 /* GeneralTab.swift in Sources */,
 				B20CAC08A9EE298641256D14 /* HotkeyTab.swift in Sources */,
+				6786F310982575927E5ED6F6 /* LLMProviderTab.swift in Sources */,
 				0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */,
 				967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */,
 				9AB5252581905E6AA95725A5 /* MenuBarController.swift in Sources */,
@@ -496,7 +497,6 @@
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
 				940157F87EA2AAC4BBC809B6 /* PresetBanner.swift in Sources */,
 				EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */,
-				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
 				DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */,
 				EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */,

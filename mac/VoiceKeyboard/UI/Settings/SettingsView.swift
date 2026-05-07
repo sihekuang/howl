@@ -22,7 +22,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general:    return "General"
         case .voice:      return "Voice"
         case .hotkey:     return "Hotkey"
-        case .provider:   return "Provider"
+        case .provider:   return "LLM Provider"
         case .dictionary: return "Dictionary"
         case .playground: return "Playground"
         case .pipeline:   return "Pipeline"   // NEW
@@ -222,7 +222,7 @@ private struct DetailView: View {
                 audioCapture: composition.audioCapture
             )
         case .provider:
-            ProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
+            LLMProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
         case .dictionary:
             DictionaryTab(settings: $settings, onSave: save)
         case .playground:

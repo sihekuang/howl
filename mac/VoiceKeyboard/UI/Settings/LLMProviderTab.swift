@@ -1,7 +1,7 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-struct ProviderTab: View {
+struct LLMProviderTab: View {
     @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
     let secrets: any SecretStore
