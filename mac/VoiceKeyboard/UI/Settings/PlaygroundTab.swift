@@ -199,22 +199,11 @@ struct PlaygroundTab: View {
         )
     }
 
-    /// Translate a Preset's stage specs into UserSettings fields. Only
-    /// fields the engine currently honors via EngineConfig are touched
-    /// (denoise on/off, TSE on/off, Whisper model size, LLM provider).
-    /// TSE threshold + pipeline timeout are preset-only today; wiring
-    /// them through EngineConfig is a separate cleanup.
+    /// Translate a Preset's stage specs into UserSettings fields and
+    /// persist via the parent's save handler. The translation itself
+    /// lives on `UserSettings.applying(_:)` so it's testable in isolation.
     private func applyPreset(_ p: Preset) {
-        var s = settings
-        s.selectedPresetName = p.name
-        for st in p.frameStages where st.name == "denoise" {
-            s.disableNoiseSuppression = !st.enabled
-        }
-        for st in p.chunkStages where st.name == "tse" {
-            s.tseEnabled = st.enabled
-        }
-        s.whisperModelSize = p.transcribe.modelSize
-        s.llmProvider = p.llm.provider
+        let s = settings.applying(p)
         settings = s
         onSave(s)
     }

@@ -77,8 +77,6 @@ struct EditorView: View {
 
             Spacer()
 
-            timeoutField
-
             Button {
                 saveSheetVisible = true
             } label: { Label("Save as…", systemImage: "square.and.arrow.down") }
@@ -92,24 +90,6 @@ struct EditorView: View {
             } label: { Label("Reset", systemImage: "arrow.uturn.backward") }
             .controlSize(.small)
             .disabled(draft?.isDirty != true)
-        }
-    }
-
-    @ViewBuilder
-    private var timeoutField: some View {
-        HStack(spacing: 4) {
-            Text("Timeout:").font(.callout).foregroundStyle(.secondary)
-            if let draft = draft {
-                TextField("", value: Binding(
-                    get: { draft.timeoutSec },
-                    set: { draft.timeoutSec = max(0, $0) }
-                ), format: .number)
-                .frame(width: 44)
-                .multilineTextAlignment(.trailing)
-                Text("s").font(.callout).foregroundStyle(.secondary)
-            } else {
-                Text("—").font(.callout).foregroundStyle(.tertiary)
-            }
         }
     }
 

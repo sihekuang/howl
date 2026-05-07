@@ -16,6 +16,18 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// Requires a completed voice enrollment in
     /// ~/Library/Application Support/VoiceKeyboard/voice/.
     public var tseEnabled: Bool
+    /// Cosine-similarity threshold for the post-extract speaker gate.
+    /// nil or 0 disables gating. Stamped in by `applying(_:)` from the
+    /// active preset's `tse.threshold`.
+    public var tseThreshold: Float?
+    /// TSE backend identifier (e.g. "ecapa"). Stamped in by `applying(_:)`
+    /// from the active preset's `tse.backend`. Empty falls back to the
+    /// engine default.
+    public var tseBackend: String
+    /// Pipeline run timeout in seconds. 0 disables the bound. Global —
+    /// not stamped from presets, edited by the user as a standalone
+    /// engine-tuning setting.
+    public var pipelineTimeoutSec: Int
     /// When true, unlocks the Pipeline Settings tab (live inspector,
     /// per-stage capture, A/B comparison) and tells the engine to
     /// capture every dictation's per-stage WAVs + transcripts to
@@ -40,6 +52,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         hotkey: KeyboardShortcut = .defaultPTT,
         inputDeviceUID: String? = nil,
         tseEnabled: Bool = false,
+        tseThreshold: Float? = nil,
+        tseBackend: String = "",
+        pipelineTimeoutSec: Int = 10,
         developerMode: Bool = false,
         selectedPresetName: String? = nil
     ) {
@@ -53,6 +68,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.hotkey = hotkey
         self.inputDeviceUID = inputDeviceUID
         self.tseEnabled = tseEnabled
+        self.tseThreshold = tseThreshold
+        self.tseBackend = tseBackend
+        self.pipelineTimeoutSec = pipelineTimeoutSec
         self.developerMode = developerMode
         self.selectedPresetName = selectedPresetName
     }
@@ -69,6 +87,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         hotkey = try c.decodeIfPresent(KeyboardShortcut.self, forKey: .hotkey) ?? .defaultPTT
         inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
         tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
+        tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
+        tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
+        pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 10
         developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
         selectedPresetName = try c.decodeIfPresent(String.self, forKey: .selectedPresetName)
     }
@@ -76,7 +97,32 @@ public struct UserSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case whisperModelSize, language, disableNoiseSuppression
         case llmProvider, llmModel, llmBaseURL, customDict, hotkey, inputDeviceUID, tseEnabled
+        case tseThreshold, tseBackend, pipelineTimeoutSec
         case developerMode, selectedPresetName
+    }
+
+    /// Returns a copy with the preset-driven fields stamped in.
+    ///
+    /// Translated: denoise toggle, TSE toggle/threshold/backend, Whisper
+    /// model size, LLM provider, and `selectedPresetName` (display-only).
+    ///
+    /// `pipelineTimeoutSec` is intentionally NOT stamped — timeout is a
+    /// global engine-tuning setting, not preset-driven. The preset's
+    /// `timeoutSec` is currently ignored on this path.
+    public func applying(_ preset: Preset) -> UserSettings {
+        var s = self
+        s.selectedPresetName = preset.name
+        for st in preset.frameStages where st.name == "denoise" {
+            s.disableNoiseSuppression = !st.enabled
+        }
+        for st in preset.chunkStages where st.name == "tse" {
+            s.tseEnabled = st.enabled
+            s.tseThreshold = st.threshold
+            s.tseBackend = st.backend ?? ""
+        }
+        s.whisperModelSize = preset.transcribe.modelSize
+        s.llmProvider = preset.llm.provider
+        return s
     }
 }
 
