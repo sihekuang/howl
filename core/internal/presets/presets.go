@@ -56,8 +56,13 @@ type TranscribeSpec struct {
 }
 
 // LLMSpec mirrors the LLM-related fields of EngineConfig.
+//
+// Model is optional in user-preset JSON: an empty value means "fall
+// back to the engine's current LLMModel" (set by the user globally
+// in the LLM Provider tab). Bundled presets must always pin a model.
 type LLMSpec struct {
 	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
 }
 
 // parseBundle parses a pipeline-presets.json blob and returns its

@@ -12,7 +12,7 @@
         {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
-      "llm":        {"provider": "anthropic"},
+      "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
       "timeout_sec": 10
     },
     {
@@ -26,7 +26,7 @@
         {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
-      "llm":        {"provider": "anthropic"},
+      "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
       "timeout_sec": 5
     },
     {
@@ -40,7 +40,7 @@
         {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "base"},
-      "llm":        {"provider": "anthropic"},
+      "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
       "timeout_sec": 15
     },
     {
@@ -54,7 +54,7 @@
         {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.7}
       ],
       "transcribe": {"model_size": "small"},
-      "llm":        {"provider": "anthropic"},
+      "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
       "timeout_sec": 10
     }
   ]
