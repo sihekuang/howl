@@ -31,9 +31,22 @@ struct SessionDetail: View {
 
     // MARK: - Transport bar
 
+    /// True when the player's current URL belongs to one of THIS
+    /// manifest's stages. Used to gate transport-bar visibility so a
+    /// shared player (e.g. across Compare's two panes) doesn't render
+    /// the same controls in both — only the pane that "owns" the
+    /// playing source shows the bar.
+    private var isPlayingOurSource: Bool {
+        guard let url = player.currentURL else { return false }
+        for stage in manifest.stages where SessionPaths.file(in: manifest.id, rel: stage.wav) == url {
+            return true
+        }
+        return false
+    }
+
     @ViewBuilder
     private var transportBar: some View {
-        if let url = player.currentURL {
+        if isPlayingOurSource, let url = player.currentURL {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Button {
