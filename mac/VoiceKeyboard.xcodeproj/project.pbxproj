@@ -31,6 +31,7 @@
 		81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7398A10FF69BCB846098786E /* ProviderTab.swift */; };
 		87B51608B1354FF446ADE4F2 /* VoiceKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 39525B7DB5D86CD0CF51E097 /* VoiceKeyboardCore */; };
 		8D0221F2A21D890DE9054B80 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */; };
+		940157F87EA2AAC4BBC809B6 /* PresetBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */; };
 		967240D7183CD08A923DA6AD /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */; };
 		9800CFAFB9EFD13E4C3839DB /* listen-cue.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = AC49053786E5F4980978B90A /* listen-cue.mp3 */; };
 		9A74204B8830395A6C2F1D2B /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB29BB613B981351CFED403B /* EditorView.swift */; };
@@ -82,6 +83,7 @@
 		67B5C020D95C44A45E9A2DCA /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWindow.swift; sourceTree = "<group>"; };
 		6C1FD92FE1AEF49A3AE2E3EA /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
+		701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetBanner.swift; sourceTree = "<group>"; };
 		7398A10FF69BCB846098786E /* ProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderTab.swift; sourceTree = "<group>"; };
 		8E501E852BF1A12EF41BF968 /* DictionaryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTab.swift; sourceTree = "<group>"; };
 		8E61404FB38AC290F4D1F66E /* WAVPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVPlayer.swift; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				59636EC6C578038A015432EA /* OllamaSection.swift */,
 				A48E3DC74B9B74C8D8ED8D7C /* OpenAISection.swift */,
 				0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */,
+				701457544EF0A4FB8D9AEFDA /* PresetBanner.swift */,
 				7398A10FF69BCB846098786E /* ProviderTab.swift */,
 				FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */,
 				E45EE6163C4F4DF22D87FE38 /* SettingsView.swift */,
@@ -491,6 +494,7 @@
 				C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */,
 				0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */,
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
+				940157F87EA2AAC4BBC809B6 /* PresetBanner.swift in Sources */,
 				EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */,
 				81C30743ABF291964B91A79C /* ProviderTab.swift in Sources */,
 				001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */,
