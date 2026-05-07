@@ -93,7 +93,7 @@ struct StageDetailPane: View {
         }
     }
 
-    // MARK: - Existing tse body (unchanged from StageDetailPanel)
+    // MARK: - Existing tse body (preserved verbatim from the pre-redesign pane)
 
     @ViewBuilder
     private func tseBody(ref: StageRef, stage: Preset.StageSpec) -> some View {
