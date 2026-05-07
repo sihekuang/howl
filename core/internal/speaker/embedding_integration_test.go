@@ -62,8 +62,7 @@ func TestComputeEmbedding_DifferentInputsDifferentEmbeds(t *testing.T) {
 	if libPath == "" {
 		libPath = "/opt/homebrew/lib/libonnxruntime.dylib"
 	}
-	// Skip InitONNXRuntime if already initialized in the same test process.
-	if err := InitONNXRuntime(libPath); err != nil && err.Error() != "The onnxruntime has already been initialized" {
+	if err := InitONNXRuntime(libPath); err != nil {
 		t.Fatalf("InitONNXRuntime: %v", err)
 	}
 	modelPath := os.Getenv("SPEAKER_ENCODER_PATH")
