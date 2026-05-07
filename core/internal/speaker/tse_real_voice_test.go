@@ -7,7 +7,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/voice-keyboard/core/internal/audio"
 )
 
 // tseResult holds everything the assertions need from one run of
@@ -65,6 +68,24 @@ func evaluateTSE(t *testing.T, voices [2]voiceClip, targetIdx int, tseModelPath,
 	extracted, err := tse.Extract(context.Background(), mixed)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
+	}
+
+	// Optional debug dump — when TSE_TEST_DUMP_DIR is set, write the
+	// mixed input and the TSE-extracted output to disk so a human can
+	// listen to what the model actually produced. Filenames are derived
+	// from t.Name() so multiple subtests don't collide.
+	if dumpDir := os.Getenv("TSE_TEST_DUMP_DIR"); dumpDir != "" {
+		if err := os.MkdirAll(dumpDir, 0o755); err != nil {
+			t.Fatalf("mkdir TSE_TEST_DUMP_DIR=%s: %v", dumpDir, err)
+		}
+		base := strings.ReplaceAll(t.Name(), "/", "_")
+		if err := audio.WriteWAVMono(filepath.Join(dumpDir, base+"_mixed.wav"), mixed, 16000); err != nil {
+			t.Fatalf("write mixed: %v", err)
+		}
+		if err := audio.WriteWAVMono(filepath.Join(dumpDir, base+"_extracted.wav"), extracted, 16000); err != nil {
+			t.Fatalf("write extracted: %v", err)
+		}
+		t.Logf("dumped %s_{mixed,extracted}.wav under %s", base, dumpDir)
 	}
 
 	embedExtracted, err := ComputeEmbedding(encoderModelPath, extracted, ecapaDim)
@@ -225,3 +246,4 @@ func TestTSE_ExtractsEnrolledVoiceFromMix(t *testing.T) {
 		})
 	}
 }
+
