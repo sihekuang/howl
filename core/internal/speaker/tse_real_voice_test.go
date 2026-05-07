@@ -207,7 +207,7 @@ func TestTSE_ExtractsEnrolledVoiceFromMix(t *testing.T) {
 
 	fixtures := []voiceFixture{
 		newLibriSpeechFixture(),
-		// elevenLabsFixture added in a later task.
+		newElevenLabsFixture(),
 	}
 
 	for _, fix := range fixtures {

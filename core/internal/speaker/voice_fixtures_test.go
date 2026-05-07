@@ -3,9 +3,18 @@
 package speaker
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/audio"
 )
@@ -75,4 +84,125 @@ func TestVoiceFixtures_LibriSpeech(t *testing.T) {
 	if a.Label == b.Label {
 		t.Errorf("fixtures should be distinct speakers; got identical label %q", a.Label)
 	}
+}
+
+// elevenLabsFixture synthesises two distinct voices via the
+// ElevenLabs TTS API. Skipped (not failed) when ELEVENLABS_API_KEY
+// is unset or `ffmpeg` is missing — opt-in path, never blocks the
+// default `go test` run.
+type elevenLabsFixture struct{}
+
+func newElevenLabsFixture() *elevenLabsFixture { return &elevenLabsFixture{} }
+
+func (f *elevenLabsFixture) Name() string { return "elevenlabs" }
+
+// Canonical demo voice IDs documented at
+// https://elevenlabs.io/docs/voices/default-voices. Adam is a
+// resonant male voice; Rachel is a clear female voice — pair gives
+// good acoustic distance for ECAPA discrimination.
+const (
+	elevenLabsAdamID   = "pNInz6obpgDQGcFmaJgB"
+	elevenLabsRachelID = "21m00Tcm4TlvDq8ikWAM"
+)
+
+const elevenLabsTestText = "Twas brillig and the slithy toves did gyre and gimble in the wabe; all mimsy were the borogoves and the mome raths outgrabe."
+
+func (f *elevenLabsFixture) Voices(t *testing.T) (a, b voiceClip) {
+	t.Helper()
+	apiKey := os.Getenv("ELEVENLABS_API_KEY")
+	if apiKey == "" {
+		t.Skip("ELEVENLABS_API_KEY not set — opt-in fixture")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not on PATH — required to decode ElevenLabs MP3")
+	}
+	a = fetchElevenLabsVoice(t, apiKey, elevenLabsAdamID, "elevenlabs-adam-M")
+	b = fetchElevenLabsVoice(t, apiKey, elevenLabsRachelID, "elevenlabs-rachel-F")
+	return
+}
+
+// fetchElevenLabsVoice returns a 16 kHz mono float32 clip for
+// (voiceID, elevenLabsTestText). Cached under $TMPDIR so repeat
+// runs don't burn API credits or re-decode.
+func fetchElevenLabsVoice(t *testing.T, apiKey, voiceID, label string) voiceClip {
+	t.Helper()
+	cacheDir := filepath.Join(os.TempDir(), "voicekeyboard-tse-fixtures")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatalf("mkdir cache: %v", err)
+	}
+	keyHash := sha256.Sum256([]byte(voiceID + "|" + elevenLabsTestText))
+	cacheFile := filepath.Join(cacheDir, fmt.Sprintf("%s_%s.wav", voiceID, hex.EncodeToString(keyHash[:8])))
+
+	if _, err := os.Stat(cacheFile); err == nil {
+		samples, sr, err := audio.ReadWAVMono(cacheFile)
+		if err == nil && sr == 16000 {
+			return voiceClip{Label: label, Samples: samples}
+		}
+		// Fall through: cache file is corrupt; re-fetch.
+	}
+
+	mp3Bytes, err := elevenLabsTTS(apiKey, voiceID, elevenLabsTestText)
+	if err != nil {
+		t.Skipf("ElevenLabs TTS failed (skipping rather than failing): %v", err)
+	}
+
+	mp3File := cacheFile + ".mp3"
+	if err := os.WriteFile(mp3File, mp3Bytes, 0o644); err != nil {
+		t.Fatalf("write mp3 cache: %v", err)
+	}
+	defer os.Remove(mp3File)
+
+	cmd := exec.Command("ffmpeg", "-y", "-loglevel", "error",
+		"-i", mp3File,
+		"-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
+		cacheFile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg mp3->wav: %v\n%s", err, out)
+	}
+
+	samples, sr, err := audio.ReadWAVMono(cacheFile)
+	if err != nil {
+		t.Fatalf("ReadWAVMono(%s): %v", cacheFile, err)
+	}
+	if sr != 16000 {
+		t.Fatalf("expected 16 kHz, got %d Hz", sr)
+	}
+	return voiceClip{Label: label, Samples: samples}
+}
+
+// elevenLabsTTS calls the v1 text-to-speech endpoint and returns
+// raw MP3 bytes. 30 s timeout — the API typically returns in 1–3 s.
+func elevenLabsTTS(apiKey, voiceID, text string) ([]byte, error) {
+	body, err := json.Marshal(map[string]any{
+		"text":     text,
+		"model_id": "eleven_multilingual_v2",
+		"voice_settings": map[string]any{
+			"stability":        0.5,
+			"similarity_boost": 0.75,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	url := "https://api.elevenlabs.io/v1/text-to-speech/" + voiceID
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("xi-api-key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "audio/mpeg")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(errBody))
+	}
+	return io.ReadAll(resp.Body)
 }
