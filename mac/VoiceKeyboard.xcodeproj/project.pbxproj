@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
 		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
+		09599C79C42E022362D8ED46 /* ComparePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4A574AD3273776A3CF5697 /* ComparePane.swift */; };
 		0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */; };
 		0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEB6360C931EC47097D3762 /* PipelineTab.swift */; };
 		0FE11049562F5A1C63430513 /* LMStudioSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13FD3D07C12A94326240356A /* LMStudioSection.swift */; };
@@ -95,6 +96,7 @@
 		B32C3E409F0FEE9101DBEB80 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTab.swift; sourceTree = "<group>"; };
 		C9AB2053A4332FD2910B26D7 /* StageDetailPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageDetailPanel.swift; sourceTree = "<group>"; };
+		CB4A574AD3273776A3CF5697 /* ComparePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComparePane.swift; sourceTree = "<group>"; };
 		D191FF4976526AAF109C19EB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D1D15493CA03941D9F207F9F /* CompareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareView.swift; sourceTree = "<group>"; };
 		D89C9EC21971FDD8AB9937B2 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
@@ -176,6 +178,7 @@
 			isa = PBXGroup;
 			children = (
 				9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */,
+				CB4A574AD3273776A3CF5697 /* ComparePane.swift */,
 				169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */,
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
@@ -469,6 +472,7 @@
 				0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
 				BC318555C2211AD96DFA6C0B /* CompareCard.swift in Sources */,
+				09599C79C42E022362D8ED46 /* ComparePane.swift in Sources */,
 				E7661B4FBC295A0DAFD40531 /* CompareSourceLoader.swift in Sources */,
 				E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
