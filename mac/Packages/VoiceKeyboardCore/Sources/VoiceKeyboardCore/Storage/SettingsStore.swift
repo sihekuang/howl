@@ -122,6 +122,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         }
         s.whisperModelSize = preset.transcribe.modelSize
         s.llmProvider = preset.llm.provider
+        if let m = preset.llm.model {
+            s.llmModel = m
+        }
         return s
     }
 }

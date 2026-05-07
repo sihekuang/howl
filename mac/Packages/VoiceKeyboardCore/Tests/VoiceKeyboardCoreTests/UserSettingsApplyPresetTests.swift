@@ -209,4 +209,38 @@ struct UserSettingsApplyPresetTests {
         let result = UserSettings().applying(preset)
         #expect(result.tseEnabled == false)
     }
+
+    // MARK: - LLM model stamping (per-preset override)
+
+    @Test func applying_preset_with_llmModel_stampsModel() {
+        let preset = Preset(
+            name: "test",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "anthropic", model: "claude-haiku-4-5"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmModel = "claude-sonnet-4-6"  // user's previous global default
+        let result = base.applying(preset)
+        #expect(result.llmModel == "claude-haiku-4-5")
+    }
+
+    @Test func applying_preset_without_llmModel_preservesGlobalModel() {
+        let preset = Preset(
+            name: "test",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "anthropic", model: nil),  // explicit nil
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmModel = "claude-sonnet-4-6"
+        let result = base.applying(preset)
+        #expect(result.llmModel == "claude-sonnet-4-6")  // preserved
+    }
 }
