@@ -84,7 +84,8 @@ struct SettingsView: View {
                 page: selectedPage,
                 composition: composition,
                 settings: $settings,
-                save: save
+                save: save,
+                navigateTo: { selectedPage = $0 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -156,6 +157,9 @@ private struct DetailView: View {
     let composition: CompositionRoot
     @Binding var settings: UserSettings
     let save: (UserSettings) -> Void
+    /// Page-level navigation hook — Playground's preset banner uses
+    /// this to deep-link into Pipeline → Editor.
+    let navigateTo: (SettingsPage) -> Void
 
     var body: some View {
         ScrollView {
@@ -227,7 +231,11 @@ private struct DetailView: View {
                 hotkey: settings.hotkey,
                 coordinator: composition.coordinator,
                 developerMode: settings.developerMode,
-                sessions: LibVKBSessionsClient(engine: composition.engine)
+                sessions: LibVKBSessionsClient(engine: composition.engine),
+                presets: LibVKBPresetsClient(engine: composition.engine),
+                settings: $settings,
+                onSave: save,
+                navigateToPipeline: { navigateTo(.pipeline) }
             )
         case .pipeline:
             PipelineTab(

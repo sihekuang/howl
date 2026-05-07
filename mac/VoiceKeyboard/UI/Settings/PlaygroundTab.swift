@@ -16,6 +16,13 @@ struct PlaygroundTab: View {
     let coordinator: EngineCoordinator
     let developerMode: Bool
     let sessions: any SessionsClient
+    let presets: any PresetsClient
+    @Binding var settings: UserSettings
+    /// Persists settings + reapplies the engine config (parent's save handler).
+    let onSave: (UserSettings) -> Void
+    /// Called when the user clicks "Configure…" in the preset banner.
+    /// Parent flips the Settings page to Pipeline → Editor.
+    let navigateToPipeline: () -> Void
 
     @State private var scratch: String = ""
     @State private var selectedID: String? = nil
@@ -73,6 +80,8 @@ struct PlaygroundTab: View {
     @ViewBuilder
     private var playgroundBanner: some View {
         VStack(alignment: .leading, spacing: 10) {
+            presetBanner
+
             HStack(spacing: 8) {
                 Image(systemName: "mic.circle.fill")
                     .foregroundStyle(.tint)
@@ -132,6 +141,7 @@ struct PlaygroundTab: View {
     @ViewBuilder
     private var playgroundColumn: some View {
         VStack(alignment: .leading, spacing: 8) {
+            presetBanner
             statusBanner
             Text("Click into the box below, then hold \(Text(hotkey.displayString).font(.system(.body, design: .monospaced).bold())) and speak. Release to transcribe — the cleaned text appears here.")
                 .font(.callout)
@@ -171,6 +181,42 @@ struct PlaygroundTab: View {
                     .disabled(scratch.isEmpty)
             }
         }
+    }
+
+    /// Compact preset banner reused across both layout modes. Picker
+    /// writes back to UserSettings via applyPreset; "Configure…"
+    /// jumps to Pipeline → Editor.
+    @ViewBuilder
+    private var presetBanner: some View {
+        PresetBanner(
+            presets: presets,
+            selectedPresetName: Binding(
+                get: { settings.selectedPresetName },
+                set: { settings.selectedPresetName = $0 }
+            ),
+            apply: { p in applyPreset(p) },
+            onConfigure: { navigateToPipeline() }
+        )
+    }
+
+    /// Translate a Preset's stage specs into UserSettings fields. Only
+    /// fields the engine currently honors via EngineConfig are touched
+    /// (denoise on/off, TSE on/off, Whisper model size, LLM provider).
+    /// TSE threshold + pipeline timeout are preset-only today; wiring
+    /// them through EngineConfig is a separate cleanup.
+    private func applyPreset(_ p: Preset) {
+        var s = settings
+        s.selectedPresetName = p.name
+        for st in p.frameStages where st.name == "denoise" {
+            s.disableNoiseSuppression = !st.enabled
+        }
+        for st in p.chunkStages where st.name == "tse" {
+            s.tseEnabled = st.enabled
+        }
+        s.whisperModelSize = p.transcribe.modelSize
+        s.llmProvider = p.llm.provider
+        settings = s
+        onSave(s)
     }
 
     /// Multiline scratch editor — TextEditor expands vertically with

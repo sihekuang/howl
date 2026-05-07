@@ -22,6 +22,12 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// /tmp/voicekeyboard/sessions/. Default false; casual users
     /// never see the extra surface.
     public var developerMode: Bool
+    /// Name of the preset the user last applied via Settings → Playground.
+    /// Display-only — the actual values live in the fields above. nil for
+    /// users who never picked a preset (legacy installs) or who edited
+    /// individual fields after applying a preset (we don't detect drift
+    /// today; the picker just shows whatever was last applied).
+    public var selectedPresetName: String?
 
     public init(
         whisperModelSize: String = "small",
@@ -34,7 +40,8 @@ public struct UserSettings: Codable, Equatable, Sendable {
         hotkey: KeyboardShortcut = .defaultPTT,
         inputDeviceUID: String? = nil,
         tseEnabled: Bool = false,
-        developerMode: Bool = false
+        developerMode: Bool = false,
+        selectedPresetName: String? = nil
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
@@ -47,6 +54,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.inputDeviceUID = inputDeviceUID
         self.tseEnabled = tseEnabled
         self.developerMode = developerMode
+        self.selectedPresetName = selectedPresetName
     }
 
     public init(from decoder: any Decoder) throws {
@@ -62,12 +70,13 @@ public struct UserSettings: Codable, Equatable, Sendable {
         inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
         tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
         developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
+        selectedPresetName = try c.decodeIfPresent(String.self, forKey: .selectedPresetName)
     }
 
     enum CodingKeys: String, CodingKey {
         case whisperModelSize, language, disableNoiseSuppression
         case llmProvider, llmModel, llmBaseURL, customDict, hotkey, inputDeviceUID, tseEnabled
-        case developerMode
+        case developerMode, selectedPresetName
     }
 }
 
