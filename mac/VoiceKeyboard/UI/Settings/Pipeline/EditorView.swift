@@ -8,6 +8,8 @@ import VoiceKeyboardCore
 struct EditorView: View {
     let presets: any PresetsClient
     let sessions: any SessionsClient
+    @Binding var settings: UserSettings
+    let navigateTo: (SettingsPage) -> Void
 
     @State private var presetList: [Preset] = []
     @State private var selectedName: String = ""

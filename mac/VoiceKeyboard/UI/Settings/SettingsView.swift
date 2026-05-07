@@ -242,7 +242,9 @@ private struct DetailView: View {
                 engine: composition.engine,
                 sessions: LibVKBSessionsClient(engine: composition.engine),
                 presets: LibVKBPresetsClient(engine: composition.engine),
-                replay: LibVKBReplayClient(engine: composition.engine)
+                replay: LibVKBReplayClient(engine: composition.engine),
+                settings: $settings,
+                navigateTo: navigateTo
             )
         }
     }
