@@ -2,8 +2,13 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Compare view: pick a captured session as audio source, pick N
-/// presets to replay through, hit Run, see results side by side.
+/// Compare view: pick a captured session as the audio source, pick
+/// one preset to replay it through, click Run, see source on the
+/// left and the preset's replay on the right.
+///
+/// Both panes reuse SessionDetail (per-stage Play buttons + transport
+/// bar + transcript Open buttons). Single shared WAVPlayer across both
+/// panes — playing audio in one stops audio in the other.
 struct CompareView: View {
     let sessions: any SessionsClient
     let presets: any PresetsClient
@@ -12,161 +17,202 @@ struct CompareView: View {
     @State private var sessionList: [SessionManifest] = []
     @State private var presetList: [Preset] = []
     @State private var selectedSourceID: String? = nil
-    @State private var selectedPresetNames: Set<String> = []
-    @State private var results: [ReplayResult] = []
+    @State private var selectedPresetName: String? = nil
+    @State private var result: ReplayResult? = nil
+    @State private var replayManifest: SessionManifest? = nil
     @State private var running = false
     @State private var loadError: String? = nil
     @State private var runError: String? = nil
-    @State private var showSourceDetail = false
-    /// Shared player. Source-session playback (via SessionDetail) and
-    /// per-card TSE playback go through the same instance so only one
-    /// audio source is heard at a time — switching sources stops the
-    /// prior one cleanly.
     @State private var player = WAVPlayer()
 
     private var canRun: Bool {
-        selectedSourceID != nil && !selectedPresetNames.isEmpty && !running
+        selectedSourceID != nil && selectedPresetName != nil && !running
     }
 
-    /// The original session's cleaned-text transcript, used as the
-    /// reference for the "closest match" badge.
-    private var sourceTranscript: String? {
+    private var sourceManifest: SessionManifest? {
         guard let id = selectedSourceID else { return nil }
-        return SessionPreview.load(in: id, maxChars: .max)
+        return sessionList.first(where: { $0.id == id })
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             toolbar
             Divider()
-            sourceDetailSection
             if let err = loadError {
                 Text(err).font(.callout).foregroundStyle(.red)
-            } else if results.isEmpty && runError == nil {
-                Text("Pick a source session and one or more presets, then click Run.")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .padding(.top, 4)
             }
-            if let err = runError {
-                Text(err).font(.callout).foregroundStyle(.red)
-            }
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(results) { r in
-                        CompareCard(
-                            result: r,
-                            isClosestMatch: r.preset == closestMatchPreset,
-                            onPlayTSE: { playTSE(for: r) }
-                        )
-                    }
-                }
-                .padding(.vertical, 4)
+            HStack(alignment: .top, spacing: 10) {
+                leftPane.frame(minWidth: 320, maxWidth: .infinity)
+                rightPane.frame(minWidth: 320, maxWidth: .infinity)
             }
         }
         .task { await refresh() }
         .onChange(of: selectedSourceID) { _, _ in
-            // Switching sources invalidates any in-flight playback,
-            // since cards' replayDir paths and the source's stage WAVs
-            // both belong to the prior selection.
+            // Switching sources stops playback and clears the right
+            // pane back to its empty state — the prior replay's
+            // manifest belongs to a different source.
             player.stop()
-        }
-    }
-
-    /// Collapsible reuse of the Inspector's per-session detail view —
-    /// lets the user hear the source's audio (denoise.wav, decimate.wav,
-    /// tse.wav if present) and read its transcripts before/while
-    /// reviewing the replay cards. Same WAVPlayer as the cards, so
-    /// only one audio source plays at a time.
-    @ViewBuilder
-    private var sourceDetailSection: some View {
-        if let source = sourceManifest {
-            DisclosureGroup(isExpanded: $showSourceDetail) {
-                SessionDetail(manifest: source, player: player)
-                    .padding(.top, 6)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "waveform")
-                        .foregroundStyle(.secondary)
-                    Text("Source audio").font(.callout)
-                    Text("(\(source.preset.isEmpty ? "—" : source.preset))")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(relativeTime(source.id))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+            result = nil
+            replayManifest = nil
+            // Default the preset picker to the new source's preset
+            // when the new source has one we recognize.
+            if let sourcePreset = sourceManifest?.preset,
+               presetList.contains(where: { $0.name == sourcePreset }) {
+                selectedPresetName = sourcePreset
             }
         }
+        .onChange(of: selectedPresetName) { _, _ in
+            // Same teardown — comparing against a different preset
+            // means the prior replay isn't relevant anymore.
+            player.stop()
+            result = nil
+            replayManifest = nil
+        }
     }
 
-    /// Manifest for the selected source. Pulled from sessionList
-    /// (already loaded by refresh()) — no extra fetch.
-    private var sourceManifest: SessionManifest? {
-        guard let id = selectedSourceID else { return nil }
-        return sessionList.first(where: { $0.id == id })
-    }
+    // MARK: - Toolbar
 
     @ViewBuilder
     private var toolbar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("Source:").foregroundStyle(.secondary).font(.callout)
-                Picker("Source", selection: Binding(
-                    get: { selectedSourceID ?? sessionList.first?.id ?? "" },
-                    set: { if !$0.isEmpty { selectedSourceID = $0 } }
-                )) {
-                    if sessionList.isEmpty {
-                        Text("(no sessions)").tag("")
-                    } else {
-                        ForEach(sessionList) { s in
-                            Text("\(relativeTime(s.id)) · \(s.preset)").tag(s.id)
-                        }
+        HStack(spacing: 10) {
+            Text("Source:").foregroundStyle(.secondary).font(.callout)
+            Picker("Source", selection: Binding(
+                get: { selectedSourceID ?? sessionList.first?.id ?? "" },
+                set: { if !$0.isEmpty { selectedSourceID = $0 } }
+            )) {
+                if sessionList.isEmpty {
+                    Text("(no sessions)").tag("")
+                } else {
+                    ForEach(sessionList) { s in
+                        Text("\(relativeTime(s.id)) · \(s.preset.isEmpty ? "—" : s.preset)")
+                            .tag(s.id)
                     }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 280)
-                Spacer()
-                Button {
-                    Task { await runReplay() }
-                } label: {
-                    if running {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Run", systemImage: "play.fill")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canRun)
             }
-            HStack(alignment: .center, spacing: 6) {
-                Text("Presets:").foregroundStyle(.secondary).font(.callout)
-                FlowLayout(spacing: 6) {
+            .labelsHidden()
+            .frame(maxWidth: 260)
+
+            Text("Preset:").foregroundStyle(.secondary).font(.callout)
+            Picker("Preset", selection: Binding(
+                get: { selectedPresetName ?? "" },
+                set: { if !$0.isEmpty { selectedPresetName = $0 } }
+            )) {
+                if presetList.isEmpty {
+                    Text("(no presets)").tag("")
+                } else {
                     ForEach(presetList) { p in
-                        Toggle(p.name, isOn: Binding(
-                            get: { selectedPresetNames.contains(p.name) },
-                            set: { on in
-                                if on { selectedPresetNames.insert(p.name) }
-                                else  { selectedPresetNames.remove(p.name) }
-                            }
-                        ))
-                        .toggleStyle(.button)
-                        .controlSize(.small)
+                        Text(p.name).tag(p.name)
                     }
                 }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 200)
+
+            Spacer()
+
+            Button {
+                Task { await runReplay() }
+            } label: {
+                if running {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Run", systemImage: "play.fill")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canRun)
+        }
+    }
+
+    // MARK: - Panes
+
+    @ViewBuilder
+    private var leftPane: some View {
+        if let source = sourceManifest {
+            ComparePane(
+                label: "ORIGINAL",
+                labelColor: Color.secondary,
+                subtitle: paneSubtitle(for: source)
+            ) {
+                SessionDetail(manifest: source, player: player)
+            }
+        } else {
+            ComparePane(
+                label: "ORIGINAL",
+                labelColor: Color.secondary,
+                subtitle: "(no source selected)"
+            ) {
+                Text("Pick a captured session above.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
         }
     }
 
-    private var closestMatchPreset: String? {
-        guard let ref = sourceTranscript, !results.isEmpty else { return nil }
-        let scored: [(String, Int)] = results
-            .compactMap { $0.error == nil ? ($0.preset, Levenshtein.distance(ref, $0.cleaned)) : nil }
-        return scored.min(by: { $0.1 < $1.1 })?.0
+    @ViewBuilder
+    private var rightPane: some View {
+        if let replay = replayManifest, let preset = selectedPresetName {
+            ComparePane(
+                label: preset.uppercased(),
+                labelColor: Color.accentColor,
+                subtitle: paneSubtitle(for: replay)
+            ) {
+                SessionDetail(manifest: replay, player: player)
+            }
+        } else if running {
+            ComparePane(
+                label: (selectedPresetName ?? "PRESET").uppercased(),
+                labelColor: Color.accentColor,
+                subtitle: "running\u{2026}"
+            ) {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, 20)
+            }
+        } else if let err = runError {
+            ComparePane(
+                label: (selectedPresetName ?? "PRESET").uppercased(),
+                labelColor: Color.accentColor,
+                subtitle: "error"
+            ) {
+                Text(err).font(.callout).foregroundStyle(.red)
+            }
+        } else if let r = result, let errString = r.error {
+            // Replay returned but this preset's run failed; surface its error.
+            ComparePane(
+                label: r.preset.uppercased(),
+                labelColor: Color.accentColor,
+                subtitle: "error"
+            ) {
+                Text(errString).font(.callout).foregroundStyle(.red)
+            }
+        } else {
+            ComparePane(
+                label: (selectedPresetName ?? "PRESET").uppercased(),
+                labelColor: Color.accentColor.opacity(0.4),
+                subtitle: "not run yet"
+            ) {
+                Text("Pick a preset and click Run.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func paneSubtitle(for m: SessionManifest) -> String {
+        let preset = m.preset.isEmpty ? "—" : m.preset
+        return "\(preset) · \(String(format: "%.1fs", m.durationSec))"
     }
 
     private func relativeTime(_ id: String) -> String {
         guard let d = RelativeTime.parse(id) else { return id }
         return RelativeTime.string(now: Date(), then: d)
     }
+
+    // MARK: - Actions
 
     private func refresh() async {
         do {
@@ -175,9 +221,17 @@ struct CompareView: View {
             self.sessionList = try await s
             self.presetList = try await p
             if selectedSourceID == nil { selectedSourceID = sessionList.first?.id }
-            if selectedPresetNames.isEmpty,
-               let def = presetList.first(where: { $0.name == "default" }) {
-                selectedPresetNames.insert(def.name)
+            if selectedPresetName == nil {
+                // Default to the source's own preset if it's known,
+                // else "default", else first available.
+                let sourcePreset = sourceManifest?.preset ?? ""
+                if presetList.contains(where: { $0.name == sourcePreset }) {
+                    selectedPresetName = sourcePreset
+                } else if presetList.contains(where: { $0.name == "default" }) {
+                    selectedPresetName = "default"
+                } else {
+                    selectedPresetName = presetList.first?.name
+                }
             }
         } catch {
             self.loadError = "Failed to load: \(error)"
@@ -185,62 +239,25 @@ struct CompareView: View {
     }
 
     private func runReplay() async {
-        guard let id = selectedSourceID else { return }
+        guard let id = selectedSourceID, let preset = selectedPresetName else { return }
         running = true
         runError = nil
-        let names = presetList.map(\.name).filter { selectedPresetNames.contains($0) }
+        result = nil
+        replayManifest = nil
         defer { running = false }
         do {
-            let got = try await replay.run(sourceID: id, presets: names)
-            await MainActor.run { self.results = got }
+            let got = try await replay.run(sourceID: id, presets: [preset])
+            await MainActor.run {
+                self.result = got.first
+                self.replayManifest = CompareSourceLoader.loadReplayManifest(
+                    sourceID: id,
+                    presetName: preset
+                )
+            }
         } catch {
             await MainActor.run {
                 self.runError = "Replay failed: \(error)"
-                self.results = []
             }
-        }
-    }
-
-    private func playTSE(for r: ReplayResult) {
-        guard let dir = r.replayDir else { return }
-        let url = URL(fileURLWithPath: dir).appendingPathComponent("tse.wav")
-        player.toggle(url: url)
-    }
-}
-
-/// Minimal flow-layout that wraps button-style toggles to multiple
-/// rows when the row width is exceeded. SwiftUI's HStack doesn't wrap.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, totalWidth: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if x + s.width > maxWidth {
-                y += rowHeight + spacing
-                x = 0; rowHeight = 0
-            }
-            x += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
-            totalWidth = max(totalWidth, x)
-        }
-        return CGSize(width: totalWidth, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = bounds.width
-        var x: CGFloat = bounds.minX, y: CGFloat = bounds.minY, rowHeight: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if x + s.width > bounds.minX + maxWidth {
-                y += rowHeight + spacing
-                x = bounds.minX; rowHeight = 0
-            }
-            sub.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: s.width, height: s.height))
-            x += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
         }
     }
 }
