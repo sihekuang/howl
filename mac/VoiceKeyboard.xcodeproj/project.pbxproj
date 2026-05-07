@@ -19,6 +19,7 @@
 		23D6EF54D72A0D934D012444 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D191FF4976526AAF109C19EB /* AppDelegate.swift */; };
 		387CBBDCD304A9269BCB3151 /* ManageElsewhereButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */; };
 		4102BD8E2579447BA75C2865 /* EnrollmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21DFB92D82B88CC06674560 /* EnrollmentSheet.swift */; };
+		42DDAFB1C61FDF67CFC27BE9 /* OverwriteConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BB3B6B23AD7F003AEB4832B /* OverwriteConfirmSheet.swift */; };
 		4461BA99467F3A76121BE581 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2A7498EF3543CE58F1CB28 /* SettingsComponents.swift */; };
 		516F8BF50BFBF9004B2AEA96 /* AnthropicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */; };
 		57B453FCFC77413D123D6F5B /* AccessibilityPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB43BCBE0BC9EE933C18D69 /* AccessibilityPanel.swift */; };
@@ -74,6 +75,7 @@
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
 		28C845B09BF6CB3A1ED34A54 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
+		2BB3B6B23AD7F003AEB4832B /* OverwriteConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverwriteConfirmSheet.swift; sourceTree = "<group>"; };
 		2D9D15E9DB6F07F96F239243 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		2FB8F17C8D38AF596BCE09D1 /* StageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageList.swift; sourceTree = "<group>"; };
 		3338ECC23099B7635CBF29F5 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
 				373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */,
+				2BB3B6B23AD7F003AEB4832B /* OverwriteConfirmSheet.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
 				088375E753FFBEF3194F73E6 /* PresetDraft.swift */,
 				FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */,
@@ -500,6 +503,7 @@
 				A211C39E4FD5A53FBE001E03 /* OccupationPacks.swift in Sources */,
 				CE1E324D14D894685ABE7C0C /* OllamaSection.swift in Sources */,
 				C6B72065D9E5A7C4AA7610DA /* OpenAISection.swift in Sources */,
+				42DDAFB1C61FDF67CFC27BE9 /* OverwriteConfirmSheet.swift in Sources */,
 				0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */,
 				B8B25B6DC5CCFEC729DE058D /* PlaygroundTab.swift in Sources */,
 				940157F87EA2AAC4BBC809B6 /* PresetBanner.swift in Sources */,
