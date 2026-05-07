@@ -104,7 +104,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// Returns a copy with the preset-driven fields stamped in.
     ///
     /// Translated: denoise toggle, TSE toggle/threshold/backend, Whisper
-    /// model size, LLM provider, and `selectedPresetName` (display-only).
+    /// model size, LLM provider, LLM model (when the preset pins one;
+    /// `nil` preserves the receiver's global `llmModel`), and
+    /// `selectedPresetName` (display-only).
     ///
     /// `pipelineTimeoutSec` is intentionally NOT stamped — timeout is a
     /// global engine-tuning setting, not preset-driven. The preset's
