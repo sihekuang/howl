@@ -162,7 +162,7 @@ struct UserSettingsApplyPresetTests {
 
     // MARK: - Sanity: stage names the engine doesn't know are silently ignored
     //
-    // Documents that the StageGraph UI lets you edit any stage name,
+    // Documents that the StageList UI lets you edit any stage name,
     // but `applying(_:)` (and the Go-side Resolve) only translate
     // "denoise" / "decimate3" / "tse". Custom stages added in the
     // Editor are saved to the preset and rendered, but the running

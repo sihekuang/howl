@@ -2,7 +2,7 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Slice 3 Editor: preset picker → editable StageGraph + StageDetailPanel
+/// Slice 3 Editor: preset picker → editable StageList + StageDetailPanel
 /// + timeout field. Edits accumulate on a PresetDraft until saved via
 /// SaveAsPresetSheet (which serializes the draft).
 struct EditorView: View {
