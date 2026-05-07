@@ -54,7 +54,26 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
 
     public struct LLMSpec: Codable, Equatable, Sendable {
         public let provider: String
-        public init(provider: String) { self.provider = provider }
+        public let model: String?
+
+        public init(provider: String, model: String? = nil) {
+            self.provider = provider
+            self.model = model
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(provider, forKey: .provider)
+            if let model { try c.encode(model, forKey: .model) }
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.provider = try c.decode(String.self, forKey: .provider)
+            self.model = try c.decodeIfPresent(String.self, forKey: .model)
+        }
+
+        enum CodingKeys: String, CodingKey { case provider, model }
     }
 
     enum CodingKeys: String, CodingKey {
