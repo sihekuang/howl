@@ -50,6 +50,7 @@
 		DA4515CBE451F50FE311EF6A /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BBB65C8F079CBEB9E3C9FA /* RecordingOverlayView.swift */; };
 		DE2086EDF8BCD8E4D88AED5F /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B46342C8400E240441BAAF8 /* FirstRunWindow.swift */; };
 		E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D15493CA03941D9F207F9F /* CompareView.swift */; };
+		E7661B4FBC295A0DAFD40531 /* CompareSourceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */; };
 		E960BDF910AF8BC85682F0D7 /* VoiceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5B7D23AD26ECD38B935CB /* VoiceTab.swift */; };
 		EA5BCED9C871EFD2B20EE65D /* SaveAsPresetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA4D9E3BC0DC90C482AA225D /* SaveAsPresetSheet.swift */; };
 		EA9512DF1733E12111B03E2B /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 088375E753FFBEF3194F73E6 /* PresetDraft.swift */; };
@@ -63,6 +64,7 @@
 		09FD3D63EFED70E41C68EC4B /* SessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionList.swift; sourceTree = "<group>"; };
 		0F396D4412E279851F3A7C26 /* PlaygroundTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundTab.swift; sourceTree = "<group>"; };
 		13FD3D07C12A94326240356A /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
+		169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareSourceLoader.swift; sourceTree = "<group>"; };
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
 		1AFF330F571F4958FD07D880 /* StageGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageGraph.swift; sourceTree = "<group>"; };
 		1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
@@ -174,6 +176,7 @@
 			isa = PBXGroup;
 			children = (
 				9D8F823F00D6F00C4B70CF05 /* CompareCard.swift */,
+				169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */,
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
 				EFEB6360C931EC47097D3762 /* PipelineTab.swift */,
@@ -466,6 +469,7 @@
 				0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */,
 				F68C7C74F80910D38629B127 /* AppState.swift in Sources */,
 				BC318555C2211AD96DFA6C0B /* CompareCard.swift in Sources */,
+				E7661B4FBC295A0DAFD40531 /* CompareSourceLoader.swift in Sources */,
 				E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
 				C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */,
