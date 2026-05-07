@@ -22,8 +22,7 @@ struct SaveAsPresetSheet: View {
     }
 
     private var nameAvailable: Bool {
-        let reserved: Set<String> = ["default", "minimal", "aggressive", "paranoid"]
-        return !reserved.contains(name)
+        !Preset.bundledNames.contains(name)
     }
 
     var body: some View {
