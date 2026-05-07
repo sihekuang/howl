@@ -35,4 +35,8 @@ int   vkb_delete_preset(const char* name);
 // Compare / replay.
 char* vkb_replay(const char* source_id, const char* presets_csv);
 
+// TSE Lab — run Target Speaker Extraction on an arbitrary WAV file.
+// Returns 0 on success, non-zero on failure (use vkb_last_error for detail).
+int vkb_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, char* voiceDir, char* onnxLibPath);
+
 #endif

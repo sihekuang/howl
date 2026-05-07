@@ -39,3 +39,10 @@ int   vkb_delete_preset(const char* name) { (void)name; return 1; }
 char* vkb_replay(const char* source_id, const char* presets_csv) {
     (void)source_id; (void)presets_csv; return NULL;
 }
+
+// TSE Lab — Slice debug stub. Tests don't actually invoke the model;
+// they exercise error paths so returning -1 is the most useful default.
+int vkb_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, char* voiceDir, char* onnxLibPath) {
+    (void)inputPath; (void)outputPath; (void)modelsDir; (void)voiceDir; (void)onnxLibPath;
+    return -1;
+}
