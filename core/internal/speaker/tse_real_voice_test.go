@@ -24,8 +24,11 @@ type tseResult struct {
 // using voices[targetIdx]'s embedding as reference, and reports the
 // four numbers needed to assess "did TSE pull toward the target."
 //
-// Pure: no assertions inside. Caller chooses what to do with the
-// result. InitONNXRuntime must have been called before this.
+// No threshold assertions inside — the caller decides pass/fail
+// from the returned tseResult. (Setup/runtime failures still call
+// t.Fatalf since there's nothing meaningful to return when the
+// encoder or TSE itself errors.) InitONNXRuntime must have been
+// called before this.
 func evaluateTSE(t *testing.T, voices [2]voiceClip, targetIdx int, tseModelPath, encoderModelPath string) tseResult {
 	t.Helper()
 	if targetIdx != 0 && targetIdx != 1 {
