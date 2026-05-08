@@ -135,6 +135,91 @@ error is the diarizer**, not the ASR — the personal-VAD is where quality is wo
 - C ABI surface grows: today we pass audio bytes; with DiCoW we'd pass audio +
   a per-frame diar tensor. New `vkb_*` export, new Swift bridge call.
 
+### DiCoW vs current pipeline — structural comparison
+
+Pipeline shapes:
+
+```
+Current:
+  mic ──► [chunked frames] ──► ConvTasNet (TSE) ──► Whisper-cpp ──► text
+                                    ▲
+                           ECAPA embedding (enrolled, fixed)
+
+DiCoW:
+  mic ──► personal-VAD ──► DiCoW (Whisper-large-v3-turbo + FDDT) ──► text
+             ▲                ▲
+         ECAPA           per-frame diar tensor
+         enrollment      {silent, target, other, overlap}
+```
+
+**Where speaker info enters:**
+
+| | Current | DiCoW |
+|---|---|---|
+| Conditioning enters at | TSE stage | ASR stage |
+| What gets conditioned | Waveform separator | Whisper's encoder layers |
+| Conditioning shape | One 192-d embedding (static) | Per-frame label sequence (dynamic, ~50 ms) |
+| Whisper itself knows the speaker? | No — sees whatever TSE emits | Yes — receives per-frame "is target talking now" |
+
+**What the system reconstructs:**
+- Current: a clean target waveform; any imperfection in reconstruction propagates downstream.
+- DiCoW: nothing. Mixture goes in untouched, text comes out. No intermediate "cleaned audio".
+
+**Failure modes:**
+
+| Failure | Current | DiCoW |
+|---|---|---|
+| 3+ sources (TV with multiple talkers) | **Breaks** — 2-channel separator forced to merge sources | OK — no source-count limit; conditioning is timing-based |
+| Interferer with similar voice | **Breaks** — ECAPA cosine ambiguous between speakers | OK — relies on *when*, not *who* |
+| Separator distortion confusing ASR | Yes — Whisper not trained on ConvTasNet artifacts | N/A — no separator |
+| Bad diarization | Not in our path | **Dominant error** — ~70% of remaining DiCoW WER |
+| Poor voice enrollment | Hurts TSE selection | Hurts personal-VAD → diarization → WER |
+
+The failure mode just *moves*. We trade "separator can't fit 3+ sources" for "diarizer must correctly label every 50 ms frame."
+
+**Latency / UX profile:**
+
+| | Current | DiCoW |
+|---|---|---|
+| Mode | Streaming, partial transcripts | Chunked, ~30 s windows |
+| Time-to-first-word | ~hundreds of ms | ~seconds (whole window must complete) |
+| Real-time factor on M-series | <1× (faster than realtime) | 2-3× (slower than realtime, chunked) |
+| User perception | "Words appear as I speak" | "I speak, pause, words appear" |
+
+**Model footprint:**
+
+| | Current | DiCoW |
+|---|---|---|
+| ECAPA encoder | ~25 MB | ~25 MB (reused) |
+| TSE / VAD | ConvTasNet ~5 MB | personal-VAD ~10 MB |
+| ASR | Whisper-base/small ~100-500 MB | Whisper-large-v3-turbo + FDDT ~1.6 GB |
+| **Total** | **~130-530 MB** | **~1.6 GB** |
+
+**Reported WER (Libri2Mix, oracle diar):**
+
+| Pipeline | WER |
+|---|---|
+| Cascade ConvTasNet + Whisper (closest to ours) | ~7.97% |
+| **DiCoW (Whisper-large-v3-turbo)** | **4.4%** |
+| Vanilla Whisper-large on the mixture | 588% |
+
+**Engineering surface in our codebase:**
+
+| Component | Current state | DiCoW state |
+|---|---|---|
+| `core/internal/speaker/tse.go` (ConvTasNet) | Active | Deleted |
+| `core/internal/speaker/encoder.go` (ECAPA) | Used at TSE inference | Used only at enrollment (frozen) |
+| `core/internal/speaker/store.go` (enrolled embedding) | Read every utterance | Read once to bootstrap personal-VAD |
+| New: personal-VAD | — | Per-frame inference, online |
+| Whisper inference | whisper.cpp via cgo | DiCoW via ONNX/CoreML or Python sidecar |
+| C ABI input | `(audio_bytes)` | `(audio_bytes, diar_tensor)` |
+
+**One-sentence summary:**
+Today we *clean the audio first, then transcribe naively.* DiCoW *transcribes the
+noisy audio while telling the model who to listen to.* Both use the same enrolled
+ECAPA embedding, but in completely different roles — ours conditions a separator,
+DiCoW's bootstraps a diarizer.
+
 ### Open-source / Mac realism
 
 - DiCoW: github.com/BUTSpeechFIT/DiCoW, weights on HF (CC BY 4.0), in HF Transformers.
