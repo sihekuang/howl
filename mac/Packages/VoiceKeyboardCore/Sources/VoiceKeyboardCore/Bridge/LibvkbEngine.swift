@@ -184,6 +184,26 @@ public actor LibvkbEngine: CoreEngine {
         }
     }
 
+    public func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) -> Int32 {
+        return inputPath.withCString { cIn in
+            outputPath.withCString { cOut in
+                modelsDir.withCString { cModels in
+                    voiceDir.withCString { cVoice in
+                        onnxLibPath.withCString { cLib in
+                            vkb_tse_extract_file(
+                                UnsafeMutablePointer(mutating: cIn),
+                                UnsafeMutablePointer(mutating: cOut),
+                                UnsafeMutablePointer(mutating: cModels),
+                                UnsafeMutablePointer(mutating: cVoice),
+                                UnsafeMutablePointer(mutating: cLib)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private nonisolated func readLastError() -> String? {
         guard let cstr = vkb_last_error() else { return nil }
         defer { vkb_free_string(cstr) }
