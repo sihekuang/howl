@@ -221,7 +221,6 @@ private struct DetailView: View {
                 appState: composition.appState,
                 hotkey: settings.hotkey,
                 coordinator: composition.coordinator,
-                developerMode: settings.developerMode,
                 sessions: LibVKBSessionsClient(engine: composition.engine),
                 presets: LibVKBPresetsClient(engine: composition.engine),
                 settings: $settings,

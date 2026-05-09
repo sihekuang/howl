@@ -212,7 +212,10 @@ public extension EngineConfig {
             llmAPIKey: apiKey,
             customDict: settings.customDict,
             llmBaseURL: settings.llmBaseURL,
-            developerMode: settings.developerMode,
+            // The Mac app no longer surfaces a "developer mode" toggle —
+            // every dictation captures per-stage WAVs + transcripts so
+            // the Playground sessions sidebar always has data to show.
+            developerMode: true,
             tseEnabled: settings.tseEnabled && paths.tseAssetsPresent,
             tseProfileDir: paths.voiceProfileDir,
             tseModelPath: paths.tseModelPath,

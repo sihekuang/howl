@@ -28,12 +28,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// not stamped from presets, edited by the user as a standalone
     /// engine-tuning setting.
     public var pipelineTimeoutSec: Int
-    /// When true, unlocks the Pipeline Settings tab (live inspector,
-    /// per-stage capture, A/B comparison) and tells the engine to
-    /// capture every dictation's per-stage WAVs + transcripts to
-    /// /tmp/voicekeyboard/sessions/. Default false; casual users
-    /// never see the extra surface.
-    public var developerMode: Bool
     /// Name of the preset the user last applied via Settings → Playground.
     /// Display-only — the actual values live in the fields above. nil for
     /// users who never picked a preset (legacy installs) or who edited
@@ -55,7 +49,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
         tseThreshold: Float? = nil,
         tseBackend: String = "",
         pipelineTimeoutSec: Int = 10,
-        developerMode: Bool = false,
         selectedPresetName: String? = nil
     ) {
         self.whisperModelSize = whisperModelSize
@@ -71,7 +64,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.tseThreshold = tseThreshold
         self.tseBackend = tseBackend
         self.pipelineTimeoutSec = pipelineTimeoutSec
-        self.developerMode = developerMode
         self.selectedPresetName = selectedPresetName
     }
 
@@ -90,7 +82,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
         tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
         tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
         pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 10
-        developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
         selectedPresetName = try c.decodeIfPresent(String.self, forKey: .selectedPresetName)
     }
 
@@ -98,7 +89,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         case whisperModelSize, language, disableNoiseSuppression
         case llmProvider, llmModel, llmBaseURL, customDict, hotkey, inputDeviceUID, tseEnabled
         case tseThreshold, tseBackend, pipelineTimeoutSec
-        case developerMode, selectedPresetName
+        case selectedPresetName
     }
 
     /// Returns a copy with the preset-driven fields stamped in.

@@ -314,7 +314,7 @@ public final class EngineCoordinator {
         let key = needsKey ? (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? "" : ""
         let paths = resolveEnginePaths(for: settings)
         let cfg = EngineConfig(settings: settings, apiKey: key, paths: paths)
-        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
+        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")

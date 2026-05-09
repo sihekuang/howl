@@ -127,13 +127,11 @@ struct UserSettingsApplyPresetTests {
         base.llmModel = "claude-sonnet-4-6"
         base.customDict = ["MCP", "WebRTC"]
         base.hotkey = .defaultPTT
-        base.developerMode = true
 
         let result = base.applying(Self.paranoid())
         #expect(result.language == "fr")
         #expect(result.llmModel == "claude-sonnet-4-6")
         #expect(result.customDict == ["MCP", "WebRTC"])
-        #expect(result.developerMode == true)
     }
 
     @Test func applying_isPure_doesNotMutateReceiver() {
