@@ -97,20 +97,10 @@ struct SettingsView: View {
         .task {
             settings = (try? composition.settings.get()) ?? UserSettings()
         }
-        .onChange(of: settings.developerMode) { _, on in
-            if !on, selectedPage == .pipeline {
-                selectedPage = .general
-            }
-        }
     }
 
     private var visiblePages: [SettingsPage] {
-        SettingsPage.allCases.filter { page in
-            switch page {
-            case .pipeline: return settings.developerMode
-            default:        return true
-            }
-        }
+        SettingsPage.allCases
     }
 
     private func save(_ s: UserSettings) {
