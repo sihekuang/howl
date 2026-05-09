@@ -61,18 +61,7 @@ struct DictionaryTab: View {
                 Button("Add") { addManualTerm() }
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            List {
-                ForEach(settings.customDict, id: \.self) { term in
-                    HStack {
-                        Text(term)
-                        Spacer()
-                        Button("Remove") {
-                            settings.customDict.removeAll { $0 == term }
-                            onSave(settings)
-                        }
-                    }
-                }
-            }
+            termsList
             Divider()
             manageSection
         }
@@ -123,6 +112,50 @@ struct DictionaryTab: View {
                 }
                 Spacer()
             }
+        }
+    }
+
+    /// Flat row list of dictionary terms. Used to be a `List`, but a
+    /// SwiftUI List nested inside the Settings ScrollView collapses to
+    /// a ~250pt fixed height with its own internal scroll — so users
+    /// who added a 50-term pack only saw the first ~8 entries and
+    /// thought the rest didn't get added. Switching to a VStack of
+    /// rows lets the outer page scroll as one, so every term is
+    /// visible by scrolling.
+    @ViewBuilder
+    private var termsList: some View {
+        if settings.customDict.isEmpty {
+            Text("No dictionary terms yet. Add one above or pick a preset pack.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 12)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(settings.customDict.enumerated()), id: \.offset) { idx, term in
+                    HStack {
+                        Text(term)
+                        Spacer()
+                        Button("Remove") {
+                            settings.customDict.removeAll { $0 == term }
+                            onSave(settings)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.red)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(idx.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06))
+                    if idx < settings.customDict.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(.secondary.opacity(0.25))
+            )
         }
     }
 
