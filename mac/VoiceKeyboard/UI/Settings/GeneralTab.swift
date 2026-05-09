@@ -110,8 +110,6 @@ struct GeneralTab: View {
         VStack(alignment: .leading, spacing: 6) {
             SettingsGroupHeader("Active preset")
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.seal.fill")
-                    .foregroundStyle(.green)
                 Picker("", selection: activePresetBinding) {
                     if presetList.isEmpty {
                         Text(settings.selectedPresetName ?? "(loading…)").tag(settings.selectedPresetName ?? "")

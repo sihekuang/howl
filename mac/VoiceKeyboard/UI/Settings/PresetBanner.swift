@@ -2,65 +2,76 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Read-only banner that displays the user's active preset alongside
-/// a one-line summary (TSE on/threshold + Whisper model + LLM provider).
-/// Used in the Playground tab. Switching the active preset is owned by
-/// the General tab — this banner only shows it. A green checkmark next
-/// to the name reinforces "this is what runs when you dictate."
-///
-/// `onChangeActive` is the deep-link target. nil hides the button (kept
-/// for symmetry with the previous design; current Playground always
-/// supplies one pointing at General).
+/// Playground's preset row. Two responsibilities:
+///   1. Display the user's active preset (set in General → Active preset)
+///      with a deep-link to General for changing it.
+///   2. Let the user pick a *different* preset for testing in this
+///      Playground tab session. Picking does NOT change the active
+///      preset — it only reconfigures the engine for the duration of
+///      the Playground session. The parent reverts on tab leave by
+///      calling `coordinator.reapplyConfig()`, which re-reads the
+///      stored UserSettings.
 struct PresetBanner: View {
     let presets: any PresetsClient
+    /// The user's active preset name, sourced from UserSettings.
+    /// Read-only here — change it via General.
     let activePresetName: String?
-    /// Called when the user clicks "Change in General…". Parent flips
-    /// the Settings page to General. nil hides the button.
+    /// Session-local override. nil = "use active". Bound to PlaygroundTab.
+    @Binding var overrideName: String?
+    /// Apply the picked preset to the engine without persisting. PlaygroundTab
+    /// builds an override UserSettings via `settings.applying(_:)` and
+    /// hands it to `coordinator.applyOverride(_:)`.
+    let onApplyOverride: (Preset) -> Void
+    /// Revert engine config back to the user's active preset by re-reading
+    /// the persistent settings store.
+    let onRevertToActive: () -> Void
+    /// Deep-link to General → Active preset. nil hides the button.
     let onChangeActive: (() -> Void)?
 
     @State private var presetList: [Preset] = []
     @State private var loadError: String? = nil
 
-    private var activePreset: Preset? {
-        guard let name = activePresetName else { return nil }
-        return presetList.first(where: { $0.name == name })
+    /// What the picker is currently bound to. Falls back to the active
+    /// preset name when there's no override (so the picker shows
+    /// something sensible even before the user touches it).
+    private var pickerSelection: String {
+        overrideName ?? activePresetName ?? ""
+    }
+
+    private var isOverriding: Bool {
+        guard let override = overrideName else { return false }
+        return override != activePresetName
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Image(systemName: "checkmark.seal.fill")
-                .foregroundStyle(.green)
-                .font(.callout)
-
-            Text("Active preset")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            if let active = activePreset {
-                Text(active.isBundled ? "\(active.name) (default)" : active.name)
-                    .font(.callout).bold()
-                Text(summary(for: active))
-                    .font(.caption.monospaced())
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Test with")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .layoutPriority(-1)
-            } else if let err = loadError {
-                Text(err).font(.caption).foregroundStyle(.red).lineLimit(1)
-            } else {
-                Text(activePresetName ?? "(none)")
-                    .font(.callout).bold()
-            }
 
-            Spacer()
+                presetPicker
 
-            if let onChangeActive {
-                Button {
-                    onChangeActive()
-                } label: {
-                    Label("Change in General →", systemImage: "gearshape")
+                if isOverriding {
+                    Button("Revert to active") {
+                        overrideName = nil
+                        onRevertToActive()
+                    }
+                    .controlSize(.small)
                 }
-                .controlSize(.small)
+
+                Spacer()
+
+                if let onChangeActive {
+                    Button {
+                        onChangeActive()
+                    } label: {
+                        Label("Change in General →", systemImage: "gearshape")
+                    }
+                    .controlSize(.small)
+                }
             }
+            statusLine
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -69,18 +80,56 @@ struct PresetBanner: View {
         .task { await refresh() }
     }
 
-    private func summary(for p: Preset) -> String {
-        var parts: [String] = []
-        if let tse = p.chunkStages.first(where: { $0.name == "tse" }), tse.enabled {
-            if let t = tse.threshold, t > 0 {
-                parts.append(String(format: "TSE @%.2f", t))
-            } else {
-                parts.append("TSE")
+    @ViewBuilder
+    private var presetPicker: some View {
+        if presetList.isEmpty {
+            Text(activePresetName ?? "(loading…)")
+                .font(.callout).bold()
+        } else {
+            Picker("", selection: Binding(
+                get: { pickerSelection },
+                set: { name in
+                    guard !name.isEmpty,
+                          let p = presetList.first(where: { $0.name == name })
+                    else { return }
+                    if name == activePresetName {
+                        overrideName = nil
+                        onRevertToActive()
+                    } else {
+                        overrideName = name
+                        onApplyOverride(p)
+                    }
+                }
+            )) {
+                if !presetList.contains(where: { $0.name == pickerSelection }), !pickerSelection.isEmpty {
+                    Text(pickerSelection).tag(pickerSelection)
+                }
+                ForEach(presetList) { p in
+                    Text(p.isBundled ? "\(p.name) (default)" : p.name).tag(p.name)
+                }
             }
+            .labelsHidden()
+            .frame(maxWidth: 220)
         }
-        parts.append("whisper:\(p.transcribe.modelSize)")
-        parts.append(p.llm.provider)
-        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        if let err = loadError {
+            Text(err).font(.caption).foregroundStyle(.red).lineLimit(1)
+        } else if isOverriding {
+            Text("Override active for this Playground session — your active preset is **\(activePresetName ?? "—")**.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        } else if let active = activePresetName {
+            Text("Active preset: \(active). Switch in General to change what runs everywhere else.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("No active preset set. Pick one in General.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func refresh() async {

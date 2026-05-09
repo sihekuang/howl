@@ -28,6 +28,11 @@ struct PlaygroundTab: View {
     @State private var selectedID: String? = nil
     @State private var player = WAVPlayer()
     @State private var sessionList: [SessionManifest] = []
+    /// Session-local preset override. nil ≡ "use the active preset"
+    /// (whatever's persisted in UserSettings). Set by the preset banner
+    /// picker; cleared on tab leave so the engine returns to the active
+    /// preset when the user moves on.
+    @State private var overridePresetName: String? = nil
 
     var body: some View {
         SettingsPane {
@@ -53,6 +58,15 @@ struct PlaygroundTab: View {
         }
         .task {
             if developerMode { await refreshSelectedManifest() }
+        }
+        .onDisappear {
+            // Leaving the Playground tab reverts the engine to whatever
+            // the user's active preset is, so any test override stops
+            // affecting future dictations elsewhere.
+            if overridePresetName != nil {
+                overridePresetName = nil
+                Task { @MainActor in await coordinator.reapplyConfig() }
+            }
         }
     }
 
@@ -183,15 +197,34 @@ struct PlaygroundTab: View {
         }
     }
 
-    /// Read-only banner showing the user's active preset. Switching is
-    /// owned by the General tab; the deep-link button navigates there.
+    /// Playground preset row. The active preset is set in General; this
+    /// banner only lets the user pick a different preset for testing in
+    /// the Playground session, applied via the coordinator's override
+    /// path so the persisted active preset stays untouched.
     @ViewBuilder
     private var presetBanner: some View {
         PresetBanner(
             presets: presets,
             activePresetName: settings.selectedPresetName,
+            overrideName: $overridePresetName,
+            onApplyOverride: { p in applyPlaygroundOverride(p) },
+            onRevertToActive: { revertPlaygroundOverride() },
             onChangeActive: { navigateTo(.general) }
         )
+    }
+
+    /// Apply a playground override by reconfiguring the engine with a
+    /// `UserSettings.applying(preset)` derivative. Does not call onSave
+    /// — the persisted active preset stays as it was.
+    private func applyPlaygroundOverride(_ p: Preset) {
+        let overrideSettings = settings.applying(p)
+        Task { @MainActor in await coordinator.applyOverride(overrideSettings) }
+    }
+
+    /// Drop the override and reconfigure the engine from the persisted
+    /// settings store so dictation goes back to the user's active preset.
+    private func revertPlaygroundOverride() {
+        Task { @MainActor in await coordinator.reapplyConfig() }
     }
 
     /// Multiline scratch editor — TextEditor expands vertically with
