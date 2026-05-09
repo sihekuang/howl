@@ -69,15 +69,13 @@ struct UserSettingsApplyPresetTests {
         )
     }
 
-    // MARK: - Wired fields (these MUST match Go's Resolve)
+    // MARK: - Stage stamping (always, both bundled and user presets)
 
-    @Test func applying_paranoid_setsTSEEnabledAndDenoiseOnAndModel() {
+    @Test func applying_paranoid_setsTSEEnabledAndDenoiseOn() {
         let result = UserSettings().applying(Self.paranoid())
         #expect(result.selectedPresetName == "paranoid")
         #expect(result.tseEnabled == true)
         #expect(result.disableNoiseSuppression == false) // denoise enabled
-        #expect(result.whisperModelSize == "small")
-        #expect(result.llmProvider == "anthropic")
     }
 
     @Test func applying_paranoid_stampsThresholdAndBackend() {
@@ -91,13 +89,36 @@ struct UserSettingsApplyPresetTests {
         #expect(result.selectedPresetName == "minimal")
         #expect(result.tseEnabled == false)
         #expect(result.disableNoiseSuppression == true) // denoise disabled
-        #expect(result.whisperModelSize == "small")
     }
 
-    @Test func applying_aggressive_picksLargerModel() {
-        let result = UserSettings().applying(Self.aggressive())
-        #expect(result.whisperModelSize == "base")
-        #expect(result.tseEnabled == true)
+    // MARK: - Bundled presets do NOT override user globals
+    //
+    // Whisper model + LLM provider/model are user-managed globals that
+    // live in their own Settings sections. A bundled preset (default,
+    // minimal, aggressive, paranoid) deliberately leaves them alone so
+    // the user's choices in General / LLM Provider stay sticky across
+    // preset changes. User-created presets DO pin those values — see
+    // the next section.
+
+    @Test func applying_bundledPreset_doesNotOverrideWhisperModel() {
+        var base = UserSettings()
+        base.whisperModelSize = "large" // user's chosen model
+        let result = base.applying(Self.aggressive()) // declares "base"
+        #expect(result.whisperModelSize == "large") // preserved
+    }
+
+    @Test func applying_bundledPreset_doesNotOverrideLLMProvider() {
+        var base = UserSettings()
+        base.llmProvider = "openai"
+        let result = base.applying(Self.paranoid()) // declares "anthropic"
+        #expect(result.llmProvider == "openai") // preserved
+    }
+
+    @Test func applying_bundledPreset_doesNotOverrideLLMModel() {
+        var base = UserSettings()
+        base.llmModel = "gpt-5"
+        let result = base.applying(Self.paranoid()) // bundled, no model pinned anyway
+        #expect(result.llmModel == "gpt-5") // preserved
     }
 
     @Test func applying_preservesUnrelatedFields() {
@@ -106,13 +127,11 @@ struct UserSettingsApplyPresetTests {
         base.llmModel = "claude-sonnet-4-6"
         base.customDict = ["MCP", "WebRTC"]
         base.hotkey = .defaultPTT
-        base.developerMode = true
 
         let result = base.applying(Self.paranoid())
         #expect(result.language == "fr")
         #expect(result.llmModel == "claude-sonnet-4-6")
         #expect(result.customDict == ["MCP", "WebRTC"])
-        #expect(result.developerMode == true)
     }
 
     @Test func applying_isPure_doesNotMutateReceiver() {
@@ -162,7 +181,7 @@ struct UserSettingsApplyPresetTests {
 
     // MARK: - Sanity: stage names the engine doesn't know are silently ignored
     //
-    // Documents that the StageGraph UI lets you edit any stage name,
+    // Documents that the StageList UI lets you edit any stage name,
     // but `applying(_:)` (and the Go-side Resolve) only translate
     // "denoise" / "decimate3" / "tse". Custom stages added in the
     // Editor are saved to the preset and rendered, but the running
@@ -208,5 +227,73 @@ struct UserSettingsApplyPresetTests {
         )
         let result = UserSettings().applying(preset)
         #expect(result.tseEnabled == false)
+    }
+
+    // MARK: - User-created presets DO pin per-preset whisper / LLM
+
+    @Test func applying_userPreset_stampsWhisperModel() {
+        let userPreset = Preset(
+            name: "my-preset", // not in Preset.bundledNames
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "medium"),
+            llm: .init(provider: "anthropic"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.whisperModelSize = "tiny"
+        let result = base.applying(userPreset)
+        #expect(result.whisperModelSize == "medium") // pinned by user preset
+    }
+
+    @Test func applying_userPreset_stampsLLMProvider() {
+        let userPreset = Preset(
+            name: "my-preset",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "openai"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmProvider = "anthropic"
+        let result = base.applying(userPreset)
+        #expect(result.llmProvider == "openai")
+    }
+
+    // MARK: - LLM model stamping (per-preset override)
+
+    @Test func applying_preset_with_llmModel_stampsModel() {
+        let preset = Preset(
+            name: "test",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "anthropic", model: "claude-haiku-4-5"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmModel = "claude-sonnet-4-6"  // user's previous global default
+        let result = base.applying(preset)
+        #expect(result.llmModel == "claude-haiku-4-5")
+    }
+
+    @Test func applying_preset_without_llmModel_preservesGlobalModel() {
+        let preset = Preset(
+            name: "test",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "anthropic", model: nil),  // explicit nil
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmModel = "claude-sonnet-4-6"
+        let result = base.applying(preset)
+        #expect(result.llmModel == "claude-sonnet-4-6")  // preserved
     }
 }

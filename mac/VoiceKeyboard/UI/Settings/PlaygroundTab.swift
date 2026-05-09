@@ -1,49 +1,50 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// A scratch text field where the user can try the full dictation flow
-/// without leaving the app, plus (when Developer mode is on) a sidebar
-/// of captured sessions and a detail pane for the selected one.
+/// Settings → Playground tab. Two regions stacked vertically:
 ///
-/// Layout: Playground sits as a full-width banner at the top of the
-/// tab so it's visually decoupled from any selected session — it's a
-/// tab-level tool, not a child of the row you happen to be reviewing.
-/// Below the banner, sessions list (left) + detail (right) share an
-/// HSplitView.
+/// - Top banner: preset picker, status / mic level, scratch editor,
+///   record button, hotkey hint. The preset picker is a session-local
+///   override (set in General → Active preset to change globally;
+///   picking here just routes Playground dictation through a different
+///   preset and reverts on tab leave).
+/// - Bottom split view: captured-sessions list (left) + selected
+///   session detail (right). Every dictation produces a session, so
+///   the list always has data to browse.
 struct PlaygroundTab: View {
     let appState: AppState
     let hotkey: VoiceKeyboardCore.KeyboardShortcut
     let coordinator: EngineCoordinator
-    let developerMode: Bool
     let sessions: any SessionsClient
     let presets: any PresetsClient
     @Binding var settings: UserSettings
     /// Persists settings + reapplies the engine config (parent's save handler).
     let onSave: (UserSettings) -> Void
-    /// Called when the user clicks "Configure…" in the preset banner.
-    /// Parent flips the Settings page to Pipeline → Editor.
-    let navigateToPipeline: () -> Void
+    /// Generic page navigation. PresetBanner uses `.general` to deep-link
+    /// the user to the canonical "Active preset" picker.
+    let navigateTo: (SettingsPage) -> Void
 
     @State private var scratch: String = ""
     @State private var selectedID: String? = nil
     @State private var player = WAVPlayer()
     @State private var sessionList: [SessionManifest] = []
+    /// Session-local preset override. nil ≡ "use the active preset"
+    /// (whatever's persisted in UserSettings). Set by the preset banner
+    /// picker; cleared on tab leave so the engine returns to the active
+    /// preset when the user moves on.
+    @State private var overridePresetName: String? = nil
 
     var body: some View {
         SettingsPane {
-            if developerMode {
-                VStack(spacing: 0) {
-                    playgroundBanner
-                    Divider()
-                    HSplitView {
-                        SessionList(sessions: sessions, selectedID: $selectedID)
-                            .frame(minWidth: 200, idealWidth: 240)
-                        detailColumn
-                            .frame(minWidth: 320)
-                    }
+            VStack(spacing: 0) {
+                playgroundBanner
+                Divider()
+                HSplitView {
+                    SessionList(sessions: sessions, selectedID: $selectedID)
+                        .frame(minWidth: 200, idealWidth: 240)
+                    detailColumn
+                        .frame(minWidth: 320)
                 }
-            } else {
-                playgroundColumn
             }
         }
         .onChange(of: selectedID) { _, _ in
@@ -52,7 +53,16 @@ struct PlaygroundTab: View {
             Task { await refreshSelectedManifest() }
         }
         .task {
-            if developerMode { await refreshSelectedManifest() }
+            await refreshSelectedManifest()
+        }
+        .onDisappear {
+            // Leaving the Playground tab reverts the engine to whatever
+            // the user's active preset is, so any test override stops
+            // affecting future dictations elsewhere.
+            if overridePresetName != nil {
+                overridePresetName = nil
+                Task { @MainActor in await coordinator.reapplyConfig() }
+            }
         }
     }
 
@@ -136,76 +146,34 @@ struct PlaygroundTab: View {
         .background(Color.secondary.opacity(0.05))
     }
 
-    /// Single-column fallback for when Developer mode is off. Same as
-    /// the prior PlaygroundTab.
-    @ViewBuilder
-    private var playgroundColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            presetBanner
-            statusBanner
-            Text("Click into the box below, then hold \(Text(hotkey.displayString).font(.system(.body, design: .monospaced).bold())) and speak. Release to transcribe — the cleaned text appears here.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            scratchEditor
-                .frame(minHeight: 200)
-            HStack {
-                Button {
-                    Task { @MainActor in
-                        switch appState.engineState {
-                        case .idle:
-                            await coordinator.manualPress()
-                        case .recording:
-                            await coordinator.manualRelease()
-                        case .processing:
-                            break
-                        }
-                    }
-                } label: {
-                    Label(recordButtonTitle, systemImage: recordButtonIcon)
-                        .frame(minWidth: 140)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(appState.engineState == .recording ? .red : .accentColor)
-                .disabled(appState.engineState == .processing)
-
-                if appState.engineState == .recording {
-                    rmsMeter
-                }
-                if appState.engineState != .idle {
-                    Button("Reset") {
-                        Task { @MainActor in await coordinator.manualReset() }
-                    }
-                }
-                Spacer()
-                Button("Clear") { scratch = "" }
-                    .disabled(scratch.isEmpty)
-            }
-        }
-    }
-
-    /// Compact preset banner reused across both layout modes. Picker
-    /// writes back to UserSettings via applyPreset; "Configure…"
-    /// jumps to Pipeline → Editor.
+    /// Playground preset row. The active preset is set in General; this
+    /// banner only lets the user pick a different preset for testing in
+    /// the Playground session, applied via the coordinator's override
+    /// path so the persisted active preset stays untouched.
     @ViewBuilder
     private var presetBanner: some View {
         PresetBanner(
             presets: presets,
-            selectedPresetName: Binding(
-                get: { settings.selectedPresetName },
-                set: { settings.selectedPresetName = $0 }
-            ),
-            apply: { p in applyPreset(p) },
-            onConfigure: { navigateToPipeline() }
+            activePresetName: settings.selectedPresetName,
+            overrideName: $overridePresetName,
+            onApplyOverride: { p in applyPlaygroundOverride(p) },
+            onRevertToActive: { revertPlaygroundOverride() },
+            onChangeActive: { navigateTo(.general) }
         )
     }
 
-    /// Translate a Preset's stage specs into UserSettings fields and
-    /// persist via the parent's save handler. The translation itself
-    /// lives on `UserSettings.applying(_:)` so it's testable in isolation.
-    private func applyPreset(_ p: Preset) {
-        let s = settings.applying(p)
-        settings = s
-        onSave(s)
+    /// Apply a playground override by reconfiguring the engine with a
+    /// `UserSettings.applying(preset)` derivative. Does not call onSave
+    /// — the persisted active preset stays as it was.
+    private func applyPlaygroundOverride(_ p: Preset) {
+        let overrideSettings = settings.applying(p)
+        Task { @MainActor in await coordinator.applyOverride(overrideSettings) }
+    }
+
+    /// Drop the override and reconfigure the engine from the persisted
+    /// settings store so dictation goes back to the user's active preset.
+    private func revertPlaygroundOverride() {
+        Task { @MainActor in await coordinator.reapplyConfig() }
     }
 
     /// Multiline scratch editor — TextEditor expands vertically with

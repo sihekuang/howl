@@ -61,20 +61,7 @@ struct DictionaryTab: View {
                 Button("Add") { addManualTerm() }
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            List {
-                ForEach(settings.customDict, id: \.self) { term in
-                    HStack {
-                        Text(term)
-                        Spacer()
-                        Button("Remove") {
-                            settings.customDict.removeAll { $0 == term }
-                            onSave(settings)
-                        }
-                    }
-                }
-            }
-            Divider()
-            manageSection
+            termsCard
         }
         .confirmationDialog(
             "Clear all \(settings.customDict.count) term\(settings.customDict.count == 1 ? "" : "s")?",
@@ -126,6 +113,66 @@ struct DictionaryTab: View {
         }
     }
 
+    /// Bordered card grouping the term list with its stats + bulk-action
+    /// header (Export / Import / Clear all). The header sits on top so
+    /// counts and actions are visible regardless of how long the list
+    /// gets — previously these lived as a footer below the list and got
+    /// pushed off-screen once the user added a 50-term preset pack.
+    @ViewBuilder
+    private var termsCard: some View {
+        VStack(spacing: 0) {
+            manageSection
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.10))
+            Divider()
+            termsBody
+        }
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(.secondary.opacity(0.25))
+        )
+    }
+
+    /// Flat row list of dictionary terms (replaces a SwiftUI `List` —
+    /// nested inside the Settings ScrollView the List collapsed to a
+    /// ~250pt fixed inner-scroll, hiding most entries and making users
+    /// think a preset pack hadn't been added). The outer ScrollView
+    /// owns scrolling now, so every row is reachable by scrolling.
+    @ViewBuilder
+    private var termsBody: some View {
+        if settings.customDict.isEmpty {
+            Text("No dictionary terms yet. Add one above or pick a preset pack.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(settings.customDict.enumerated()), id: \.offset) { idx, term in
+                    HStack {
+                        Text(term)
+                        Spacer()
+                        Button("Remove") {
+                            settings.customDict.removeAll { $0 == term }
+                            onSave(settings)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.red)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(idx.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06))
+                    if idx < settings.customDict.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var manageSection: some View {
         HStack(spacing: 12) {
@@ -161,17 +208,8 @@ struct DictionaryTab: View {
         .help("Approximate token count of the joined dictionary as it ships to the LLM. The prompt template adds another ~60 tokens regardless. Token estimate is char-count / 4; actual cost will vary slightly with the model's tokenizer.")
     }
 
-    private func dictStats() -> (words: Int, chars: Int, tokens: Int) {
-        let terms = settings.customDict
-        guard !terms.isEmpty else { return (0, 0, 0) }
-        // Same shape as Go's strings.Join(terms, ", ").
-        let payload = terms.joined(separator: ", ")
-        let chars = payload.count
-        // Heuristic: Claude averages ~3.5–4 chars per token for English;
-        // technical jargon and acronyms compress slightly less. Dividing
-        // by 4 biases a touch conservative (overcount > undercount).
-        let tokens = Int((Double(chars) / 4.0).rounded(.up))
-        return (terms.count, chars, tokens)
+    private func dictStats() -> DictStats.Snapshot {
+        DictStats.compute(from: settings.customDict)
     }
 
     // MARK: - Actions
@@ -179,7 +217,7 @@ struct DictionaryTab: View {
     private func addManualTerm() {
         let t = newTerm.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty, !settings.customDict.contains(t) else { return }
-        settings.customDict.append(t)
+        settings.customDict.insert(t, at: 0)
         newTerm = ""
         onSave(settings)
     }
@@ -189,7 +227,7 @@ struct DictionaryTab: View {
         let existing = Set(settings.customDict)
         let fresh = pack.terms.filter { !existing.contains($0) }
         if !fresh.isEmpty {
-            settings.customDict.append(contentsOf: fresh)
+            settings.customDict.insert(contentsOf: fresh, at: 0)
             onSave(settings)
         }
         flashBanner(fresh.isEmpty ? .alreadyAdded : .added(fresh.count))
@@ -255,7 +293,7 @@ struct DictionaryTab: View {
         } else {
             let existing = Set(settings.customDict)
             let fresh = incoming.filter { !existing.contains($0) }
-            settings.customDict.append(contentsOf: fresh)
+            settings.customDict.insert(contentsOf: fresh, at: 0)
             onSave(settings)
             flashBanner(.imported(added: fresh.count, skipped: incoming.count - fresh.count))
         }

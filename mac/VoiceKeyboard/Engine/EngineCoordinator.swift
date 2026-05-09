@@ -294,6 +294,19 @@ public final class EngineCoordinator {
 
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
+        await applyConfig(for: settings)
+    }
+
+    /// Reconfigure the engine using a caller-supplied UserSettings — does
+    /// NOT read from or write to the persistent settings store. Used by
+    /// the Playground tab to "test with" a different preset without
+    /// changing the user's active preset; revert by calling
+    /// `reapplyConfig()` (which re-reads from the store).
+    public func applyOverride(_ settings: UserSettings) async {
+        await applyConfig(for: settings)
+    }
+
+    private func applyConfig(for settings: UserSettings) async {
         // Look up the API key for the active cloud provider. Ollama and
         // any future local-only providers fall through with key="" — the
         // engine ignores LLMAPIKey for providers whose NeedsAPIKey is false.
@@ -301,7 +314,7 @@ public final class EngineCoordinator {
         let key = needsKey ? (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? "" : ""
         let paths = resolveEnginePaths(for: settings)
         let cfg = EngineConfig(settings: settings, apiKey: key, paths: paths)
-        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public) devMode=\(settings.developerMode, privacy: .public)")
+        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")

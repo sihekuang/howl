@@ -5,6 +5,11 @@ struct GeneralTab: View {
     @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
     let audioCapture: any AudioCapture
+    /// Source of available presets for the "Active preset" picker. The
+    /// picker is the canonical way to switch which preset is running;
+    /// Playground and Pipeline only show it (Playground read-only,
+    /// Pipeline picks editing targets — neither activates).
+    let presets: any PresetsClient
 
     @State private var devices: [AudioInputDevice] = []
     @State private var downloader = ModelDownloader()
@@ -15,6 +20,8 @@ struct GeneralTab: View {
     /// externally (e.g. user untoggles in System Settings), so re-read
     /// on `.task` rather than caching forever.
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    @State private var presetList: [Preset] = []
+    @State private var presetLoadError: String? = nil
 
     private let modelSizes: [(size: String, label: String, mb: String)] = [
         ("tiny", "Tiny", "75 MB"),
@@ -27,6 +34,8 @@ struct GeneralTab: View {
 
     var body: some View {
         SettingsPane {
+            activePresetPicker
+            activePresetCaption
             Picker("Microphone", selection: micBinding) {
                 Text("System Default").tag("")
                 ForEach(devices) { dev in
@@ -65,13 +74,6 @@ struct GeneralTab: View {
                     launchAtLoginEnabled = LaunchAtLogin.isEnabled
                 }
             ))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Developer mode", isOn: $settings.developerMode)
-                Text("Show the Pipeline tab — captures per-stage audio + transcripts to /tmp on every dictation.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .onChange(of: settings) { _, new in onSave(new) }
         .task {
@@ -86,6 +88,81 @@ struct GeneralTab: View {
             }
             modelStatusTick += 1
             launchAtLoginEnabled = LaunchAtLogin.isEnabled
+            await loadPresets()
+        }
+    }
+
+    // MARK: - Active preset
+
+    /// Canonical "set active preset" UI. Selecting writes both the name
+    /// and the preset's stage fields into UserSettings (via applying).
+    /// Playground shows the result read-only; Pipeline only flags which
+    /// preset is active in its editor picker.
+    ///
+    /// Rendered as a plain `Picker("Label", ...)` so it lines up with
+    /// Microphone / Whisper model / Language above — same form-style
+    /// label column.
+    @ViewBuilder
+    private var activePresetPicker: some View {
+        Picker("Active preset", selection: activePresetBinding) {
+            if presetList.isEmpty {
+                Text(settings.selectedPresetName ?? "(loading…)").tag(settings.selectedPresetName ?? "")
+            } else {
+                // Stub for an unknown selection (e.g. preset deleted on
+                // disk) so the binding stays valid.
+                if let current = settings.selectedPresetName,
+                   !presetList.contains(where: { $0.name == current }) {
+                    Text("\(current) (missing)").tag(current)
+                }
+                ForEach(presetList) { p in
+                    Text(displayName(p)).tag(p.name)
+                }
+            }
+        }
+    }
+
+    /// Caption row sitting directly under the active-preset picker —
+    /// mirrors how `modelStatusRow` sits under the Whisper model picker.
+    @ViewBuilder
+    private var activePresetCaption: some View {
+        if let err = presetLoadError {
+            Text(err).font(.caption).foregroundStyle(.red)
+        } else {
+            Text("The active preset is what runs when you dictate. Switch any time — bundled presets keep your Whisper / LLM choices intact.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var activePresetBinding: Binding<String> {
+        Binding(
+            get: { settings.selectedPresetName ?? "" },
+            set: { name in
+                guard !name.isEmpty,
+                      let p = presetList.first(where: { $0.name == name })
+                else { return }
+                // applying() stamps stage fields + selectedPresetName in
+                // one shot. The outer .onChange(of: settings) handler
+                // then fires onSave once, reapplying the engine config.
+                settings = settings.applying(p)
+            }
+        )
+    }
+
+    private func displayName(_ p: Preset) -> String {
+        p.isBundled ? "\(p.name) (default)" : p.name
+    }
+
+    private func loadPresets() async {
+        do {
+            let list = try await presets.list()
+            await MainActor.run {
+                self.presetList = list
+                self.presetLoadError = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.presetLoadError = "Couldn't load presets: \(error.localizedDescription)"
+            }
         }
     }
 

@@ -22,7 +22,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general:    return "General"
         case .voice:      return "Voice"
         case .hotkey:     return "Hotkey"
-        case .provider:   return "Provider"
+        case .provider:   return "LLM Provider"
         case .dictionary: return "Dictionary"
         case .playground: return "Playground"
         case .pipeline:   return "Pipeline"   // NEW
@@ -97,20 +97,10 @@ struct SettingsView: View {
         .task {
             settings = (try? composition.settings.get()) ?? UserSettings()
         }
-        .onChange(of: settings.developerMode) { _, on in
-            if !on, selectedPage == .pipeline {
-                selectedPage = .general
-            }
-        }
     }
 
     private var visiblePages: [SettingsPage] {
-        SettingsPage.allCases.filter { page in
-            switch page {
-            case .pipeline: return settings.developerMode
-            default:        return true
-            }
-        }
+        SettingsPage.allCases
     }
 
     private func save(_ s: UserSettings) {
@@ -196,7 +186,8 @@ private struct DetailView: View {
             GeneralTab(
                 settings: $settings,
                 onSave: save,
-                audioCapture: composition.audioCapture
+                audioCapture: composition.audioCapture,
+                presets: LibVKBPresetsClient(engine: composition.engine)
             )
         case .voice:
             VoiceTab(
@@ -222,7 +213,7 @@ private struct DetailView: View {
                 audioCapture: composition.audioCapture
             )
         case .provider:
-            ProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
+            LLMProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
         case .dictionary:
             DictionaryTab(settings: $settings, onSave: save)
         case .playground:
@@ -230,19 +221,20 @@ private struct DetailView: View {
                 appState: composition.appState,
                 hotkey: settings.hotkey,
                 coordinator: composition.coordinator,
-                developerMode: settings.developerMode,
                 sessions: LibVKBSessionsClient(engine: composition.engine),
                 presets: LibVKBPresetsClient(engine: composition.engine),
                 settings: $settings,
                 onSave: save,
-                navigateToPipeline: { navigateTo(.pipeline) }
+                navigateTo: navigateTo
             )
         case .pipeline:
             PipelineTab(
                 engine: composition.engine,
                 sessions: LibVKBSessionsClient(engine: composition.engine),
                 presets: LibVKBPresetsClient(engine: composition.engine),
-                replay: LibVKBReplayClient(engine: composition.engine)
+                replay: LibVKBReplayClient(engine: composition.engine),
+                settings: $settings,
+                navigateTo: navigateTo
             )
         }
     }

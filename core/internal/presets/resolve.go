@@ -39,6 +39,16 @@ func resolveLLMProvider(p Preset, secrets EngineSecrets) string {
 	return p.LLM.Provider
 }
 
+// resolveLLMModel returns the preset's pinned model when set, otherwise
+// the engine's current LLMModel (typically the user's global default
+// from the LLM Provider tab). Mirrors resolveLLMProvider semantics.
+func resolveLLMModel(p Preset, secrets EngineSecrets) string {
+	if p.LLM.Model != "" {
+		return p.LLM.Model
+	}
+	return secrets.LLMModel
+}
+
 // Resolve produces a config.Config equivalent to running this preset.
 // secrets supplies fields the preset doesn't (and shouldn't) specify.
 //
@@ -53,7 +63,7 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 		Language:            secrets.Language,
 		DeepFilterModelPath: secrets.DeepFilterModelPath,
 		LLMProvider:         resolveLLMProvider(p, secrets),
-		LLMModel:            secrets.LLMModel,
+		LLMModel:            resolveLLMModel(p, secrets),
 		LLMAPIKey:           secrets.LLMAPIKey,
 		LLMBaseURL:          secrets.LLMBaseURL,
 		CustomDict:          secrets.CustomDict,

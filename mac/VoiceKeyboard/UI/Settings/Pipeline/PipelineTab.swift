@@ -13,6 +13,8 @@ struct PipelineTab: View {
     let sessions: any SessionsClient
     let presets: any PresetsClient
     let replay: any ReplayClient
+    @Binding var settings: UserSettings
+    let navigateTo: (SettingsPage) -> Void
 
     @State private var selectedView: SubView = .editor
 
@@ -38,7 +40,12 @@ struct PipelineTab: View {
 
             switch selectedView {
             case .editor:
-                EditorView(presets: presets, sessions: sessions)
+                EditorView(
+                    presets: presets,
+                    sessions: sessions,
+                    settings: $settings,
+                    navigateTo: navigateTo
+                )
             case .compare:
                 CompareView(sessions: sessions, presets: presets, replay: replay)
             case .tseLab:
