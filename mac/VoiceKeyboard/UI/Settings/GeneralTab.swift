@@ -34,8 +34,8 @@ struct GeneralTab: View {
 
     var body: some View {
         SettingsPane {
-            activePresetSection
-            Divider()
+            activePresetPicker
+            activePresetCaption
             Picker("Microphone", selection: micBinding) {
                 Text("System Default").tag("")
                 ForEach(devices) { dev in
@@ -105,36 +105,38 @@ struct GeneralTab: View {
     /// and the preset's stage fields into UserSettings (via applying).
     /// Playground shows the result read-only; Pipeline only flags which
     /// preset is active in its editor picker.
+    ///
+    /// Rendered as a plain `Picker("Label", ...)` so it lines up with
+    /// Microphone / Whisper model / Language above — same form-style
+    /// label column.
     @ViewBuilder
-    private var activePresetSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SettingsGroupHeader("Active preset")
-            HStack(spacing: 8) {
-                Picker("", selection: activePresetBinding) {
-                    if presetList.isEmpty {
-                        Text(settings.selectedPresetName ?? "(loading…)").tag(settings.selectedPresetName ?? "")
-                    } else {
-                        // Stub for an unknown selection (e.g. preset
-                        // deleted on disk) so the binding stays valid.
-                        if let current = settings.selectedPresetName,
-                           !presetList.contains(where: { $0.name == current }) {
-                            Text("\(current) (missing)").tag(current)
-                        }
-                        ForEach(presetList) { p in
-                            Text(displayName(p)).tag(p.name)
-                        }
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 260)
-                Spacer()
-            }
-            if let err = presetLoadError {
-                Text(err).font(.caption).foregroundStyle(.red)
+    private var activePresetPicker: some View {
+        Picker("Active preset", selection: activePresetBinding) {
+            if presetList.isEmpty {
+                Text(settings.selectedPresetName ?? "(loading…)").tag(settings.selectedPresetName ?? "")
             } else {
-                Text("The active preset is what runs when you dictate. Switch any time — bundled presets keep your Whisper / LLM choices intact.")
-                    .font(.caption).foregroundStyle(.secondary)
+                // Stub for an unknown selection (e.g. preset deleted on
+                // disk) so the binding stays valid.
+                if let current = settings.selectedPresetName,
+                   !presetList.contains(where: { $0.name == current }) {
+                    Text("\(current) (missing)").tag(current)
+                }
+                ForEach(presetList) { p in
+                    Text(displayName(p)).tag(p.name)
+                }
             }
+        }
+    }
+
+    /// Caption row sitting directly under the active-preset picker —
+    /// mirrors how `modelStatusRow` sits under the Whisper model picker.
+    @ViewBuilder
+    private var activePresetCaption: some View {
+        if let err = presetLoadError {
+            Text(err).font(.caption).foregroundStyle(.red)
+        } else {
+            Text("The active preset is what runs when you dictate. Switch any time — bundled presets keep your Whisper / LLM choices intact.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
