@@ -184,8 +184,10 @@ struct PlaygroundTab: View {
     }
 
     /// Compact preset banner reused across both layout modes. Picker
-    /// writes back to UserSettings via applyPreset; "Configure…"
-    /// jumps to Pipeline → Editor.
+    /// writes back to UserSettings via applyPreset; "Configure…" jumps
+    /// to Pipeline → Editor — but only in developer mode, since the
+    /// Pipeline tab is dev-only. Non-dev users see preset selection
+    /// without an edit affordance.
     @ViewBuilder
     private var presetBanner: some View {
         PresetBanner(
@@ -195,7 +197,7 @@ struct PlaygroundTab: View {
                 set: { settings.selectedPresetName = $0 }
             ),
             apply: { p in applyPreset(p) },
-            onConfigure: { navigateToPipeline() }
+            onConfigure: developerMode ? { navigateToPipeline() } : nil
         )
     }
 

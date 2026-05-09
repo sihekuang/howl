@@ -5,13 +5,19 @@ import VoiceKeyboardCore
 /// Compact pipeline-preset banner used in the Playground tab. Displays
 /// the active preset, a picker to switch presets, a one-line summary
 /// of the resolved settings (TSE on/threshold + Whisper model + LLM
-/// provider), and a "Configure…" button that deep-links into
+/// provider), and an optional "Configure…" button that deep-links into
 /// Pipeline → Editor for stage-level tweaks.
 ///
 /// The picker writes back to UserSettings via the `apply` closure so
 /// switching presets actually changes the live engine config. Reuses
 /// PresetsClient + Preset from VoiceKeyboardCore — no duplicate
 /// preset-loading state.
+///
+/// `onConfigure` is optional: when nil, the Configure button is hidden.
+/// Pipeline editing is gated to Developer mode, so the Playground only
+/// supplies a navigateTo closure when developer mode is on. Non-dev
+/// users still see the picker and can switch among presets — they just
+/// don't get the deep-link to the editor.
 struct PresetBanner: View {
     let presets: any PresetsClient
     @Binding var selectedPresetName: String?
@@ -19,8 +25,9 @@ struct PresetBanner: View {
     /// the Preset's stage specs into UserSettings fields and saves.
     let apply: (Preset) -> Void
     /// Called when the user clicks "Configure…". Parent flips the
-    /// Settings page to Pipeline → Editor.
-    let onConfigure: () -> Void
+    /// Settings page to Pipeline → Editor. nil hides the button entirely
+    /// (used in non-developer mode where the Pipeline tab isn't visible).
+    let onConfigure: (() -> Void)?
 
     @State private var presetList: [Preset] = []
     @State private var loadError: String? = nil
@@ -54,12 +61,14 @@ struct PresetBanner: View {
 
             Spacer()
 
-            Button {
-                onConfigure()
-            } label: {
-                Label("Configure…", systemImage: "slider.horizontal.below.rectangle")
+            if let onConfigure {
+                Button {
+                    onConfigure()
+                } label: {
+                    Label("Configure…", systemImage: "slider.horizontal.below.rectangle")
+                }
+                .controlSize(.small)
             }
-            .controlSize(.small)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
