@@ -72,6 +72,16 @@ final class PresetDraft {
         selectedStage = nil
     }
 
+    /// Re-anchor the source baseline to a freshly-saved preset, clearing
+    /// the dirty state without touching any draft fields or the user's
+    /// selected stage. Use this from the Save (overwrite) path: the
+    /// edits the user just persisted become the new "clean" baseline.
+    /// Unlike `resetTo`, this preserves `selectedStage` so the right
+    /// pane keeps showing whatever was being edited.
+    func markSaved(as saved: Preset) {
+        source = saved
+    }
+
     /// Serialize the draft to a Preset for save. name + description are
     /// supplied by SaveAsPresetSheet; the draft itself doesn't track them.
     func toPreset(name: String, description: String) -> Preset {

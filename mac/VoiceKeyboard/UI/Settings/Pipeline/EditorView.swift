@@ -186,11 +186,14 @@ struct EditorView: View {
                     self.draft = PresetDraft(first)
                 } else if let p = list.first(where: { $0.name == self.selectedName }),
                           !(self.draft?.isDirty ?? false) {
-                    // Refreshed while clean (e.g. just after a successful Save):
-                    // re-anchor the draft so isDirty resets. Skip if the user has
-                    // unsaved edits — preserves work-in-progress against any
-                    // external refresh trigger.
-                    self.draft = PresetDraft(p)
+                    // Refresh while clean: re-anchor the source baseline
+                    // so any disk-side normalization (e.g. timeoutSec
+                    // defaults) becomes the new baseline. Use markSaved
+                    // rather than replacing the draft so the user's
+                    // selectedStage survives an external refresh. Skip
+                    // entirely when the draft is dirty — preserves
+                    // work-in-progress.
+                    self.draft?.markSaved(as: p)
                 }
                 self.loadError = nil
             }
@@ -210,8 +213,17 @@ struct EditorView: View {
             await MainActor.run {
                 overwriteConfirmVisible = false
                 saving = false
+                // Re-anchor the draft so isDirty resets and the "edited"
+                // badge clears — without losing the user's selected stage.
+                self.draft?.markSaved(as: p)
+                // Replace the matching entry in our in-memory preset list
+                // so the picker + summary reflect the saved version. We
+                // skip a full refresh here because the only change on
+                // disk is the one we just made.
+                if let idx = self.presetList.firstIndex(where: { $0.name == p.name }) {
+                    self.presetList[idx] = p
+                }
             }
-            await refresh()
         } catch {
             await MainActor.run {
                 saveError = "Save failed: \(error)"
