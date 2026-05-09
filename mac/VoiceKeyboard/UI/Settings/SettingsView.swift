@@ -186,7 +186,8 @@ private struct DetailView: View {
             GeneralTab(
                 settings: $settings,
                 onSave: save,
-                audioCapture: composition.audioCapture
+                audioCapture: composition.audioCapture,
+                presets: LibVKBPresetsClient(engine: composition.engine)
             )
         case .voice:
             VoiceTab(
@@ -225,7 +226,7 @@ private struct DetailView: View {
                 presets: LibVKBPresetsClient(engine: composition.engine),
                 settings: $settings,
                 onSave: save,
-                navigateToPipeline: { navigateTo(.pipeline) }
+                navigateTo: navigateTo
             )
         case .pipeline:
             PipelineTab(

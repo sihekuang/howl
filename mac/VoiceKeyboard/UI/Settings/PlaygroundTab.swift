@@ -20,9 +20,9 @@ struct PlaygroundTab: View {
     @Binding var settings: UserSettings
     /// Persists settings + reapplies the engine config (parent's save handler).
     let onSave: (UserSettings) -> Void
-    /// Called when the user clicks "Configure…" in the preset banner.
-    /// Parent flips the Settings page to Pipeline → Editor.
-    let navigateToPipeline: () -> Void
+    /// Generic page navigation. PresetBanner uses `.general` to deep-link
+    /// the user to the canonical "Active preset" picker.
+    let navigateTo: (SettingsPage) -> Void
 
     @State private var scratch: String = ""
     @State private var selectedID: String? = nil
@@ -183,29 +183,15 @@ struct PlaygroundTab: View {
         }
     }
 
-    /// Compact preset banner reused across both layout modes. Picker
-    /// writes back to UserSettings via applyPreset; "Configure…" jumps
-    /// to Pipeline → Editor.
+    /// Read-only banner showing the user's active preset. Switching is
+    /// owned by the General tab; the deep-link button navigates there.
     @ViewBuilder
     private var presetBanner: some View {
         PresetBanner(
             presets: presets,
-            selectedPresetName: Binding(
-                get: { settings.selectedPresetName },
-                set: { settings.selectedPresetName = $0 }
-            ),
-            apply: { p in applyPreset(p) },
-            onConfigure: { navigateToPipeline() }
+            activePresetName: settings.selectedPresetName,
+            onChangeActive: { navigateTo(.general) }
         )
-    }
-
-    /// Translate a Preset's stage specs into UserSettings fields and
-    /// persist via the parent's save handler. The translation itself
-    /// lives on `UserSettings.applying(_:)` so it's testable in isolation.
-    private func applyPreset(_ p: Preset) {
-        let s = settings.applying(p)
-        settings = s
-        onSave(s)
     }
 
     /// Multiline scratch editor — TextEditor expands vertically with

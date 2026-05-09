@@ -147,7 +147,13 @@ struct EditorView: View {
     }
 
     private func displayName(_ p: Preset) -> String {
-        p.isBundled ? "\(p.name) (default)" : p.name
+        // Prefix the active preset (the one running for live dictation,
+        // sourced from settings.selectedPresetName) with a checkmark so
+        // users editing a non-active preset can still see which one is
+        // live. Active is set in General; the editor only edits.
+        let active = settings.selectedPresetName == p.name
+        let base = p.isBundled ? "\(p.name) (default)" : p.name
+        return active ? "✓ \(base)" : "  \(base)"
     }
 
     // MARK: - Right pane

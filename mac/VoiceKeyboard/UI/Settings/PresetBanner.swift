@@ -2,54 +2,43 @@
 import SwiftUI
 import VoiceKeyboardCore
 
-/// Compact pipeline-preset banner used in the Playground tab. Displays
-/// the active preset, a picker to switch presets, a one-line summary
-/// of the resolved settings (TSE on/threshold + Whisper model + LLM
-/// provider), and an optional "Configure…" button that deep-links into
-/// Pipeline → Editor for stage-level tweaks.
+/// Read-only banner that displays the user's active preset alongside
+/// a one-line summary (TSE on/threshold + Whisper model + LLM provider).
+/// Used in the Playground tab. Switching the active preset is owned by
+/// the General tab — this banner only shows it. A green checkmark next
+/// to the name reinforces "this is what runs when you dictate."
 ///
-/// The picker writes back to UserSettings via the `apply` closure so
-/// switching presets actually changes the live engine config. Reuses
-/// PresetsClient + Preset from VoiceKeyboardCore — no duplicate
-/// preset-loading state.
-///
-/// `onConfigure` is optional: when nil, the Configure button is hidden.
-/// Pipeline editing is gated to Developer mode, so the Playground only
-/// supplies a navigateTo closure when developer mode is on. Non-dev
-/// users still see the picker and can switch among presets — they just
-/// don't get the deep-link to the editor.
+/// `onChangeActive` is the deep-link target. nil hides the button (kept
+/// for symmetry with the previous design; current Playground always
+/// supplies one pointing at General).
 struct PresetBanner: View {
     let presets: any PresetsClient
-    @Binding var selectedPresetName: String?
-    /// Called when the user picks a different preset. Parent translates
-    /// the Preset's stage specs into UserSettings fields and saves.
-    let apply: (Preset) -> Void
-    /// Called when the user clicks "Configure…". Parent flips the
-    /// Settings page to Pipeline → Editor. nil hides the button entirely
-    /// (used in non-developer mode where the Pipeline tab isn't visible).
-    let onConfigure: (() -> Void)?
+    let activePresetName: String?
+    /// Called when the user clicks "Change in General…". Parent flips
+    /// the Settings page to General. nil hides the button.
+    let onChangeActive: (() -> Void)?
 
     @State private var presetList: [Preset] = []
     @State private var loadError: String? = nil
 
     private var activePreset: Preset? {
-        guard let name = selectedPresetName else { return nil }
+        guard let name = activePresetName else { return nil }
         return presetList.first(where: { $0.name == name })
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Image(systemName: "slider.horizontal.3")
-                .foregroundStyle(.tint)
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(.green)
                 .font(.callout)
 
-            Text("Preset")
+            Text("Active preset")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            presetPicker
-
             if let active = activePreset {
+                Text(active.isBundled ? "\(active.name) (default)" : active.name)
+                    .font(.callout).bold()
                 Text(summary(for: active))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -57,15 +46,18 @@ struct PresetBanner: View {
                     .layoutPriority(-1)
             } else if let err = loadError {
                 Text(err).font(.caption).foregroundStyle(.red).lineLimit(1)
+            } else {
+                Text(activePresetName ?? "(none)")
+                    .font(.callout).bold()
             }
 
             Spacer()
 
-            if let onConfigure {
+            if let onChangeActive {
                 Button {
-                    onConfigure()
+                    onChangeActive()
                 } label: {
-                    Label("Configure…", systemImage: "slider.horizontal.below.rectangle")
+                    Label("Change in General →", systemImage: "gearshape")
                 }
                 .controlSize(.small)
             }
@@ -75,35 +67,6 @@ struct PresetBanner: View {
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .task { await refresh() }
-    }
-
-    @ViewBuilder
-    private var presetPicker: some View {
-        if presetList.isEmpty {
-            Text(selectedPresetName ?? "(loading…)")
-                .font(.callout).bold()
-        } else {
-            Picker("", selection: Binding(
-                get: { selectedPresetName ?? "" },
-                set: { name in
-                    guard !name.isEmpty,
-                          let p = presetList.first(where: { $0.name == name })
-                    else { return }
-                    selectedPresetName = name
-                    apply(p)
-                }
-            )) {
-                if selectedPresetName == nil || !presetList.contains(where: { $0.name == selectedPresetName }) {
-                    Text(selectedPresetName ?? "(none)").tag(selectedPresetName ?? "")
-                }
-                ForEach(presetList) { p in
-                    Text(p.name).tag(p.name)
-                }
-            }
-            .labelsHidden()
-            .controlSize(.small)
-            .fixedSize()
-        }
     }
 
     private func summary(for p: Preset) -> String {
