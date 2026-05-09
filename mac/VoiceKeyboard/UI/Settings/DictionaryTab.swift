@@ -217,7 +217,7 @@ struct DictionaryTab: View {
     private func addManualTerm() {
         let t = newTerm.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty, !settings.customDict.contains(t) else { return }
-        settings.customDict.append(t)
+        settings.customDict.insert(t, at: 0)
         newTerm = ""
         onSave(settings)
     }
@@ -227,7 +227,7 @@ struct DictionaryTab: View {
         let existing = Set(settings.customDict)
         let fresh = pack.terms.filter { !existing.contains($0) }
         if !fresh.isEmpty {
-            settings.customDict.append(contentsOf: fresh)
+            settings.customDict.insert(contentsOf: fresh, at: 0)
             onSave(settings)
         }
         flashBanner(fresh.isEmpty ? .alreadyAdded : .added(fresh.count))
@@ -293,7 +293,7 @@ struct DictionaryTab: View {
         } else {
             let existing = Set(settings.customDict)
             let fresh = incoming.filter { !existing.contains($0) }
-            settings.customDict.append(contentsOf: fresh)
+            settings.customDict.insert(contentsOf: fresh, at: 0)
             onSave(settings)
             flashBanner(.imported(added: fresh.count, skipped: incoming.count - fresh.count))
         }
