@@ -37,7 +37,6 @@ struct StageDetailPane: View {
                     await refreshSimilarity()
                 }
             }
-            .disabled(editingDisabled)
         } else {
             Text("Select a stage to edit its tunables.")
                 .font(.caption)
@@ -74,6 +73,7 @@ struct StageDetailPane: View {
         case .chunk:
             if ref.name == "tse", let stage = draft.stage(for: ref) {
                 tseBody(ref: ref, stage: stage)
+                    .disabled(editingDisabled)
             } else {
                 Text("No tunables.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -81,11 +81,21 @@ struct StageDetailPane: View {
         case .terminal:
             switch ref.name {
             case "whisper":
-                WhisperStageBody(draft: draft, navigateTo: navigateTo)
+                WhisperStageBody(
+                    draft: draft,
+                    settings: $settings,
+                    isBundled: editingDisabled,
+                    navigateTo: navigateTo
+                )
             case "dict":
                 DictStageBody(settings: $settings, navigateTo: navigateTo)
             case "llm":
-                LLMStageBody(draft: draft, navigateTo: navigateTo)
+                LLMStageBody(
+                    draft: draft,
+                    settings: $settings,
+                    isBundled: editingDisabled,
+                    navigateTo: navigateTo
+                )
             default:
                 Text("Unknown terminal stage \(ref.name)")
                     .foregroundStyle(.red)

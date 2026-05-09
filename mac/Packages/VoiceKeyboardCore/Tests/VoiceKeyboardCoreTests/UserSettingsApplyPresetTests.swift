@@ -69,15 +69,13 @@ struct UserSettingsApplyPresetTests {
         )
     }
 
-    // MARK: - Wired fields (these MUST match Go's Resolve)
+    // MARK: - Stage stamping (always, both bundled and user presets)
 
-    @Test func applying_paranoid_setsTSEEnabledAndDenoiseOnAndModel() {
+    @Test func applying_paranoid_setsTSEEnabledAndDenoiseOn() {
         let result = UserSettings().applying(Self.paranoid())
         #expect(result.selectedPresetName == "paranoid")
         #expect(result.tseEnabled == true)
         #expect(result.disableNoiseSuppression == false) // denoise enabled
-        #expect(result.whisperModelSize == "small")
-        #expect(result.llmProvider == "anthropic")
     }
 
     @Test func applying_paranoid_stampsThresholdAndBackend() {
@@ -91,13 +89,36 @@ struct UserSettingsApplyPresetTests {
         #expect(result.selectedPresetName == "minimal")
         #expect(result.tseEnabled == false)
         #expect(result.disableNoiseSuppression == true) // denoise disabled
-        #expect(result.whisperModelSize == "small")
     }
 
-    @Test func applying_aggressive_picksLargerModel() {
-        let result = UserSettings().applying(Self.aggressive())
-        #expect(result.whisperModelSize == "base")
-        #expect(result.tseEnabled == true)
+    // MARK: - Bundled presets do NOT override user globals
+    //
+    // Whisper model + LLM provider/model are user-managed globals that
+    // live in their own Settings sections. A bundled preset (default,
+    // minimal, aggressive, paranoid) deliberately leaves them alone so
+    // the user's choices in General / LLM Provider stay sticky across
+    // preset changes. User-created presets DO pin those values — see
+    // the next section.
+
+    @Test func applying_bundledPreset_doesNotOverrideWhisperModel() {
+        var base = UserSettings()
+        base.whisperModelSize = "large" // user's chosen model
+        let result = base.applying(Self.aggressive()) // declares "base"
+        #expect(result.whisperModelSize == "large") // preserved
+    }
+
+    @Test func applying_bundledPreset_doesNotOverrideLLMProvider() {
+        var base = UserSettings()
+        base.llmProvider = "openai"
+        let result = base.applying(Self.paranoid()) // declares "anthropic"
+        #expect(result.llmProvider == "openai") // preserved
+    }
+
+    @Test func applying_bundledPreset_doesNotOverrideLLMModel() {
+        var base = UserSettings()
+        base.llmModel = "gpt-5"
+        let result = base.applying(Self.paranoid()) // bundled, no model pinned anyway
+        #expect(result.llmModel == "gpt-5") // preserved
     }
 
     @Test func applying_preservesUnrelatedFields() {
@@ -208,6 +229,40 @@ struct UserSettingsApplyPresetTests {
         )
         let result = UserSettings().applying(preset)
         #expect(result.tseEnabled == false)
+    }
+
+    // MARK: - User-created presets DO pin per-preset whisper / LLM
+
+    @Test func applying_userPreset_stampsWhisperModel() {
+        let userPreset = Preset(
+            name: "my-preset", // not in Preset.bundledNames
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "medium"),
+            llm: .init(provider: "anthropic"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.whisperModelSize = "tiny"
+        let result = base.applying(userPreset)
+        #expect(result.whisperModelSize == "medium") // pinned by user preset
+    }
+
+    @Test func applying_userPreset_stampsLLMProvider() {
+        let userPreset = Preset(
+            name: "my-preset",
+            description: "",
+            frameStages: [.init(name: "denoise", enabled: true), .init(name: "decimate3", enabled: true)],
+            chunkStages: [.init(name: "tse", enabled: true, backend: "ecapa", threshold: 0.0)],
+            transcribe: .init(modelSize: "small"),
+            llm: .init(provider: "openai"),
+            timeoutSec: 10
+        )
+        var base = UserSettings()
+        base.llmProvider = "anthropic"
+        let result = base.applying(userPreset)
+        #expect(result.llmProvider == "openai")
     }
 
     // MARK: - LLM model stamping (per-preset override)

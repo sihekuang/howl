@@ -4,11 +4,19 @@ import VoiceKeyboardCore
 
 // MARK: - Whisper
 
-/// Per-preset whisper model picker. Shows the same labels as
-/// GeneralTab (✓ prefix for downloaded sizes), but does not start
-/// downloads — the user follows the deep-link to General for that.
+/// Whisper stage detail.
+///
+/// - Bundled (default) preset → read-only display of the user's global
+///   Whisper model from General. The bundled preset deliberately does
+///   not override that global; an info banner explains the rule and
+///   nudges users to "Save as…" if they want a per-preset pin.
+/// - User-created preset → editable model picker pinned to the preset.
+///   Same labels as GeneralTab (✓ prefix for downloaded sizes); does
+///   not start downloads — that flow lives in General.
 struct WhisperStageBody: View {
     @Bindable var draft: PresetDraft
+    @Binding var settings: UserSettings
+    let isBundled: Bool
     let navigateTo: (SettingsPage) -> Void
 
     private let modelSizes: [(size: String, label: String, mb: String)] = [
@@ -23,19 +31,24 @@ struct WhisperStageBody: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Model size").frame(width: 96, alignment: .leading)
-                Picker("", selection: Binding(
-                    get: { draft.transcribeModelSize },
-                    set: { draft.transcribeModelSize = $0 }
-                )) {
-                    ForEach(modelSizes, id: \.size) { m in
-                        Text(label(for: m)).tag(m.size)
+                if isBundled {
+                    Text(displayLabel(for: settings.whisperModelSize))
+                        .font(.callout)
+                } else {
+                    Picker("", selection: Binding(
+                        get: { draft.transcribeModelSize },
+                        set: { draft.transcribeModelSize = $0 }
+                    )) {
+                        ForEach(modelSizes, id: \.size) { m in
+                            Text(label(for: m)).tag(m.size)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
                 }
-                .labelsHidden()
-                .frame(maxWidth: 220)
                 Spacer()
             }
-            Text("Per-preset whisper model. Manage which models are downloaded in General → Whisper model.")
+            Text(footnote)
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
@@ -44,17 +57,30 @@ struct WhisperStageBody: View {
         }
     }
 
+    private var footnote: String {
+        if isBundled {
+            return "Default presets use your global Whisper model from General. Save as… to pin a different model to a copy of this preset."
+        } else {
+            return "Per-preset Whisper model. Manage which model files are downloaded in General → Whisper model."
+        }
+    }
+
     private func label(for m: (size: String, label: String, mb: String)) -> String {
         let path = ModelPaths.whisperModel(size: m.size).path
         let mark = FileManager.default.fileExists(atPath: path) ? "✓" : " "
         return "\(mark) \(m.label) (\(m.mb))"
     }
+
+    private func displayLabel(for size: String) -> String {
+        modelSizes.first(where: { $0.size == size }).map { "\($0.label) (\($0.mb))" } ?? size
+    }
 }
 
-// MARK: - Dict (read-only)
+// MARK: - Dict (always global)
 
-/// Read-only summary of the global custom dictionary. Per-preset
-/// override isn't supported — every preset uses the same terms.
+/// Read-only summary of the user's custom dictionary. Dictionary terms
+/// are always global — every preset (bundled or user-created) uses the
+/// same list, so this view doesn't branch on `isBundled`.
 struct DictStageBody: View {
     @Binding var settings: UserSettings
     let navigateTo: (SettingsPage) -> Void
@@ -79,44 +105,73 @@ struct DictStageBody: View {
 
 // MARK: - LLM
 
-/// Per-preset LLM provider + model. Provider list and curated model
-/// list both come from LLMProviderCatalog so this stays in sync with
-/// LLMProviderTab. For local providers (ollama, lmstudio) where the
-/// curated list is empty, the model field falls back to a TextField
-/// so users can name a locally-installed model that the LLM Provider
-/// tab would auto-detect.
+/// LLM stage detail.
+///
+/// - Bundled (default) preset → read-only display of the user's global
+///   provider/model from LLM Provider. The bundled preset does not
+///   override those globals; users wanting a pinned LLM choice should
+///   "Save as…" first.
+/// - User-created preset → editable provider + model controls. Provider
+///   list and curated model list both come from LLMProviderCatalog so
+///   this stays in sync with LLMProviderTab. For local providers
+///   (ollama, lmstudio) where the curated list is empty, the model
+///   field falls back to a TextField for free-form names.
 struct LLMStageBody: View {
     @Bindable var draft: PresetDraft
+    @Binding var settings: UserSettings
+    let isBundled: Bool
     let navigateTo: (SettingsPage) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Provider").frame(width: 96, alignment: .leading)
-                Picker("", selection: Binding(
-                    get: { draft.llmProvider },
-                    set: { draft.setLLMProvider($0) }
-                )) {
-                    ForEach(LLMProviderCatalog.providers, id: \.id) { p in
-                        Text(p.label).tag(p.id)
+                if isBundled {
+                    Text(providerLabel(for: settings.llmProvider))
+                        .font(.callout)
+                } else {
+                    Picker("", selection: Binding(
+                        get: { draft.llmProvider },
+                        set: { draft.setLLMProvider($0) }
+                    )) {
+                        ForEach(LLMProviderCatalog.providers, id: \.id) { p in
+                            Text(p.label).tag(p.id)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
                 }
-                .labelsHidden()
-                .frame(maxWidth: 220)
                 Spacer()
             }
             HStack {
                 Text("Model").frame(width: 96, alignment: .leading)
-                modelControl
+                if isBundled {
+                    Text(settings.llmModel.isEmpty ? "(provider default)" : settings.llmModel)
+                        .font(.callout.monospaced())
+                } else {
+                    modelControl
+                }
                 Spacer()
             }
-            Text("Pinned to this preset. API keys, base URLs, and the default provider/model live in LLM Provider.")
+            Text(footnote)
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 ManageElsewhereButton(target: .provider, label: "Manage in LLM Provider →", navigateTo: navigateTo)
             }
         }
+    }
+
+    private var footnote: String {
+        if isBundled {
+            return "Default presets use your global LLM provider/model from LLM Provider. Save as… to pin a different provider or model to a copy of this preset."
+        } else {
+            return "Pinned to this preset. API keys, base URLs, and the global default provider/model live in LLM Provider."
+        }
+    }
+
+    private func providerLabel(for id: String) -> String {
+        LLMProviderCatalog.providers.first(where: { $0.id == id })?.label ?? id
     }
 
     @ViewBuilder

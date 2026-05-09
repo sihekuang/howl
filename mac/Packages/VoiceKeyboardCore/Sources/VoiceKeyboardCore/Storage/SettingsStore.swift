@@ -103,13 +103,17 @@ public struct UserSettings: Codable, Equatable, Sendable {
 
     /// Returns a copy with the preset-driven fields stamped in.
     ///
-    /// Translated: denoise toggle, TSE toggle/threshold/backend, Whisper
-    /// model size, LLM provider, LLM model (when the preset pins one;
-    /// `nil` preserves the receiver's global `llmModel`), and
+    /// Always stamped: denoise toggle, TSE toggle/threshold/backend, and
     /// `selectedPresetName` (display-only).
     ///
-    /// `pipelineTimeoutSec` is intentionally NOT stamped — timeout is a
-    /// global engine-tuning setting, not preset-driven. The preset's
+    /// Bundled (built-in) presets do NOT override the user's Whisper
+    /// model / LLM provider / LLM model — those live in their dedicated
+    /// Settings sections (General, LLM Provider) as user-managed globals.
+    /// User-created presets DO pin those values per-preset (so a user
+    /// can save a preset with a specific transcribe + LLM combo).
+    ///
+    /// `pipelineTimeoutSec` is intentionally NOT stamped from any preset —
+    /// timeout is a global engine-tuning setting. The preset's
     /// `timeoutSec` is currently ignored on this path.
     public func applying(_ preset: Preset) -> UserSettings {
         var s = self
@@ -122,10 +126,12 @@ public struct UserSettings: Codable, Equatable, Sendable {
             s.tseThreshold = st.threshold
             s.tseBackend = st.backend ?? ""
         }
-        s.whisperModelSize = preset.transcribe.modelSize
-        s.llmProvider = preset.llm.provider
-        if let m = preset.llm.model {
-            s.llmModel = m
+        if !preset.isBundled {
+            s.whisperModelSize = preset.transcribe.modelSize
+            s.llmProvider = preset.llm.provider
+            if let m = preset.llm.model {
+                s.llmModel = m
+            }
         }
         return s
     }
