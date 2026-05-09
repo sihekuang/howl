@@ -61,9 +61,7 @@ struct DictionaryTab: View {
                 Button("Add") { addManualTerm() }
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            termsList
-            Divider()
-            manageSection
+            termsCard
         }
         .confirmationDialog(
             "Clear all \(settings.customDict.count) term\(settings.customDict.count == 1 ? "" : "s")?",
@@ -115,20 +113,42 @@ struct DictionaryTab: View {
         }
     }
 
-    /// Flat row list of dictionary terms. Used to be a `List`, but a
-    /// SwiftUI List nested inside the Settings ScrollView collapses to
-    /// a ~250pt fixed height with its own internal scroll — so users
-    /// who added a 50-term pack only saw the first ~8 entries and
-    /// thought the rest didn't get added. Switching to a VStack of
-    /// rows lets the outer page scroll as one, so every term is
-    /// visible by scrolling.
+    /// Bordered card grouping the term list with its stats + bulk-action
+    /// header (Export / Import / Clear all). The header sits on top so
+    /// counts and actions are visible regardless of how long the list
+    /// gets — previously these lived as a footer below the list and got
+    /// pushed off-screen once the user added a 50-term preset pack.
     @ViewBuilder
-    private var termsList: some View {
+    private var termsCard: some View {
+        VStack(spacing: 0) {
+            manageSection
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.10))
+            Divider()
+            termsBody
+        }
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(.secondary.opacity(0.25))
+        )
+    }
+
+    /// Flat row list of dictionary terms (replaces a SwiftUI `List` —
+    /// nested inside the Settings ScrollView the List collapsed to a
+    /// ~250pt fixed inner-scroll, hiding most entries and making users
+    /// think a preset pack hadn't been added). The outer ScrollView
+    /// owns scrolling now, so every row is reachable by scrolling.
+    @ViewBuilder
+    private var termsBody: some View {
         if settings.customDict.isEmpty {
             Text("No dictionary terms yet. Add one above or pick a preset pack.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .padding(.vertical, 12)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(settings.customDict.enumerated()), id: \.offset) { idx, term in
@@ -150,12 +170,6 @@ struct DictionaryTab: View {
                     }
                 }
             }
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(.secondary.opacity(0.25))
-            )
         }
     }
 
