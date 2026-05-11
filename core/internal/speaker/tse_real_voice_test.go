@@ -1,4 +1,4 @@
-//go:build speakerbeam
+//go:build speakerbeam || cleanupeval
 
 package speaker
 
