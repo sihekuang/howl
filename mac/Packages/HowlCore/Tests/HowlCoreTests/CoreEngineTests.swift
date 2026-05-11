@@ -1,0 +1,73 @@
+import Foundation
+import Testing
+@testable import HowlCore
+
+/// Spy that records every call. Exercises the protocol without
+/// touching the real C ABI.
+final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
+    var configureCalls: [EngineConfig] = []
+    var startCalls = 0
+    var pushSampleCount = 0
+    var stopCalls = 0
+    var nextEvent: EngineEvent?
+    var stubSessionsListJSON: String? = "[]"
+    var stubSessionGetJSON: [String: String] = [:]
+    var stubSessionDeleteRC: Int32 = 0
+    var stubSessionsClearRC: Int32 = 0
+    var stubPresetsListJSON: String? = "[]"
+    var stubPresetGetJSON: [String: String] = [:]
+    var stubPresetSaveRC: Int32 = 0
+    var stubPresetDeleteRC: Int32 = 0
+    var stubReplayJSON: String? = "[]"
+    var stubTSEExtractRC: Int32 = 0
+    var stubLastError: String?
+    var tseExtractCalls: [(input: String, output: String, modelsDir: String, voiceDir: String, onnxLibPath: String)] = []
+
+    func configure(_ config: EngineConfig) async throws {
+        configureCalls.append(config)
+    }
+    func startCapture() async throws { startCalls += 1 }
+    func pushAudio(_ samples: [Float]) throws {
+        pushSampleCount += samples.count
+    }
+    func stopCapture() async throws { stopCalls += 1 }
+    func cancelCapture() {}
+    func pollEvent() -> EngineEvent? { defer { nextEvent = nil }; return nextEvent }
+    func computeEnrollment(samples: [Float], sampleRate: Int, profileDir: String) async throws {}
+    func lastError() -> String? { stubLastError }
+    func shutdown() {}
+
+    func sessionsListJSON() -> String? { stubSessionsListJSON }
+    func sessionGetJSON(_ id: String) -> String? { stubSessionGetJSON[id] }
+    func sessionDelete(_ id: String) -> Int32 { stubSessionDeleteRC }
+    func sessionsClear() -> Int32 { stubSessionsClearRC }
+
+    func presetsListJSON() -> String? { stubPresetsListJSON }
+    func presetGetJSON(_ name: String) -> String? { stubPresetGetJSON[name] }
+    func presetSaveJSON(name: String, description: String, body: String) -> Int32 { stubPresetSaveRC }
+    func presetDelete(_ name: String) -> Int32 { stubPresetDeleteRC }
+    func replayJSON(sourceID: String, presetsCSV: String) -> String? { stubReplayJSON }
+
+    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) -> Int32 {
+        tseExtractCalls.append((inputPath, outputPath, modelsDir, voiceDir, onnxLibPath))
+        return stubTSEExtractRC
+    }
+}
+
+@Suite("CoreEngine protocol")
+struct CoreEngineTests {
+    @Test func spyHonorsProtocol() async throws {
+        let spy = SpyCoreEngine()
+        try await spy.configure(EngineConfig(
+            whisperModelPath: "/x", whisperModelSize: "tiny",
+            language: "en", disableNoiseSuppression: false,
+            deepFilterModelPath: "", llmProvider: "anthropic",
+            llmModel: "claude-sonnet-4-6", llmAPIKey: "k",
+            customDict: []))
+        try await spy.startCapture()
+        try await spy.stopCapture()
+        #expect(spy.configureCalls.count == 1)
+        #expect(spy.startCalls == 1)
+        #expect(spy.stopCalls == 1)
+    }
+}

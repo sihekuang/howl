@@ -1,0 +1,291 @@
+import AVFoundation
+import SwiftUI
+import os
+import HowlCore
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "GeneralTab")
+
+struct GeneralTab: View {
+    @Binding var settings: UserSettings
+    let onSave: (UserSettings) -> Void
+    let audioCapture: any AudioCapture
+    /// Source of available presets for the "Active preset" picker. The
+    /// picker is the canonical way to switch which preset is running;
+    /// Playground and Pipeline only show it (Playground read-only,
+    /// Pipeline picks editing targets — neither activates).
+    let presets: any PresetsClient
+
+    @State private var devices: [AudioInputDevice] = []
+    @State private var downloader = ModelDownloader()
+    /// Bumps every time we want SwiftUI to re-evaluate isDownloaded
+    /// (after a download completes / after launch / after switching).
+    @State private var modelStatusTick = 0
+    /// Live read of SMAppService.mainApp.status. macOS can change this
+    /// externally (e.g. user untoggles in System Settings), so re-read
+    /// on `.task` rather than caching forever.
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    @State private var presetList: [Preset] = []
+    @State private var presetLoadError: String? = nil
+    @State private var micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+
+    private let modelSizes: [(size: String, label: String, mb: String)] = [
+        ("tiny", "Tiny", "75 MB"),
+        ("base", "Base", "142 MB"),
+        ("small", "Small", "466 MB"),
+        ("medium", "Medium", "1.5 GB"),
+        ("large", "Large", "2.9 GB"),
+    ]
+    private let languages = ["auto", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
+
+    var body: some View {
+        SettingsPane {
+            activePresetPicker
+            activePresetCaption
+            Picker("Microphone", selection: micBinding) {
+                Text("System Default").tag("")
+                ForEach(devices) { dev in
+                    Text(dev.name).tag(dev.id)
+                }
+                // Saved selection points to a device that isn't in the
+                // discovery list (disconnected, or `.task` hasn't loaded
+                // yet on first render). Without this stub the picker
+                // binding has no matching tag and SwiftUI logs
+                // "selection is invalid and does not have an associated
+                // tag, this will give undefined results." Same pattern
+                // OllamaSection uses for uninstalled models.
+                if let savedUID = settings.inputDeviceUID,
+                   !savedUID.isEmpty,
+                   !devices.contains(where: { $0.id == savedUID }) {
+                    Text("\(displayName(for: savedUID)) — not connected").tag(savedUID)
+                }
+            }
+            micPermissionRow
+            Picker("Whisper model", selection: $settings.whisperModelSize) {
+                ForEach(modelSizes, id: \.size) { m in
+                    Text(modelLabel(for: m)).tag(m.size)
+                }
+            }
+            modelStatusRow
+            Picker("Language", selection: $settings.language) {
+                ForEach(languages, id: \.self) { Text($0).tag($0) }
+            }
+            Toggle("Disable noise suppression", isOn: $settings.disableNoiseSuppression)
+
+            Toggle("Open at login", isOn: Binding(
+                get: { launchAtLoginEnabled },
+                set: { newValue in
+                    LaunchAtLogin.setEnabled(newValue)
+                    // Re-read so the toggle reflects whether macOS
+                    // actually accepted the change (it can decline).
+                    launchAtLoginEnabled = LaunchAtLogin.isEnabled
+                }
+            ))
+        }
+        .onChange(of: settings) { _, new in onSave(new) }
+        .task {
+            micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+            devices = audioCapture.availableInputDevices()
+            // Auto-select a real device when the user hasn't picked one
+            // and any are available. Without this the picker sticks on
+            // "System Default" indefinitely, which is opaque about which
+            // mic the engine actually grabs. nil means "never picked";
+            // an explicit "" (System Default) is preserved.
+            if settings.inputDeviceUID == nil, let first = devices.first {
+                settings.inputDeviceUID = first.id
+            }
+            modelStatusTick += 1
+            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+            await loadPresets()
+        }
+    }
+
+    // MARK: - Active preset
+
+    /// Canonical "set active preset" UI. Selecting writes both the name
+    /// and the preset's stage fields into UserSettings (via applying).
+    /// Playground shows the result read-only; Pipeline only flags which
+    /// preset is active in its editor picker.
+    ///
+    /// Rendered as a plain `Picker("Label", ...)` so it lines up with
+    /// Microphone / Whisper model / Language above — same form-style
+    /// label column.
+    @ViewBuilder
+    private var activePresetPicker: some View {
+        Picker("Active preset", selection: activePresetBinding) {
+            if presetList.isEmpty {
+                Text(settings.selectedPresetName ?? "(loading…)").tag(settings.selectedPresetName ?? "")
+            } else {
+                // Stub for an unknown selection (e.g. preset deleted on
+                // disk) so the binding stays valid.
+                if let current = settings.selectedPresetName,
+                   !presetList.contains(where: { $0.name == current }) {
+                    Text("\(current) (missing)").tag(current)
+                }
+                ForEach(presetList) { p in
+                    Text(displayName(p)).tag(p.name)
+                }
+            }
+        }
+    }
+
+    /// Caption row sitting directly under the active-preset picker —
+    /// mirrors how `modelStatusRow` sits under the Whisper model picker.
+    @ViewBuilder
+    private var activePresetCaption: some View {
+        if let err = presetLoadError {
+            Text(err).font(.caption).foregroundStyle(.red)
+        } else {
+            Text("The active preset is what runs when you dictate. Switch any time — bundled presets keep your Whisper / LLM choices intact.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var activePresetBinding: Binding<String> {
+        Binding(
+            get: { settings.selectedPresetName ?? "" },
+            set: { name in
+                guard !name.isEmpty,
+                      let p = presetList.first(where: { $0.name == name })
+                else { return }
+                // applying() stamps stage fields + selectedPresetName in
+                // one shot. The outer .onChange(of: settings) handler
+                // then fires onSave once, reapplying the engine config.
+                settings = settings.applying(p)
+            }
+        )
+    }
+
+    private func displayName(_ p: Preset) -> String {
+        p.isBundled ? "\(p.name) (default)" : p.name
+    }
+
+    private func loadPresets() async {
+        do {
+            let list = try await presets.list()
+            await MainActor.run {
+                self.presetList = list
+                self.presetLoadError = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.presetLoadError = "Couldn't load presets: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var micPermissionRow: some View {
+        HStack {
+            if micAuthStatus == .authorized {
+                Label("Microphone permission granted", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green).font(.caption)
+                Spacer()
+            } else {
+                Label(micStatusLabel, systemImage: "mic.slash")
+                    .foregroundStyle(micAuthStatus == .notDetermined ? .orange : .red)
+                    .font(.caption)
+                Spacer()
+                Button("Enable Mic") {
+                    let before = AVCaptureDevice.authorizationStatus(for: .audio)
+                    log.info("Enable Mic clicked: status before=\(before.rawValue, privacy: .public)")
+                    AVCaptureDevice.requestAccess(for: .audio) { granted in
+                        let after = AVCaptureDevice.authorizationStatus(for: .audio)
+                        log.info("Enable Mic requestAccess returned granted=\(granted, privacy: .public) status after=\(after.rawValue, privacy: .public)")
+                        Task { @MainActor in
+                            micAuthStatus = after
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var micStatusLabel: String {
+        switch micAuthStatus {
+        case .notDetermined: "Microphone permission not yet requested"
+        case .denied, .restricted: "Microphone permission denied — click Enable Mic to retry"
+        default: "Microphone permission unknown"
+        }
+    }
+
+    @ViewBuilder
+    private var modelStatusRow: some View {
+        let size = settings.whisperModelSize
+        let path = ModelPaths.whisperModel(size: size).path
+        // modelStatusTick is referenced so SwiftUI re-evaluates after
+        // a download completes.
+        let _ = modelStatusTick
+        let downloaded = FileManager.default.fileExists(atPath: path)
+
+        switch downloader.state {
+        case .downloading(let p):
+            HStack {
+                ProgressView(value: p)
+                Text("\(Int(p * 100))%").font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+        case .failed(let msg):
+            HStack {
+                Label("Download failed: \(msg)", systemImage: "xmark.octagon.fill")
+                    .foregroundStyle(.red).font(.caption)
+                Spacer()
+                Button("Retry") { Task { await runDownload(size: size) } }
+            }
+        default:
+            HStack {
+                if downloaded {
+                    Label("Model downloaded", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green).font(.caption)
+                } else {
+                    Label("Not downloaded", systemImage: "arrow.down.circle")
+                        .foregroundStyle(.orange).font(.caption)
+                }
+                Spacer()
+                if !downloaded {
+                    Button("Download \(size.capitalized)") {
+                        Task { await runDownload(size: size) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func runDownload(size: String) async {
+        await downloader.download(size: size, to: ModelPaths.whisperModel(size: size))
+        modelStatusTick += 1
+    }
+
+    private func modelLabel(for m: (size: String, label: String, mb: String)) -> String {
+        let path = ModelPaths.whisperModel(size: m.size).path
+        let mark = FileManager.default.fileExists(atPath: path) ? "✓" : " "
+        return "\(mark) \(m.label) (\(m.mb))"
+    }
+
+    private var micBinding: Binding<String> {
+        Binding(
+            get: { settings.inputDeviceUID ?? "" },
+            // Picking "System Default" (tag "") writes "" — distinct
+            // from nil ("never picked"). Auto-default in .task only
+            // fires when nil, so an explicit System Default sticks.
+            // The engine treats non-nil-empty the same as nil
+            // (AudioCapture: `if let uid, !uid.isEmpty`), so this is
+            // purely about preserving user intent in the picker.
+            set: { settings.inputDeviceUID = $0 }
+        )
+    }
+
+    /// Best-effort friendly name from a Core Audio UID. macOS UIDs for
+    /// USB devices come through as colon-delimited strings whose third
+    /// segment is the model name, e.g.
+    ///   AppleUSBAudioEngine:Creative Technology Ltd:SB Katana SE:6E0…:5
+    /// becomes "SB Katana SE". Falls back to the whole UID for unknown
+    /// formats (Bluetooth, AirPods, virtual devices) — better than
+    /// showing nothing.
+    private func displayName(for uid: String) -> String {
+        let parts = uid.split(separator: ":", omittingEmptySubsequences: false)
+        if parts.count >= 3 {
+            let model = parts[2].trimmingCharacters(in: .whitespaces)
+            if !model.isEmpty { return model }
+        }
+        return uid
+    }
+}

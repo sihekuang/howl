@@ -1,6 +1,6 @@
-name: VoiceKeyboard
+name: Howl
 options:
-  bundleIdPrefix: com.voicekeyboard
+  bundleIdPrefix: com.howl
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -12,35 +12,35 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_HARDENED_RUNTIME: YES
-    # Apple-Silicon-only: libvkb.dylib (Go cgo) and the bundled Homebrew
+    # Apple-Silicon-only: libhowl.dylib (Go cgo) and the bundled Homebrew
     # dylibs are arm64-only. A universal build would need a parallel
     # x86_64 toolchain we don't have. Set ARCHS explicitly so Release
     # builds (which default to ONLY_ACTIVE_ARCH=NO → both archs) don't
     # try to link x86_64.
     ARCHS: arm64
 packages:
-  VoiceKeyboardCore:
-    path: Packages/VoiceKeyboardCore
+  HowlCore:
+    path: Packages/HowlCore
 targets:
-  VoiceKeyboard:
+  Howl:
     type: application
     platform: macOS
     sources:
-      - path: VoiceKeyboard
+      - path: Howl
         excludes:
           - "Info.plist"
-          - "VoiceKeyboard.entitlements"
+          - "Howl.entitlements"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.voicekeyboard.app
-        PRODUCT_NAME: VoiceKeyboard
-        INFOPLIST_FILE: VoiceKeyboard/Info.plist
-        CODE_SIGN_ENTITLEMENTS: VoiceKeyboard/VoiceKeyboard.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.howl.app
+        PRODUCT_NAME: Howl
+        INFOPLIST_FILE: Howl/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Howl/Howl.entitlements
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../core/build"
-        OTHER_LDFLAGS: "-lvkb"
+        OTHER_LDFLAGS: "-lhowl"
     dependencies:
-      - package: VoiceKeyboardCore
+      - package: HowlCore
     preBuildScripts:
       - name: Build Go core
         script: |
@@ -61,27 +61,27 @@ targets:
           unset GOFLAGS
           make build-dylib
         outputFiles:
-          - "$(SRCROOT)/../core/build/libvkb.dylib"
-          - "$(SRCROOT)/../core/build/libvkb.h"
+          - "$(SRCROOT)/../core/build/libhowl.dylib"
+          - "$(SRCROOT)/../core/build/libhowl.h"
     postCompileScripts:
-      - name: Copy libvkb.dylib + libdf.dylib into Frameworks
+      - name: Copy libhowl.dylib + libdf.dylib into Frameworks
         script: |
           set -e
           DST="$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH"
           mkdir -p "$DST"
           # Both sources already have install_name = @rpath/<basename>
-          # (libvkb's is set by core/Makefile build-dylib; libdf's is
+          # (libhowl's is set by core/Makefile build-dylib; libdf's is
           # pre-vendored). cp -p preserves mtime AND signature, so on
           # warm builds we don't bump anything. Don't re-run
           # install_name_tool here — that would invalidate signatures
           # and force a costly re-sign every build.
-          cp -pf "$SRCROOT/../core/build/libvkb.dylib" "$DST/"
+          cp -pf "$SRCROOT/../core/build/libhowl.dylib" "$DST/"
           cp -pf "$SRCROOT/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib" "$DST/"
         inputFiles:
-          - "$(SRCROOT)/../core/build/libvkb.dylib"
+          - "$(SRCROOT)/../core/build/libhowl.dylib"
           - "$(SRCROOT)/../core/third_party/deepfilter/lib/macos-arm64/libdf.dylib"
         outputFiles:
-          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libhowl.dylib"
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libdf.dylib"
       - name: Copy TSE models into Resources (Release only)
         script: |
@@ -116,7 +116,7 @@ targets:
         shell: /bin/bash
         script: |
           set -e
-          # Debug builds skip the dylib bundle entirely: libvkb.dylib's
+          # Debug builds skip the dylib bundle entirely: libhowl.dylib's
           # cgo link table holds absolute /opt/homebrew paths to whisper /
           # ggml that dyld will resolve at runtime, and ModelPaths.onnxLib
           # falls back to /opt/homebrew/lib/libonnxruntime.dylib when the
@@ -146,8 +146,8 @@ targets:
           # Skip the whole phase when the bundle is already up to date.
           # Without this guard, the phase adds ~30-60s to every warm
           # build because Xcode can't dependency-track all ~88 output
-          # dylibs. Compare against the SOURCE libvkb (in core/build),
-          # not the copy in Frameworks — Go rebuilds libvkb only when
+          # dylibs. Compare against the SOURCE libhowl (in core/build),
+          # not the copy in Frameworks — Go rebuilds libhowl only when
           # its sources change, and that's the actual "did anything
           # change?" signal we want.
           #
@@ -157,19 +157,19 @@ targets:
           # unsigned sentinel there breaks the .app's seal with
           # "code object is not signed at all" failures.
           SENTINEL="$BUILT_PRODUCTS_DIR/.${TARGET_NAME}-bundled-deps-stamp"
-          LIBVKB_SRC="$SRCROOT/../core/build/libvkb.dylib"
+          LIBHOWL_SRC="$SRCROOT/../core/build/libhowl.dylib"
           if [ -e "$SENTINEL" ] \
               && [ "$SENTINEL" -nt "$BREW_PREFIX/lib/libonnxruntime.dylib" ] \
-              && [ "$SENTINEL" -nt "$LIBVKB_SRC" ]; then
+              && [ "$SENTINEL" -nt "$LIBHOWL_SRC" ]; then
             echo "Homebrew dylib bundle up to date — skipping."
             exit 0
           fi
 
           # Walk the transitive Homebrew dep closure starting from:
-          # 1. The just-bundled libvkb.dylib (covers whisper.cpp + ggml,
-          #    which libvkb link-time-depends on via cgo).
+          # 1. The just-bundled libhowl.dylib (covers whisper.cpp + ggml,
+          #    which libhowl link-time-depends on via cgo).
           # 2. libonnxruntime.dylib (loaded at runtime via dlopen, not in
-          #    libvkb's dep table — must be seeded explicitly).
+          #    libhowl's dep table — must be seeded explicitly).
           SEEN="$(mktemp)"
           trap 'rm -f "$SEEN"' EXIT
 
@@ -185,10 +185,10 @@ targets:
             done <<< "$deps"
           }
           walk "$BREW_PREFIX/lib/libonnxruntime.dylib"
-          # Walk libvkb's deps. Note: libvkb itself isn't in $SEEN
+          # Walk libhowl's deps. Note: libhowl itself isn't in $SEEN
           # because it's not under $BREW_PREFIX — but its Homebrew deps
           # are now reached.
-          for dep in $(otool -L "$DST/libvkb.dylib" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
+          for dep in $(otool -L "$DST/libhowl.dylib" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
             walk "$dep"
           done
 
@@ -221,9 +221,9 @@ targets:
             rewrite_deps "$DST/$(basename "$src")"
           done < "$SEEN"
 
-          # Also rewrite libvkb.dylib's own /opt/homebrew refs.
-          chmod u+w "$DST/libvkb.dylib"
-          rewrite_deps "$DST/libvkb.dylib"
+          # Also rewrite libhowl.dylib's own /opt/homebrew refs.
+          chmod u+w "$DST/libhowl.dylib"
+          rewrite_deps "$DST/libhowl.dylib"
 
           # Third pass: replicate Homebrew's short-name → long-name symlinks
           # alongside each bundled dylib. Some packages (e.g. ggml) embed
@@ -268,20 +268,20 @@ targets:
           while IFS= read -r src; do
             codesign "${SIGN_FLAGS[@]}" "$DST/$(basename "$src")"
           done < "$SEEN"
-          codesign "${SIGN_FLAGS[@]}" "$DST/libvkb.dylib"
+          codesign "${SIGN_FLAGS[@]}" "$DST/libhowl.dylib"
           codesign "${SIGN_FLAGS[@]}" "$DST/libdf.dylib"
 
           # Mark the bundle as up-to-date so the next warm build can skip.
           touch "$SENTINEL"
         inputFiles:
           - "/opt/homebrew/lib/libonnxruntime.dylib"
-          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvkb.dylib"
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libhowl.dylib"
         outputFiles:
           - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libonnxruntime.1.25.1.dylib"
 schemes:
-  VoiceKeyboard:
+  Howl:
     build:
       targets:
-        VoiceKeyboard: all
+        Howl: all
     run:
       config: Debug
