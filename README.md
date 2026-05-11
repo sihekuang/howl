@@ -54,7 +54,7 @@ A free, self-hostable alternative to **[Wispr Flow](https://wisprflow.ai/)**,
 ## Repo layout
 
 ```
-core/                 Go pipeline (libhowl.dylib + howl)
+core/                 Go pipeline (libhowl.dylib + howl-cli)
 mac/                  Swift macOS app
 mac/project.yml       Source of truth for the Xcode project
 mac/Howl/             App sources
@@ -115,29 +115,29 @@ to a GitHub Release on tag push.
 
 ## CLI
 
-`howl` is the headless equivalent of the Mac app — useful for CI,
+`howl-cli` is the headless equivalent of the Mac app — useful for CI,
 scripting, and reproducing issues without launching the GUI. Same Go
 primitives, no SwiftUI.
 
 ```bash
 # List + inspect presets
-howl presets list
-howl presets show default
+howl-cli presets list
+howl-cli presets show default
 
 # Run dictation with a specific preset
-howl pipe --preset minimal --live
-howl pipe --preset default FILE.wav
+howl-cli pipe --preset minimal --live
+howl-cli pipe --preset default FILE.wav
 
 # Inspect captured sessions
-howl sessions list
-howl sessions show <id>
-howl sessions delete <id>
+howl-cli sessions list
+howl-cli sessions show <id>
+howl-cli sessions delete <id>
 
 # A/B compare presets against the same captured audio
-howl compare <session-id> --presets default,minimal,paranoid
+howl-cli compare <session-id> --presets default,minimal,paranoid
 ```
 
-See `core/cmd/howl/README.md` for the full subcommand reference.
+See `core/cmd/howl-cli/README.md` for the full subcommand reference.
 
 ## Releases
 

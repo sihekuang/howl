@@ -34,7 +34,7 @@ clean:
 	rm -f ../core/build/libhowl.dylib ../core/build/libhowl.h
 	cd Packages/HowlCore && swift package clean
 
-# Same as `clean` plus the cheap Go binaries (howl, enroll).
+# Same as `clean` plus the cheap Go binaries (howl-cli, enroll).
 # Still preserves TSE models + Python venv — call `make distclean`
 # in core/ if you actually want those gone.
 clean-all: clean

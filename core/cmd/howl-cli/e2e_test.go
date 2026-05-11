@@ -6,7 +6,7 @@
 //
 // Run with:
 //
-//	cd core && go test -tags='e2e whispercpp' ./cmd/howl/... -v
+//	cd core && go test -tags='e2e whispercpp' ./cmd/howl-cli/... -v
 //
 // The pipe-with-preset case skips when HOWL_MODEL_PATH or
 // HOWL_E2E_FIXTURE_WAV is unset/missing, so CI without a Whisper model

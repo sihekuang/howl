@@ -13,14 +13,14 @@ import (
 	"github.com/voice-keyboard/core/internal/sessions"
 )
 
-// runPresets dispatches `howl presets <action>` to per-action helpers.
+// runPresets dispatches `howl-cli presets <action>` to per-action helpers.
 // All actions return:
 //   - 0 on success
 //   - 1 on runtime/IO error
 //   - 2 on usage / validation error
 func runPresets(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: howl presets {list|show|save|delete} ...")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli presets {list|show|save|delete} ...")
 		return 2
 	}
 	switch args[0] {
@@ -79,7 +79,7 @@ func presetsShow(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl presets show <name> [--json]")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli presets show <name> [--json]")
 		return 2
 	}
 	name := fs.Arg(0)
@@ -109,7 +109,7 @@ func presetsSave(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl presets save <name> [--description \"...\"] [--from <session-id>]")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli presets save <name> [--description \"...\"] [--from <session-id>]")
 		return 2
 	}
 	name := fs.Arg(0)
@@ -160,7 +160,7 @@ func presetsDelete(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl presets delete <name>")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli presets delete <name>")
 		return 2
 	}
 	name := fs.Arg(0)

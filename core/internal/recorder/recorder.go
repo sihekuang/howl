@@ -108,7 +108,7 @@ func (s *Session) WriteTranscript(name, text string) error {
 }
 
 // WriteManifest serializes a session manifest to <dir>/session.json so
-// readers (Inspector, howl) can discover what each WAV represents.
+// readers (Inspector, howl-cli) can discover what each WAV represents.
 // Caller fills the Manifest with metadata; recorder is the writer
 // because it owns the directory the WAVs live in.
 //

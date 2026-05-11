@@ -21,7 +21,7 @@ build: build-cli build-dylib
 
 build-cli:
 	mkdir -p $(BUILD_DIR)
-	$(GO) build -tags="whispercpp deepfilter" -o $(BUILD_DIR)/howl ./cmd/howl
+	$(GO) build -tags="whispercpp deepfilter" -o $(BUILD_DIR)/howl-cli ./cmd/howl-cli
 
 build-dylib:
 	mkdir -p $(BUILD_DIR)
@@ -43,7 +43,7 @@ test-integration:
 # `distclean` when you actually want to nuke those.
 clean:
 	rm -f $(BUILD_DIR)/libhowl.dylib $(BUILD_DIR)/libhowl.h
-	rm -f $(BUILD_DIR)/howl $(BUILD_DIR)/enroll
+	rm -f $(BUILD_DIR)/howl-cli $(BUILD_DIR)/enroll
 
 # Drop the TSE ONNX models. Forces the next Release build (or anything
 # that touches TSE) to retrace from PyTorch via ./enroll.sh — ~30+ min.

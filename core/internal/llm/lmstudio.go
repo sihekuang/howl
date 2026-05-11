@@ -82,7 +82,7 @@ type lmStudioModelsResponse struct {
 
 // lmStudioListModels queries /v1/models and returns model ids in the
 // order LM Studio returned them. Used by the factory's auto-detect
-// path and by Provider.LocalModels for `howl providers --models`.
+// path and by Provider.LocalModels for `howl-cli providers --models`.
 func lmStudioListModels(baseURL string, timeout time.Duration) ([]string, error) {
 	if baseURL == "" {
 		baseURL = lmStudioDefaultBaseURL

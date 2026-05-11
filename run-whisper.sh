@@ -12,7 +12,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-echo "Building howl..." >&2
+echo "Building howl-cli..." >&2
 make -C core build-cli >&2
 
 DICT="${HOWL_DICT:-}"
@@ -26,7 +26,7 @@ ARGS="--live --no-llm --latency-report"
 [ -n "$DICT" ] && ARGS="$ARGS --dict $DICT"
 
 # shellcheck disable=SC2086
-core/build/howl pipe $ARGS < "$FIFO" &
+core/build/howl-cli pipe $ARGS < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 

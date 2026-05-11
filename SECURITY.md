@@ -24,7 +24,7 @@ In scope:
 
 - The Howl macOS app (the published `.app` bundle and its sources
   under `mac/`).
-- The Go core library (`core/`) and `howl`.
+- The Go core library (`core/`) and `howl-cli`.
 - The C ABI between them.
 - Build / CI configuration committed to the repo.
 

@@ -11,14 +11,14 @@ import (
 	"github.com/voice-keyboard/core/internal/sessions"
 )
 
-// runSessions dispatches `howl sessions <action>` to per-action helpers.
+// runSessions dispatches `howl-cli sessions <action>` to per-action helpers.
 // Same rc convention as runPresets:
 //   - 0 on success
 //   - 1 on runtime/IO error
 //   - 2 on usage / validation error
 func runSessions(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: howl sessions {list|show|delete|clear} ...")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli sessions {list|show|delete|clear} ...")
 		return 2
 	}
 	switch args[0] {
@@ -78,7 +78,7 @@ func sessionsShow(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl sessions show [--json] <id>")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli sessions show [--json] <id>")
 		return 2
 	}
 	id := fs.Arg(0)
@@ -107,7 +107,7 @@ func sessionsDelete(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl sessions delete <id>")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli sessions delete <id>")
 		return 2
 	}
 	store := sessions.NewStore(defaultSessionsBase())

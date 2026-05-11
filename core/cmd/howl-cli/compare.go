@@ -19,7 +19,7 @@ import (
 // runCompare drives a Compare run: replay a captured session's raw audio
 // through one or more named presets and surface the per-preset transcripts.
 //
-//   howl compare <session-id> --presets a,b,c [--json]
+//   howl-cli compare <session-id> --presets a,b,c [--json]
 //
 // rc convention matches the other subcommands (0 ok, 1 runtime/IO, 2 usage).
 func runCompare(args []string) int {
@@ -30,7 +30,7 @@ func runCompare(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl compare <session-id> --presets a,b,c [--json]")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli compare <session-id> --presets a,b,c [--json]")
 		return 2
 	}
 	id := fs.Arg(0)

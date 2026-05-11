@@ -19,7 +19,7 @@ func runTranscribe(args []string) int {
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl transcribe FILE.wav")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli transcribe FILE.wav")
 		return 2
 	}
 	path := rest[0]

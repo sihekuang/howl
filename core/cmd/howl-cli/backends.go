@@ -47,7 +47,7 @@ func runBackends(args []string) int {
 	}
 	_ = w.Flush()
 	fmt.Println()
-	fmt.Println("* default; pass --tse-backend NAME to howl pipe to override.")
+	fmt.Println("* default; pass --tse-backend NAME to howl-cli pipe to override.")
 	return 0
 }
 

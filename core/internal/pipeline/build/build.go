@@ -36,7 +36,7 @@ type Options struct {
 
 // FromOptions builds a *pipeline.Pipeline from a config plus injectable
 // dependencies. Callers without the build-tagged transcribe path
-// (currently none — howl also has whispercpp) just pass nil for
+// (currently none — howl-cli also has whispercpp) just pass nil for
 // SharedTranscriber and let FromOptions construct one.
 func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 	cfg := opts.Config

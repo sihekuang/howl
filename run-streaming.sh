@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-streaming.sh — interactive harness for the chunked Whisper
-# pipeline. Records from the mic via howl pipe --live, prints
+# pipeline. Records from the mic via howl-cli pipe --live, prints
 # per-chunk timing and a post-stop latency report when finished.
 #
 # Press any key to STOP and transcribe normally.
@@ -31,7 +31,7 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY not set (looked in ./.env)" >&2; exit 1
 fi
 
-echo "Building howl..." >&2
+echo "Building howl-cli..." >&2
 make -C core build-cli >&2
 
 FIFO="$(mktemp -u /tmp/howl-streaming.XXXXXX.fifo)"
@@ -42,7 +42,7 @@ trap cleanup EXIT
 MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
 
 # Start the CLI in the background, with stdin from the fifo.
-ANTHROPIC_MODEL="$MODEL" core/build/howl pipe --dict "$DICT" --live --latency-report < "$FIFO" &
+ANTHROPIC_MODEL="$MODEL" core/build/howl-cli pipe --dict "$DICT" --live --latency-report < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 

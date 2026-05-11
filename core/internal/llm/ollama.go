@@ -70,7 +70,7 @@ type ollamaTagsResponse struct {
 
 // ollamaListModels queries /api/tags and returns the names of installed
 // models in the order Ollama returned them. Used both by the auto-detect
-// path in factory and by Provider.LocalModels for the `howl providers
+// path in factory and by Provider.LocalModels for the `howl-cli providers
 // --models` listing.
 func ollamaListModels(baseURL string, timeout time.Duration) ([]string, error) {
 	if baseURL == "" {

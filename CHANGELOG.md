@@ -30,12 +30,12 @@ project uses platform-scoped semantic versioning (`mac-vX.Y.Z`,
 
 - **Go core rename** — binaries, directories, and link wiring:
   - `core/cmd/libvkb/` → `core/cmd/libhowl/`
-  - `core/cmd/vkb-cli/` → `core/cmd/howl/`
-  - Build outputs: `libvkb.dylib` → `libhowl.dylib`, `libvkb.h` → `libhowl.h`, CLI binary `vkb-cli` → `howl`
+  - `core/cmd/vkb-cli/` → `core/cmd/howl-cli/`
+  - Build outputs: `libvkb.dylib` → `libhowl.dylib`, `libvkb.h` → `libhowl.h`, CLI binary `vkb-cli` → `howl-cli`
   - Linker flag `-lvkb` → `-lhowl`
   - CVKB shim header `libvkb_shim.h` → `libhowl_shim.h`; header guard `LIBVKB_SHIM` → `LIBHOWL_SHIM`
   - Mac postCompile/preBuild scripts updated to copy + dlopen `libhowl.dylib`
-  - Run scripts (`run.sh`, `run-streaming.sh`, `run-whisper.sh`) updated to call `howl`
+  - Run scripts (`run.sh`, `run-streaming.sh`, `run-whisper.sh`) updated to call `howl-cli`
 
 - **C ABI symbol prefix** — all 22 exported functions renamed (`vkb_init` → `howl_init`, `vkb_configure` → `howl_configure`, …). Affects Go `//export` directives, CVKB shim header declarations, CVKBStubs test stubs, and the Swift `LibhowlEngine` (renamed from `LibvkbEngine`) call sites.
 - **Environment variables** — all `VKB_*` env vars renamed to `HOWL_*` (`HOWL_LLM_PROVIDER`, `HOWL_MODEL_PATH`, `HOWL_SESSIONS_DIR`, `HOWL_PRESETS_USER_DIR`, `HOWL_LANGUAGE`, `HOWL_DICT`, `HOWL_LLM_MODEL`, `HOWL_LLM_BASE_URL`, `HOWL_MODELS_DIR`, `HOWL_PROFILE_DIR`, `HOWL_DEEPFILTER_MODEL_PATH`, `HOWL_TEST_MODEL`, `HOWL_TEST_WAV`, `HOWL_E2E_FIXTURE_WAV`). Existing dev shell configs that export `VKB_*` need updating.
@@ -60,8 +60,8 @@ project uses platform-scoped semantic versioning (`mac-vX.Y.Z`,
 ### Added
 - In-app mic permission button with TCC status logging.
 - `scripts/debug-mic-tcc.sh` for diagnosing mic permission issues.
-- A/B preset comparison via `howl compare <session-id>`.
-- User preset CRUD (`howl presets save/delete`).
+- A/B preset comparison via `howl-cli compare <session-id>`.
+- User preset CRUD (`howl-cli presets save/delete`).
 - Pluggable LLM providers: Anthropic, OpenAI, Ollama, LM Studio.
 - Target Speaker Extraction (TSE) pipeline with speaker enrollment.
 - Custom dictionary with fuzzy + phonetic matching.

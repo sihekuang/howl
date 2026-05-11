@@ -27,7 +27,7 @@ bootstraps the Go dylib so the first Xcode build succeeds. See the
 | New TSE backend | `core/internal/speaker/` + register in the backend table |
 | C ABI exposure of new Go API | `core/cmd/libhowl/exports.go` (keep the C surface narrow; pass JSON) |
 | Mac SwiftUI app | `mac/Howl/` (Swift sources); `mac/Packages/HowlCore/` (reusable Core wrapping libhowl) |
-| Headless CLI | `core/cmd/howl/` |
+| Headless CLI | `core/cmd/howl-cli/` |
 | Build / CI / scripts | `core/Makefile`, `mac/Makefile`, `scripts/`, `.github/workflows/` |
 | Specs and plans for new work | `docs/superpowers/specs/` and `docs/superpowers/plans/` |
 
@@ -70,7 +70,7 @@ readers which layer is affected (`mac`, `core`, `presets`, `dictionary`,
 4. **Run the full test suite locally** before pushing. CI runs both
    Go and Mac builds on every push and PR.
 5. Update relevant docs in the same PR. If you add a CLI subcommand,
-   update [`core/cmd/howl/README.md`](core/cmd/howl/README.md).
+   update [`core/cmd/howl-cli/README.md`](core/cmd/howl-cli/README.md).
    If you add an environment variable, update the env table in the
    same file.
 6. Get one approving review before merging. The maintainer
@@ -107,9 +107,9 @@ project picks them up automatically.
 Use the issue templates. Include:
 
 - macOS version + chip (Apple Silicon required currently)
-- Howl version (Mac menu bar → About, or `howl` build line)
+- Howl version (Mac menu bar → About, or `howl-cli` build line)
 - A reproducer or, for transcription quality issues, a captured
-  session — `howl sessions list` and attach the manifest
+  session — `howl-cli sessions list` and attach the manifest
   (audio stays local, you choose what to share).
 
 For security issues, **do not open a public issue**. See

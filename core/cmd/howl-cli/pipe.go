@@ -47,12 +47,12 @@ func runPipe(args []string) int {
 	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no API key needed)")
 	speakerMode := fs.Bool("speaker", false, "enable speaker gating; requires a prior ./enroll.sh run")
 	tseBackend := fs.String("tse-backend", "", "TSE backend name (default: ecapa)")
-	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `howl providers`)")
+	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `howl-cli providers`)")
 	llmModel := fs.String("llm-model", "", "LLM model id (overrides ANTHROPIC_MODEL env; required for ollama)")
 	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
 	recordDir := fs.String("record-dir", "", "directory to write per-stage WAVs and transcripts")
 	recordSpec := fs.String("record", "", "comma-separated taps: audio,transcripts (e.g. --record audio,transcripts). Requires --record-dir.")
-	presetName := fs.String("preset", "", "named preset applied before per-flag overrides (see `howl presets list`)")
+	presetName := fs.String("preset", "", "named preset applied before per-flag overrides (see `howl-cli presets list`)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -289,7 +289,7 @@ func runPipe(args []string) int {
 	// File mode.
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: howl pipe [--dict X,Y] FILE.wav  (or --live / --persistent)")
+		fmt.Fprintln(os.Stderr, "usage: howl-cli pipe [--dict X,Y] FILE.wav  (or --live / --persistent)")
 		return 2
 	}
 	pcm, sr, err := readWavMonoFloat(rest[0])

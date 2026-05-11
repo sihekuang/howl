@@ -48,8 +48,8 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
 fi
 
 # Build CLI if missing
-if [ ! -x core/build/howl ]; then
-  echo "Building howl..." >&2
+if [ ! -x core/build/howl-cli ]; then
+  echo "Building howl-cli..." >&2
   make -C core build-cli >&2
 fi
 
@@ -59,10 +59,10 @@ fi
 if [ "$KEEP_WAV" = "1" ]; then
   WAV="/tmp/howl-test.wav"
   echo "Recording $SECS seconds to $WAV. Speak now." >&2
-  core/build/howl capture --secs "$SECS" --out "$WAV"
+  core/build/howl-cli capture --secs "$SECS" --out "$WAV"
   echo "" >&2
   echo "Cleaned output:" >&2
-  core/build/howl pipe --dict "$DICT" "$WAV"
+  core/build/howl-cli pipe --dict "$DICT" "$WAV"
   exit $?
 fi
 
@@ -70,4 +70,4 @@ fi
 # full pipeline; it stops on Enter (newline on stdin). We deliver that
 # newline after $SECS seconds so the script honors the duration arg.
 echo "Recording $SECS seconds via --live. Speak now." >&2
-( sleep "$SECS"; printf '\n' ) | core/build/howl pipe --dict "$DICT" --live
+( sleep "$SECS"; printf '\n' ) | core/build/howl-cli pipe --dict "$DICT" --live

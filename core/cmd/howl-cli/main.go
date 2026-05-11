@@ -43,22 +43,22 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `howl — voice keyboard CLI test harness
 
 Usage:
-  howl check                          verify dependencies and config
-  howl capture --out FILE [--secs N]  record from mic to WAV
-  howl transcribe FILE                run Whisper on a WAV
-  howl pipe FILE                      run full pipeline on a WAV
-  howl pipe --live                    record from mic, full pipeline
-  howl pipe [...] [--record-dir DIR --record audio,transcripts]
+  howl-cli check                          verify dependencies and config
+  howl-cli capture --out FILE [--secs N]  record from mic to WAV
+  howl-cli transcribe FILE                run Whisper on a WAV
+  howl-cli pipe FILE                      run full pipeline on a WAV
+  howl-cli pipe --live                    record from mic, full pipeline
+  howl-cli pipe [...] [--record-dir DIR --record audio,transcripts]
                                          tap audio stages / transcripts to DIR
-  howl backends                       list registered TSE backends
+  howl-cli backends                       list registered TSE backends
                                          (--models-dir DIR also checks
                                          that each backend's files exist)
-  howl providers                      list registered LLM providers
-  howl presets {list|show|save|delete}
+  howl-cli providers                      list registered LLM providers
+  howl-cli presets {list|show|save|delete}
                                          manage bundled + user pipeline presets
-  howl sessions {list|show|delete|clear}
+  howl-cli sessions {list|show|delete|clear}
                                          inspect captured per-stage sessions
-  howl compare ID --presets a,b,c     A/B replay a captured session
+  howl-cli compare ID --presets a,b,c     A/B replay a captured session
                                          through one or more presets
 
 Environment:

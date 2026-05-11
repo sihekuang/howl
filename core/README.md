@@ -7,9 +7,9 @@ cleanup, and emits cleaned text. Written in Go, exposed two ways:
 - **`libhowl.dylib`** — C ABI shared library loaded by the Mac SwiftUI app
   via `dlopen`. Same dylib will back the Linux and Windows wrappers once
   those land. See `cmd/libhowl/`.
-- **`howl`** — headless command-line equivalent of the Mac app. Used
+- **`howl-cli`** — headless command-line equivalent of the Mac app. Used
   for CI, scripting, A/B preset comparison, and reproducing issues
-  without launching the GUI. See [`cmd/howl/README.md`](cmd/howl/README.md).
+  without launching the GUI. See [`cmd/howl-cli/README.md`](cmd/howl-cli/README.md).
 
 > The Go module path is still `github.com/voice-keyboard/core` from the
 > project's pre-rename history.
@@ -30,7 +30,7 @@ Mic ─► VAD ─► Denoise ─► (TSE) ─► Whisper ─► Dictionary ─�
 Every stage is a swappable component selected by a **preset**
 (`internal/presets/`). Bundled presets live in
 `internal/presets/builtin.go`; users add their own via
-`howl presets save` or the Mac app's editor. Captures land in a
+`howl-cli presets save` or the Mac app's editor. Captures land in a
 **session** folder (`internal/sessions/`) so any run can be replayed
 through a different preset for A/B comparison.
 
@@ -39,7 +39,7 @@ through a different preset for A/B comparison.
 ```
 cmd/
   libhowl/                C ABI exports — the .dylib the Mac app loads
-  howl/               Headless CLI; mirrors the Mac app's pipeline
+  howl-cli/           Headless CLI; mirrors the Mac app's pipeline
   enroll/                Speaker enrollment for TSE
   ollama-smoke/          Manual smoke test for Ollama provider
 
@@ -69,7 +69,7 @@ make build-dylib
 make build-cli
 
 # CLI without whispercpp (pipe/compare/transcribe are stubbed)
-go build ./cmd/howl
+go build ./cmd/howl-cli
 
 # Tests
 make test           # short tests
@@ -89,16 +89,16 @@ export HOWL_LLM_PROVIDER=ollama                # or "anthropic" / "openai" / "lm
 export HOWL_MODEL_PATH=~/Library/Application\ Support/VoiceKeyboard/models/ggml-tiny.en.bin
 
 # Verify the toolchain
-./build/howl check
+./build/howl-cli check
 
 # Live dictation from the mic
-./build/howl pipe --preset default --live
+./build/howl-cli pipe --preset default --live
 
 # Or pipe a WAV
-./build/howl pipe --preset default sample.wav
+./build/howl-cli pipe --preset default sample.wav
 ```
 
-The CLI's full subcommand reference lives in [`cmd/howl/README.md`](cmd/howl/README.md).
+The CLI's full subcommand reference lives in [`cmd/howl-cli/README.md`](cmd/howl-cli/README.md).
 
 ## Extending the pipeline
 

@@ -15,7 +15,7 @@ ONNX_LIB="${ONNXRUNTIME_LIB_PATH:-/opt/homebrew/lib/libonnxruntime.dylib}"
 TSE_BACKEND="${TSE_BACKEND:-${1:-ecapa}}"
 
 # LLM provider + model selection (env vars only — keep flag space simple).
-# LLM_PROVIDER empty → howl default ("anthropic").
+# LLM_PROVIDER empty → howl-cli default ("anthropic").
 # LLM_MODEL    empty → provider's default (anthropic: claude-sonnet-4-6;
 #                                          ollama: auto-detected from /api/tags).
 # LLM_BASE_URL empty → provider's default (e.g. http://localhost:11434 for ollama).
@@ -31,7 +31,7 @@ LLM_BASE_URL="${LLM_BASE_URL:-}"
 # models / enrollment aren't aligned with the active backend.
 SPEAKER="${SPEAKER:-1}"
 
-# Per-stage WAV + transcript dump. When set, howl writes one WAV per
+# Per-stage WAV + transcript dump. When set, howl-cli writes one WAV per
 # pipeline stage (denoise.wav, decimate.wav, tse.wav) plus raw.txt /
 # dict.txt / cleaned.txt under this directory. Empty → no recording.
 # Example: RECORD_DIR=/tmp/tse-debug ./run-speaker.sh
@@ -47,9 +47,9 @@ if [[ "$SPEAKER" == "1" && ! -f "$PROFILE_DIR/speaker.json" ]]; then
   exit 1
 fi
 
-# Build howl
-echo "Building howl..."
-(cd "$SCRIPT_DIR/core" && go build -tags whispercpp -o build/howl ./cmd/howl/)
+# Build howl-cli
+echo "Building howl-cli..."
+(cd "$SCRIPT_DIR/core" && go build -tags whispercpp -o build/howl-cli ./cmd/howl-cli/)
 
 FIFO=$(mktemp -t howl-speaker-XXXXX)
 rm -f "$FIFO"
@@ -72,7 +72,7 @@ fi
 ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
 HOWL_PROFILE_DIR="$PROFILE_DIR" \
 HOWL_MODELS_DIR="$MODELS_DIR" \
-  "$SCRIPT_DIR/core/build/howl" pipe \
+  "$SCRIPT_DIR/core/build/howl-cli" pipe \
   ${DICT:+--dict "$DICT"} \
   --live \
   --latency-report \
