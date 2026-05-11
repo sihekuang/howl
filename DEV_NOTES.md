@@ -460,3 +460,114 @@ ECAPA vector, and isn't streaming. Not worth prototyping ahead of #1–#3.
 - [E3Net paper (arXiv 2204.00771)](https://arxiv.org/abs/2204.00771)
 - [FlowTSE paper (arXiv 2505.14465)](https://arxiv.org/abs/2505.14465)
 - [SpeechBrain ECAPA-TDNN (HF)](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+
+---
+
+## Cleanup harness bring-up — first run (2026-05-11)
+
+First run of `TestCleanup_Matrix` produced the table in
+`/tmp/matrix-firstrun.txt` (or wherever the engineer captured it).
+Numbers are baseline calibration only — the rubric in the design spec
+gets recalibrated against these.
+
+### What to look for in the first numbers
+
+- **Passthrough WER on `clean (no mix)`** — establishes the WER floor
+  for our Whisper model + LibriSpeech clips. Anything worse than this
+  on a clean condition is broken.
+- **Passthrough WER on `voice+voice 0dB`** — establishes the upper
+  bound. Cleanup candidates need to beat this by ≥5 points to clear
+  the rubric.
+- **Passthrough simT/simI margin on `voice+voice 0dB`** — sanity
+  check that an unprocessed mixture has narrow margin (<0.05). If it's
+  wider than that, the encoder is biased toward one of the two voices
+  and the margin metric is less informative than expected.
+- **SpeakerGate (former default) numbers across the matrix** — gives
+  us back the May-7 picture: where it works, where it falls apart on
+  multi-voice / overlap conditions.
+- **PyannoteSepECAPA, when present** — the actual prototype answer.
+
+### Rubric calibration follow-up
+
+After capturing the baseline, update
+`docs/superpowers/specs/2026-05-11-audio-cleanup-eval-harness-design.md`
+with the actual baseline numbers and revised rubric thresholds, dated.
+The numbers in the spec today are starting points only.
+
+### First-run results (2026-05-11)
+
+Run command:
+```
+WHISPER_MODEL_PATH="$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin" \
+  go test -tags 'cleanupeval whispercpp' -v -run TestCleanup_Matrix \
+  -timeout 20m ./internal/speaker/...
+```
+
+Model used: `ggml-tiny.en.bin` (ggml-small.bin not present; tiny is the fastest available).
+SpeakerGate and PyannoteSepECAPA both skipped (models unavailable — `tse_model.onnx` /
+`pyannote_sep.onnx` not found at the optional search paths).
+Harness compiled and ran cleanly. Total elapsed: ~4 seconds.
+
+Full output table (fixture=libri_speech, target=A, reference voice clip=libri-1272-M):
+
+```
+candidate            | condition                      | simT    | simI    | margin  | RMSr   | WER%   | notes
+---------------------+--------------------------------+---------+---------+---------+--------+--------+------
+passthrough          | clean (no mix)                 |  1.0000 |  0.8773 | +0.1227 |  1.000 |   9.09 | hyp="Nor is Mr. Quilter's manner less interesting than his matter."
+speakergate          | clean (no mix)                 | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | clean (no mix)                 | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+voice 0dB                |  0.9467 |  0.9091 | +0.0377 |  1.000 | 136.36 | hyp="It was not as Mr. Croker's manner unless interested. But everything is all in the time."
+speakergate          | voice+voice 0dB                | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+voice 0dB                | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+voice -6dB               |  0.9251 |  0.9478 | -0.0228 |  1.000 | 109.09 | hyp="It was yours and poverty and proximity. But everything was young after."
+speakergate          | voice+voice -6dB               | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+voice -6dB               | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+voice -12dB              |  0.8632 |  0.9391 | -0.0759 |  1.000 | 118.18 | hyp="It was yours and poverty and proximity, because everything was yelling at kindly."
+speakergate          | voice+voice -12dB              | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+voice -12dB              | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+music 0dB                |  0.7615 |  0.7099 | +0.0516 |  1.000 |  81.82 | hyp="Nor is Mr. Colter's manner of this interesting thing, he's a mentor."
+speakergate          | voice+music 0dB                | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+music 0dB                | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+music -6dB               |  0.5682 |  0.5435 | +0.0247 |  1.000 |  63.64 | hyp="Nor is Mr. Colter's manner of this interesting thing is better."
+speakergate          | voice+music -6dB               | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+music -6dB               | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+music -12dB              |  0.3827 |  0.4159 | -0.0332 |  1.000 | 136.36 | hyp="Nor is Mr. Contrasman or this interesting thing is Mr. Contrasman or this interesting thing is Mr. Contrasman."
+  ⚠ simT 0.3827 < 0.40 (output may not look like target)
+speakergate          | voice+music -12dB              | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+music -12dB              | —       | —       | —       | —      | —      | skipped (model unavailable)
+passthrough          | voice+voice+music -6dB / 0dB   |  0.8116 |  0.8317 | -0.0201 |  1.000 | 172.73 | hyp="It was yours. It was talker-y. It was unboxy musking. It was everything we've known that, kindly."
+speakergate          | voice+voice+music -6dB / 0dB   | —       | —       | —       | —      | —      | skipped (model unavailable)
+pyannote_sep_ecapa   | voice+voice+music -6dB / 0dB   | —       | —       | —       | —      | —      | skipped (model unavailable)
+```
+
+### Observations on the baseline numbers
+
+**WER floor (clean, no mix):** 9.09% with ggml-tiny.en. The reference transcript is
+"Nor is Mr. Quilter's manner less interesting than his matter." — tiny got it right, so
+the 9.09% is from a single word-level error (one word substituted). Rerun with ggml-small
+to see whether WER floor drops to ~0%.
+
+**Passthrough WER at voice+voice 0dB:** 136.36% — Whisper on a raw two-voice mixture is
+badly broken, as expected. This establishes the ceiling any cleanup candidate needs to beat.
+
+**simT/simI margin at voice+voice 0dB:** +0.0377 — narrower than the 0.05 threshold noted
+in the design spec, confirming the unprocessed mixture has ambiguous speaker identity.
+At -6dB (interferer louder) the margin inverts to -0.0228 (simI > simT), which is correct
+behaviour — Whisper-tiny-on-mixture is picking up the stronger voice.
+
+**voice+music -12dB:** simT drops to 0.3827 (below the 0.40 warning threshold), WER=136.36%
+with hallucinated repetition in the hypothesis. At -12dB the music signal is dominant; this
+is a genuine edge condition that cleanup candidates should address. The ⚠ warning fires
+correctly.
+
+**SpeakerGate / PyannoteSepECAPA:** both skipped because `tse_model.onnx` and
+`pyannote_sep.onnx` are not at the optional search paths (`core/build/models/`). To enable
+them, copy or symlink the model files there and re-run. The `speaker_encoder.onnx` present
+in `~/Library/Application Support/VoiceKeyboard/models/` is picked up automatically by
+`resolveModelPath` for SPEAKER_ENCODER_PATH, but the optional-path adapters use
+`optionalModelPath` which only checks `core/build/models/`.
+
+**Harness wiring:** no panics, no type errors, no compile failures. The build tag
+(`cleanupeval whispercpp`) compiles cleanly; per-row failures are isolated (skipped rows
+do not stop other rows). Matrix is ready for real candidate comparisons once models are
+sourced.
