@@ -33,7 +33,7 @@ type SileroVAD struct {
 // and return nil.
 //
 // Idempotency matters because the Mac app rebuilds the pipeline on
-// every settings change (vkb_configure), and that rebuild path goes
+// every settings change (howl_configure), and that rebuild path goes
 // through pipeline.LoadTSE → InitONNXRuntime. Without this guard,
 // the second-and-later calls fail with "onnxruntime has already been
 // initialized", which propagates as a "TSE load failed" log line

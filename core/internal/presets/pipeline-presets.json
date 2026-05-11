@@ -3,13 +3,13 @@
   "presets": [
     {
       "name": "default",
-      "description": "Standard pipeline: denoise → decimate → TSE → Whisper → dict → LLM cleanup.",
+      "description": "Standard pipeline: denoise → decimate → Whisper → dict → LLM cleanup.",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
+        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},

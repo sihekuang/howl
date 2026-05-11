@@ -1,8 +1,8 @@
 # core/ — Voice Keyboard Go core
 
-The C-ABI library (`libvkb.dylib`) consumed by the Mac app and future
+The C-ABI library (`libhowl.dylib`) consumed by the Mac app and future
 Win/Linux shells. Pipeline lives in `internal/`; C ABI exports in
-`cmd/libvkb`.
+`cmd/libhowl`.
 
 ## Audio pipeline evaluation harness
 

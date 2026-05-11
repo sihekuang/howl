@@ -5,16 +5,51 @@
 // gitignored) exists alongside this one.
 //
 // You only need this if you have an Apple Developer account and want
-// Xcode to sign with your "Apple Development" identity for personal
-// builds. The default — no override — is ad-hoc signing, which works
-// for any contributor and matches what CI ships.
+// local builds signed with your own identity. The default — no
+// override — is ad-hoc signing, which works for any contributor and
+// matches what CI ships.
 //
 // To use:
 //   cp DeveloperSettings.xcconfig.sample DeveloperSettings.xcconfig
 //   # then edit DeveloperSettings.xcconfig with your team ID
 //
-// Find your team ID at https://developer.apple.com/account
-// (Membership Details) or run:  security find-identity -v -p codesigning
+// Find your 10-character Team ID at
+// https://developer.apple.com/account (Membership Details), or by
+// running:
+//   security find-identity -v -p codesigning
+//
+// The output looks like:
+//   1) ... "Apple Development: Your Name (ABCD123456)"
+//   2) ... "Developer ID Application: Your Name (XYZW789012)"
+// The string in parentheses is your Team ID.
+//
+// ─── Pick ONE of the two profiles below ────────────────────────────
+//
+// PROFILE A — Apple Development (recommended for personal iteration)
+//
+//   DEVELOPMENT_TEAM = ABCD123456
+//   CODE_SIGN_STYLE = Automatic
+//   CODE_SIGN_IDENTITY = Apple Development
+//
+//   - Sticky TCC perms across rebuilds on your Mac (no re-granting
+//     mic + Accessibility after every build).
+//   - Only your Mac (and machines provisioned via your team) can
+//     launch the resulting .app. Not distributable to others.
+//
+// PROFILE B — Developer ID Application (for distributable archives)
+//
+//   DEVELOPMENT_TEAM = XYZW789012
+//   CODE_SIGN_STYLE = Manual
+//   CODE_SIGN_IDENTITY = Developer ID Application
+//
+//   - The .app can be launched on any Mac (Gatekeeper-acceptable
+//     after Apple notarization — separate step).
+//   - TCC perms also sticky on your Mac because the cdhash chain
+//     stays stable across rebuilds.
+//   - Requires a paid Apple Developer Program membership.
+//
+// Fill in only the one you want, delete the other. CI ignores this
+// file entirely (it isn't on the runner) and ships ad-hoc.
 
 DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
 CODE_SIGN_STYLE = Automatic

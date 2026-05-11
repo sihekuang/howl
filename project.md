@@ -1,25 +1,25 @@
-# Voice Dictation App — Project Brief
+# Howl — Project Brief
 
 ## Vision
 
-An open-source, privacy-first voice dictation tool for Mac (with Linux/Windows later). Competes with Wispr Flow but runs entirely locally—no cloud, no subscription. Users choose their own LLM. Automatic filler word removal and custom dictionary support are the core differentiators over competitors like SuperWhisper and Voibe.
+An open-source, privacy-first voice dictation tool. macOS first; Linux and Windows share the same Go core and are on the roadmap. Competes with Wispr Flow, SuperWhisper, and Voibe by being free, open source, and letting the user choose their own LLM — a local model (Ollama, LM Studio) for fully-offline operation, or a cloud model (Claude, GPT) when they want best-in-class cleanup. Whisper transcription always runs locally. Automatic filler-word removal and custom dictionary support are the core differentiators on the cleanup side.
 
 ---
 
 ## Competitive Landscape
 
-| Product | Price | Offline | Filler Removal | Open Source |
-|---|---|---|---|---|
-| Wispr Flow | $15/mo | ❌ | ✅ | ❌ |
-| SuperWhisper | $250 lifetime | ✅ | ❌ | ❌ |
-| Voibe | $99 lifetime | ✅ | ❌ | ❌ |
-| **This project** | Free | ✅ | ✅ | ✅ |
+| Product    | Price         | Local Transcription | Cloud-free option | Filler Removal | Open Source |
+|------------|---------------|---------------------|-------------------|----------------|-------------|
+| Wispr Flow | $15/mo        | ❌                  | ❌                | ✅             | ❌          |
+| SuperWhisper | $250 lifetime | ✅                  | ✅                | ❌             | ❌          |
+| Voibe      | $99 lifetime  | ✅                  | ✅                | ❌             | ❌          |
+| **Howl**   | Free          | ✅                  | ✅ (Ollama / LM Studio) | ✅       | ✅          |
 
-**Key gaps to fill:**
+**Key gaps Howl fills:**
 - Wispr Flow is cloud-only and paid
-- SuperWhisper and Voibe leave filler words in—no automatic cleanup
+- SuperWhisper and Voibe leave filler words in — no automatic cleanup
 - None are open source
-- None let users choose their own LLM
+- None let users choose their own LLM (cloud *or* local)
 
 ---
 
@@ -50,7 +50,7 @@ Text Output — inject at cursor, system-wide
 - **VAD**: Silero VAD (ONNX runtime in Go)
 - **Noise suppression**: DeepFilterNet2 or RNNoise (call via FFI or subprocess)
 - **Dictionary matching**: Levenshtein distance for fuzzy matching; Metaphone/Soundex for phonetic matching
-- **LLM integration**: Pluggable — Anthropic API, OpenAI API, or Ollama for local models
+- **LLM integration**: Pluggable — Anthropic API (Claude), OpenAI API (GPT), Ollama or LM Studio for local models
 
 ### Mac UI (Swift / SwiftUI)
 - Native Mac app — menu bar icon with dropdown
@@ -77,7 +77,7 @@ func OnTranscription(cb func(text string))
 // Config struct
 type Config struct {
     WhisperModel   string   // "tiny", "base", "small", "medium", "large"
-    LLMProvider    string   // "anthropic", "openai", "ollama"
+    LLMProvider    string   // "anthropic", "openai", "ollama", "lmstudio"
     LLMModel       string   // e.g. "claude-sonnet-4-20250514", "gpt-4o", "llama3"
     LLMAPIKey      string
     CustomDict     []string // user's custom vocabulary

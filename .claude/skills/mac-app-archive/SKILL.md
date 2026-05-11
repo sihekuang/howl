@@ -1,12 +1,12 @@
 ---
 name: mac-app-archive
-description: Build a Release .xcarchive of the VoiceKeyboard Mac app and produce a distributable .app.zip. Use when the user asks to "archive the app", "make a release build", "package the app for distribution", or wants to bump the version and ship a new build.
+description: Build a Release .xcarchive of the Howl Mac app and produce a distributable .app.zip. Use when the user asks to "archive the app", "make a release build", "package the app for distribution", or wants to bump the version and ship a new build.
 ---
 
 # Mac App Archive
 
 End-to-end recipe for producing a clean, signed, self-contained
-`.xcarchive` of `mac/VoiceKeyboard.app` and a distributable
+`.xcarchive` of `mac/Howl.app` and a distributable
 `.app.zip`. Tuned for this repo's specifics: arm64-only, signing
 auto-detected from the local environment (Apple Development if
 `DeveloperSettings.xcconfig` is present, ad-hoc otherwise), Go core
@@ -73,7 +73,7 @@ build → run with `FORCE_ADHOC=1` so the artifact matches CI.**
 
 ### 1. Bump version
 
-`mac/VoiceKeyboard/Info.plist` is the source of truth. Two keys:
+`mac/Howl/Info.plist` is the source of truth. Two keys:
 
 - `CFBundleShortVersionString` — semver shown to users (e.g.
   `0.2.0`). For pre-1.0 work, keep major at `0`. Bump minor for
@@ -97,8 +97,8 @@ If you want to verify Xcode's preBuild + postCompile phases all
 work from a truly empty state (e.g., before tagging a release):
 
 ```bash
-rm -f core/build/libvkb.dylib core/build/libvkb.h
-rm -rf /tmp/vkb-archive-derived
+rm -f core/build/libhowl.dylib core/build/libhowl.h
+rm -rf /tmp/howl-archive-derived
 ```
 
 Don't `rm -rf core/build/` — that wipes the TSE models (~30+ min
@@ -112,14 +112,14 @@ above). Archive path matches what Xcode itself would use
 (`~/Library/Developer/Xcode/Archives/<YYYY-MM-DD>/`) so the
 result shows up in Window → Organizer alongside any other
 archives — but with a version-stamped filename instead of
-`VoiceKeyboard 5-1-26, 4.40 PM.xcarchive`:
+`Howl 5-1-26, 4.40 PM.xcarchive`:
 
 ```bash
 VERSION=<X.Y.Z>
 DATE=$(date +%Y-%m-%d)
 ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$DATE"
 mkdir -p "$ARCHIVE_DIR"
-ARCHIVE_PATH="$ARCHIVE_DIR/VoiceKeyboard-$VERSION.xcarchive"
+ARCHIVE_PATH="$ARCHIVE_DIR/Howl-$VERSION.xcarchive"
 
 # Pick signing mode. Apple Development if user has a local
 # DeveloperSettings.xcconfig and didn't request ad-hoc explicitly.
@@ -134,15 +134,15 @@ fi
 # Wipe prior archive at the same path + derived data so codesign
 # actually re-runs (prevents "I changed signing flags but the .app
 # still has the old signature" surprises).
-rm -rf "$ARCHIVE_PATH" /tmp/vkb-archive-derived
+rm -rf "$ARCHIVE_PATH" /tmp/howl-archive-derived
 
 cd mac
 xcodebuild \
-  -project VoiceKeyboard.xcodeproj \
-  -scheme VoiceKeyboard \
+  -project Howl.xcodeproj \
+  -scheme Howl \
   -configuration Release \
   -destination 'platform=macOS' \
-  -derivedDataPath /tmp/vkb-archive-derived \
+  -derivedDataPath /tmp/howl-archive-derived \
   -archivePath "$ARCHIVE_PATH" \
   "${SIGN_FLAGS[@]}" \
   archive
@@ -176,7 +176,7 @@ The archive can succeed structurally but still ship a broken .app
 Always run all five checks:
 
 ```bash
-APP="$ARCHIVE_PATH/Products/Applications/VoiceKeyboard.app"
+APP="$ARCHIVE_PATH/Products/Applications/Howl.app"
 
 # A. Versions match what you bumped
 /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist"
@@ -210,7 +210,7 @@ ls "$APP/Contents/Resources/"*.onnx
 
 Expected: B exits 0, C reports the mode you intended, D reports
 `0 missing`, E lists `tse_model.onnx` and `speaker_encoder.onnx`.
-App size is typically ~130 MB (16 MB libvkb + ~70 MB Homebrew
+App size is typically ~130 MB (16 MB libhowl + ~70 MB Homebrew
 dylib closure + ~70 MB TSE models).
 
 ### 5. Produce the distributable zip
@@ -221,8 +221,8 @@ dylib closure + ~70 MB TSE models).
 `~/Library/Developer/Xcode/Archives/` so Organizer can see it:
 
 ```bash
-ditto -c -k --keepParent "$APP" "/tmp/VoiceKeyboard-$VERSION.app.zip"
-ls -lh "/tmp/VoiceKeyboard-$VERSION.app.zip"
+ditto -c -k --keepParent "$APP" "/tmp/Howl-$VERSION.app.zip"
+ls -lh "/tmp/Howl-$VERSION.app.zip"
 ```
 
 Expected size: ~80 MB compressed (the 130 MB .app compresses well
@@ -275,13 +275,13 @@ confirm it still verifies — that's what CI will produce on the tag.
   as the cost of distributable builds.
 - **"I changed signing settings but the .app still has the old
   signature"**: Xcode caches signed binaries aggressively. The
-  archive script wipes `$ARCHIVE_PATH` and `/tmp/vkb-archive-derived`
+  archive script wipes `$ARCHIVE_PATH` and `/tmp/howl-archive-derived`
   before each run for this reason — if you adapt the script, keep
   those `rm -rf`s.
 - **Archive succeeds but launching the .app crashes with
   "library not loaded: @rpath/libonnxruntime.X.Y.Z.dylib"**:
   the postCompile dylib bundle phase didn't run or was incomplete.
-  Re-archive with `rm -rf /tmp/vkb-archive-derived` to force the
+  Re-archive with `rm -rf /tmp/howl-archive-derived` to force the
   cold path; check the build log for `Bundle Homebrew dylibs` step
   output.
 - **Codesign verify fails with "code object is not signed at all"
@@ -294,7 +294,7 @@ confirm it still verifies — that's what CI will produce on the tag.
   errored. Run `./enroll.sh` to regenerate models, then re-archive.
 - **App rebuilt but Info.plist version unchanged**: Xcode's
   incremental build sometimes reuses a cached Info.plist. Force
-  it with `rm -rf /tmp/vkb-archive-derived` before re-archiving
+  it with `rm -rf /tmp/howl-archive-derived` before re-archiving
   (the script already does this — the gotcha applies if you adapt
   the script).
 - **Universal-arch prompt from Xcode IDE**: the project pins
@@ -310,7 +310,7 @@ confirm it still verifies — that's what CI will produce on the tag.
 - CI source: `.github/workflows/build.yml` — archives without any
   `DeveloperSettings.xcconfig` so always ad-hoc; runs on every
   `mac-v*` tag
-- Versioning: `mac/VoiceKeyboard/Info.plist` `CFBundleShortVersionString`
+- Versioning: `mac/Howl/Info.plist` `CFBundleShortVersionString`
   + `CFBundleVersion`
 - Local signing override: `mac/Configs/DeveloperSettings.xcconfig`
   (gitignored; sample at `DeveloperSettings.xcconfig.sample`)
