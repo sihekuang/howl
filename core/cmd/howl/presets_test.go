@@ -106,7 +106,7 @@ func TestPresets_Show_KnownName_JSON(t *testing.T) {
 
 func TestPresets_Save_ClonesDefault_RoundTripDelete(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
 
 	if rc := runPresets([]string{"save", "--description", "test clone", "my-clone"}); rc != 0 {
 		t.Fatalf("save rc = %d", rc)
@@ -133,7 +133,7 @@ func TestPresets_Save_ClonesDefault_RoundTripDelete(t *testing.T) {
 
 func TestPresets_Save_RejectsBundledName(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
 	if rc := runPresets([]string{"save", "default"}); rc == 0 {
 		t.Errorf("expected non-zero rc when saving over bundled name")
 	}
@@ -141,7 +141,7 @@ func TestPresets_Save_RejectsBundledName(t *testing.T) {
 
 func TestPresets_Save_RejectsInvalidName(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
 	if rc := runPresets([]string{"save", "Has Spaces"}); rc == 0 {
 		t.Errorf("expected non-zero rc for invalid name")
 	}
@@ -149,8 +149,8 @@ func TestPresets_Save_RejectsInvalidName(t *testing.T) {
 
 func TestPresets_Save_FromMissingSession(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
-	t.Setenv("VKB_SESSIONS_DIR", t.TempDir())
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", t.TempDir())
 	if rc := runPresets([]string{"save", "--from", "no-such-session", "from-session"}); rc == 0 {
 		t.Errorf("expected non-zero rc when --from references missing session")
 	}
@@ -158,7 +158,7 @@ func TestPresets_Save_FromMissingSession(t *testing.T) {
 
 func TestPresets_Delete_Idempotent(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
 	// Deleting a preset that doesn't exist mirrors presets.DeleteUser's
 	// idempotent contract — should succeed (rc=0).
 	if rc := runPresets([]string{"delete", "ghost"}); rc != 0 {

@@ -12,7 +12,7 @@ import (
 
 // ErrInvalidSessionID is returned (wrapped) by Get and Delete when the
 // caller-supplied id fails validSessionID's whitelist. Callers (notably
-// the C ABI in cmd/libvkb) check errors.Is(err, ErrInvalidSessionID) to
+// the C ABI in cmd/libhowl) check errors.Is(err, ErrInvalidSessionID) to
 // distinguish bad input (caller's fault) from filesystem failures.
 var ErrInvalidSessionID = errors.New("sessions: invalid session id")
 
@@ -60,9 +60,9 @@ func (s *Store) List() ([]Manifest, error) {
 		if err != nil {
 			// Tolerant: missing manifest = unfinished session = skip silently.
 			// Other errors (corrupt JSON, unknown version) are logged so
-			// the user sees them in /tmp/vkb.log but the picker still works.
+			// the user sees them in /tmp/howl.log but the picker still works.
 			if !errors.Is(err, ErrManifestNotFound) {
-				log.Printf("[vkb] sessions.List: skipping %s: %v", dir, err)
+				log.Printf("[howl] sessions.List: skipping %s: %v", dir, err)
 			}
 			continue
 		}

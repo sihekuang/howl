@@ -8,6 +8,6 @@ import (
 )
 
 func runTranscribe(_ []string) int {
-	fmt.Fprintln(os.Stderr, "vkb-cli: 'transcribe' requires -tags whispercpp (whisper.cpp CGo)")
+	fmt.Fprintln(os.Stderr, "howl: 'transcribe' requires -tags whispercpp (whisper.cpp CGo)")
 	return 1
 }

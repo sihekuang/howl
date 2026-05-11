@@ -20,7 +20,7 @@ func TestCompare_RequiresPresetsFlag(t *testing.T) {
 
 func TestCompare_UnknownSession(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	rc := runCompare([]string{"--presets", "default", "no-such-id"})
 	if rc == 0 {
 		t.Errorf("expected non-zero rc for unknown session")

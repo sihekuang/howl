@@ -47,12 +47,12 @@ func runPipe(args []string) int {
 	noLLM := fs.Bool("no-llm", false, "skip LLM cleanup; output raw Whisper text (no API key needed)")
 	speakerMode := fs.Bool("speaker", false, "enable speaker gating; requires a prior ./enroll.sh run")
 	tseBackend := fs.String("tse-backend", "", "TSE backend name (default: ecapa)")
-	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `vkb-cli providers`)")
+	llmProvider := fs.String("llm-provider", "", "LLM provider name (default: anthropic; see `howl providers`)")
 	llmModel := fs.String("llm-model", "", "LLM model id (overrides ANTHROPIC_MODEL env; required for ollama)")
 	llmBaseURL := fs.String("llm-base-url", "", "LLM base URL override (e.g. http://localhost:11434 for Ollama on a non-default host)")
 	recordDir := fs.String("record-dir", "", "directory to write per-stage WAVs and transcripts")
 	recordSpec := fs.String("record", "", "comma-separated taps: audio,transcripts (e.g. --record audio,transcripts). Requires --record-dir.")
-	presetName := fs.String("preset", "", "named preset applied before per-flag overrides (see `vkb-cli presets list`)")
+	presetName := fs.String("preset", "", "named preset applied before per-flag overrides (see `howl presets list`)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -90,18 +90,18 @@ func runPipe(args []string) int {
 			break
 		}
 		// p.Transcribe.ModelSize and p.TimeoutSec are intentionally
-		// *not* applied here — vkb-cli reads VKB_MODEL_PATH directly
+		// *not* applied here — howl reads HOWL_MODEL_PATH directly
 		// (no model-size→path resolver) and runs a one-shot pipeline
-		// without the libvkb engine's context.WithTimeout wrapping.
+		// without the libhowl engine's context.WithTimeout wrapping.
 		// Both queued as Slice 5.5 follow-ups.
-		fmt.Fprintf(os.Stderr, "[vkb] preset %q applied (overrides on top take precedence)\n", p.Name)
+		fmt.Fprintf(os.Stderr, "[howl] preset %q applied (overrides on top take precedence)\n", p.Name)
 	}
 
-	modelPath := os.Getenv("VKB_MODEL_PATH")
+	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
 		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
 	}
-	lang := os.Getenv("VKB_LANGUAGE")
+	lang := os.Getenv("HOWL_LANGUAGE")
 	if lang == "" {
 		lang = "en"
 	}
@@ -150,7 +150,7 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", provider.Name, err)
 			return 1
 		}
-		fmt.Fprintf(os.Stderr, "[vkb] LLM provider=%s model=%s\n", provider.Name, opts.Model)
+		fmt.Fprintf(os.Stderr, "[howl] LLM provider=%s model=%s\n", provider.Name, opts.Model)
 	}
 
 	var terms []string
@@ -194,11 +194,11 @@ func runPipe(args []string) int {
 	p.FrameStages = []audio.Stage{denoise.NewStage(d), resample.NewDecimate3()}
 
 	if *speakerMode {
-		profileDir := os.Getenv("VKB_PROFILE_DIR")
+		profileDir := os.Getenv("HOWL_PROFILE_DIR")
 		if profileDir == "" {
 			profileDir = os.ExpandEnv("$HOME/.config/voice-keyboard")
 		}
-		modelsDir := os.Getenv("VKB_MODELS_DIR")
+		modelsDir := os.Getenv("HOWL_MODELS_DIR")
 		if modelsDir == "" {
 			modelsDir = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models")
 		}
@@ -211,8 +211,8 @@ func runPipe(args []string) int {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", beErr)
 			return 2
 		}
-		// vkb-cli leaves the post-extract similarity gate disabled (threshold=0);
-		// the libvkb engine wires presets/threshold through. CLI is for raw
+		// howl leaves the post-extract similarity gate disabled (threshold=0);
+		// the libhowl engine wires presets/threshold through. CLI is for raw
 		// pipeline shape verification, not preset evaluation.
 		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib, 0)
 		if err != nil {
@@ -224,7 +224,7 @@ func runPipe(args []string) int {
 			return 1
 		}
 		p.ChunkStages = []audio.Stage{tseStage}
-		fmt.Fprintf(os.Stderr, "[vkb] speaker gating active (backend=%s)\n", backend.Name)
+		fmt.Fprintf(os.Stderr, "[howl] speaker gating active (backend=%s)\n", backend.Name)
 	}
 
 	var (
@@ -289,7 +289,7 @@ func runPipe(args []string) int {
 	// File mode.
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: vkb-cli pipe [--dict X,Y] FILE.wav  (or --live / --persistent)")
+		fmt.Fprintln(os.Stderr, "usage: howl pipe [--dict X,Y] FILE.wav  (or --live / --persistent)")
 		return 2
 	}
 	pcm, sr, err := readWavMonoFloat(rest[0])
@@ -338,7 +338,7 @@ func runOneLive(ctx context.Context, cancel context.CancelFunc, p *pipeline.Pipe
 		line = strings.TrimSpace(line)
 		notifyStop()
 		if line == "cancel" {
-			fmt.Fprintln(os.Stderr, "[vkb] --live: stdin sentinel 'cancel' — aborting pipeline")
+			fmt.Fprintln(os.Stderr, "[howl] --live: stdin sentinel 'cancel' — aborting pipeline")
 			cancel()
 		} else {
 			_ = cap.Stop()
@@ -428,7 +428,7 @@ func runPipeLoop(ctx context.Context, p *pipeline.Pipeline, cap *audio.MalgoCapt
 
 func printLatencyReport(stopAt time.Time, chunks []chunkInfo, firstTok time.Duration, sawFirst bool) {
 	w := os.Stderr
-	fmt.Fprintln(w, "[vkb] === latency report ===")
+	fmt.Fprintln(w, "[howl] === latency report ===")
 	var preStopTransc, postStopTransc int
 	for _, c := range chunks {
 		if c.emittedAt.Before(stopAt) {
@@ -437,16 +437,16 @@ func printLatencyReport(stopAt time.Time, chunks []chunkInfo, firstTok time.Dura
 			postStopTransc += c.transcMs
 		}
 	}
-	fmt.Fprintf(w, "[vkb]   chunks emitted:        %d\n", len(chunks))
-	fmt.Fprintf(w, "[vkb]   transcribe-during-rec: %dms\n", preStopTransc)
-	fmt.Fprintf(w, "[vkb]   post-stop-transcribe:  %dms\n", postStopTransc)
+	fmt.Fprintf(w, "[howl]   chunks emitted:        %d\n", len(chunks))
+	fmt.Fprintf(w, "[howl]   transcribe-during-rec: %dms\n", preStopTransc)
+	fmt.Fprintf(w, "[howl]   post-stop-transcribe:  %dms\n", postStopTransc)
 	if sawFirst {
-		fmt.Fprintf(w, "[vkb]   post-stop-llm-first:   %dms after transcribe done\n", int(firstTok.Milliseconds()))
+		fmt.Fprintf(w, "[howl]   post-stop-llm-first:   %dms after transcribe done\n", int(firstTok.Milliseconds()))
 	}
 	if sawFirst {
 		totalPostStop := postStopTransc + int(firstTok.Milliseconds())
-		fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms\n", totalPostStop)
+		fmt.Fprintf(w, "[howl]   total post-stop wait:  %dms\n", totalPostStop)
 	} else {
-		fmt.Fprintf(w, "[vkb]   total post-stop wait:  %dms (no LLM call)\n", postStopTransc)
+		fmt.Fprintf(w, "[howl]   total post-stop wait:  %dms (no LLM call)\n", postStopTransc)
 	}
 }

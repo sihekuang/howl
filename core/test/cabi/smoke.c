@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "libvkb.h"
+#include "libhowl.h"
 
 int main(int argc, char** argv) {
-    int rc = vkb_init();
+    int rc = howl_init();
     if (rc != 0) {
-        fprintf(stderr, "vkb_init failed: %d\n", rc);
+        fprintf(stderr, "howl_init failed: %d\n", rc);
         return 1;
     }
 
@@ -21,19 +21,19 @@ int main(int argc, char** argv) {
         "\"custom_dict\":[]"
         "}";
 
-    rc = vkb_configure((char*)config_json);
+    rc = howl_configure((char*)config_json);
     if (rc == 0) {
-        fprintf(stderr, "vkb_configure unexpectedly succeeded with bogus model path\n");
+        fprintf(stderr, "howl_configure unexpectedly succeeded with bogus model path\n");
         return 2;
     }
-    char* err = vkb_last_error();
+    char* err = howl_last_error();
     if (err == NULL) {
-        fprintf(stderr, "expected non-null vkb_last_error, got NULL\n");
+        fprintf(stderr, "expected non-null howl_last_error, got NULL\n");
         return 3;
     }
     printf("expected error from configure: %s\n", err);
-    vkb_free_string(err);
-    vkb_destroy();
+    howl_free_string(err);
+    howl_destroy();
     printf("ABI smoke test OK\n");
     return 0;
 }

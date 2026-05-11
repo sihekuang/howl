@@ -11,8 +11,8 @@ import (
 	"github.com/voice-keyboard/core/internal/audio"
 )
 
-// TestVkbTSEExtractFile_Smoke runs the Go-level body of
-// vkb_tse_extract_file (runTSEExtractFile) on a 2-speaker LibriSpeech
+// TestHowlTSEExtractFile_Smoke runs the Go-level body of
+// howl_tse_extract_file (runTSEExtractFile) on a 2-speaker LibriSpeech
 // mix and verifies the output WAV exists, has the right format, and
 // carries non-trivial energy.
 //
@@ -25,7 +25,7 @@ import (
 // (extracted audio is closer to the enrolled speaker than to the
 // interferer) lives in internal/speaker tests. Skips when the
 // production model / enrollment artefacts aren't on the machine.
-func TestVkbTSEExtractFile_Smoke(t *testing.T) {
+func TestHowlTSEExtractFile_Smoke(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)

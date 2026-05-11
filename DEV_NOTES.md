@@ -116,7 +116,7 @@ error is the diarizer**, not the ASR — the personal-VAD is where quality is wo
 
 **What survives if we adopt DiCoW:**
 - Audio capture / Go core / C ABI / Swift shell: unchanged
-- ECAPA enrollment (`vkb_enroll_compute`): reused to condition the personal-VAD
+- ECAPA enrollment (`howl_enroll_compute`): reused to condition the personal-VAD
 - TSE Lab UI, Settings, Compare, Inspector: unchanged
 - xcodegen / model-bundling shape: same, different files
 
@@ -133,7 +133,7 @@ error is the diarizer**, not the ASR — the personal-VAD is where quality is wo
 - Model size jump: probably Whisper-small/base (~100 MB) → large-v3-turbo
   (~1.6 GB fp16). Disk, RAM, first-load grow.
 - C ABI surface grows: today we pass audio bytes; with DiCoW we'd pass audio +
-  a per-frame diar tensor. New `vkb_*` export, new Swift bridge call.
+  a per-frame diar tensor. New `howl_*` export, new Swift bridge call.
 
 ### DiCoW vs current pipeline — structural comparison
 

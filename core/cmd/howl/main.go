@@ -40,30 +40,30 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `vkb-cli — voice keyboard CLI test harness
+	fmt.Fprintf(os.Stderr, `howl — voice keyboard CLI test harness
 
 Usage:
-  vkb-cli check                          verify dependencies and config
-  vkb-cli capture --out FILE [--secs N]  record from mic to WAV
-  vkb-cli transcribe FILE                run Whisper on a WAV
-  vkb-cli pipe FILE                      run full pipeline on a WAV
-  vkb-cli pipe --live                    record from mic, full pipeline
-  vkb-cli pipe [...] [--record-dir DIR --record audio,transcripts]
+  howl check                          verify dependencies and config
+  howl capture --out FILE [--secs N]  record from mic to WAV
+  howl transcribe FILE                run Whisper on a WAV
+  howl pipe FILE                      run full pipeline on a WAV
+  howl pipe --live                    record from mic, full pipeline
+  howl pipe [...] [--record-dir DIR --record audio,transcripts]
                                          tap audio stages / transcripts to DIR
-  vkb-cli backends                       list registered TSE backends
+  howl backends                       list registered TSE backends
                                          (--models-dir DIR also checks
                                          that each backend's files exist)
-  vkb-cli providers                      list registered LLM providers
-  vkb-cli presets {list|show|save|delete}
+  howl providers                      list registered LLM providers
+  howl presets {list|show|save|delete}
                                          manage bundled + user pipeline presets
-  vkb-cli sessions {list|show|delete|clear}
+  howl sessions {list|show|delete|clear}
                                          inspect captured per-stage sessions
-  vkb-cli compare ID --presets a,b,c     A/B replay a captured session
+  howl compare ID --presets a,b,c     A/B replay a captured session
                                          through one or more presets
 
 Environment:
   ANTHROPIC_API_KEY   required for cleanup (anthropic provider only)
-  VKB_MODEL_PATH      path to Whisper ggml-*.bin file
-  VKB_LANGUAGE        defaults to "en"
+  HOWL_MODEL_PATH      path to Whisper ggml-*.bin file
+  HOWL_LANGUAGE        defaults to "en"
 `)
 }

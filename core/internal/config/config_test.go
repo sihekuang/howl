@@ -118,7 +118,7 @@ func TestConfig_DeveloperMode_JSONRoundTrip(t *testing.T) {
 }
 
 // Cross-language contract tests: pin down the exact JSON keys the Mac's
-// EngineConfig emits, decoded by the same Unmarshal that vkb_configure
+// EngineConfig emits, decoded by the same Unmarshal that howl_configure
 // uses. If a key here drifts from the Swift side (mac/Packages/.../
 // EngineConfig.swift) the test fails — closing the gap that allowed
 // tse_threshold + tse_backend + pipeline_timeout_sec to be silently

@@ -2,14 +2,14 @@
 
 // End-to-end smoke tests. Gated behind both `e2e` and `whispercpp` build
 // tags so the default `go test ./...` skips them — they shell out to a
-// freshly compiled `vkb-cli` binary, which costs a build per test.
+// freshly compiled `howl` binary, which costs a build per test.
 //
 // Run with:
 //
-//	cd core && go test -tags='e2e whispercpp' ./cmd/vkb-cli/... -v
+//	cd core && go test -tags='e2e whispercpp' ./cmd/howl/... -v
 //
-// The pipe-with-preset case skips when VKB_MODEL_PATH or
-// VKB_E2E_FIXTURE_WAV is unset/missing, so CI without a Whisper model
+// The pipe-with-preset case skips when HOWL_MODEL_PATH or
+// HOWL_E2E_FIXTURE_WAV is unset/missing, so CI without a Whisper model
 // still gets coverage of presets/sessions list.
 package main
 
@@ -23,13 +23,13 @@ import (
 	"testing"
 )
 
-// buildVKBCLI compiles vkb-cli (whispercpp tag) into t.TempDir() and
+// buildHowlCLI compiles howl (whispercpp tag) into t.TempDir() and
 // returns the binary path. Each test gets its own fresh build —
 // inexpensive enough for a smoke suite, and avoids cross-test cache
 // contamination.
-func buildVKBCLI(t *testing.T) string {
+func buildHowlCLI(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "vkb-cli")
+	bin := filepath.Join(t.TempDir(), "howl")
 	cmd := exec.Command("go", "build", "-tags", "whispercpp", "-o", bin, ".")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -60,7 +60,7 @@ func runBin(t *testing.T, bin string, env []string, args ...string) (string, str
 }
 
 func TestE2E_PresetsList_IncludesBundled(t *testing.T) {
-	bin := buildVKBCLI(t)
+	bin := buildHowlCLI(t)
 	out, _, rc := runBin(t, bin, nil, "presets", "list")
 	if rc != 0 {
 		t.Fatalf("rc = %d", rc)
@@ -83,9 +83,9 @@ func TestE2E_PresetsList_IncludesBundled(t *testing.T) {
 }
 
 func TestE2E_Sessions_ListEmpty(t *testing.T) {
-	bin := buildVKBCLI(t)
+	bin := buildHowlCLI(t)
 	dir := t.TempDir()
-	out, _, rc := runBin(t, bin, []string{"VKB_SESSIONS_DIR=" + dir}, "sessions", "list", "--json")
+	out, _, rc := runBin(t, bin, []string{"HOWL_SESSIONS_DIR=" + dir}, "sessions", "list", "--json")
 	if rc != 0 {
 		t.Fatalf("rc = %d", rc)
 	}
@@ -96,23 +96,23 @@ func TestE2E_Sessions_ListEmpty(t *testing.T) {
 }
 
 func TestE2E_Pipe_WithPreset_SkipsWithoutModel(t *testing.T) {
-	model := os.Getenv("VKB_MODEL_PATH")
+	model := os.Getenv("HOWL_MODEL_PATH")
 	if model == "" {
-		t.Skip("VKB_MODEL_PATH unset — skipping pipe smoke")
+		t.Skip("HOWL_MODEL_PATH unset — skipping pipe smoke")
 	}
 	if _, err := os.Stat(model); err != nil {
 		t.Skipf("model %s missing: %v", model, err)
 	}
-	wav := os.Getenv("VKB_E2E_FIXTURE_WAV")
+	wav := os.Getenv("HOWL_E2E_FIXTURE_WAV")
 	if wav == "" {
-		t.Skip("VKB_E2E_FIXTURE_WAV unset — skipping pipe smoke")
+		t.Skip("HOWL_E2E_FIXTURE_WAV unset — skipping pipe smoke")
 	}
 	if _, err := os.Stat(wav); err != nil {
 		t.Skipf("fixture %s missing: %v", wav, err)
 	}
 
-	bin := buildVKBCLI(t)
-	out, stderr, rc := runBin(t, bin, []string{"VKB_LANGUAGE=en"}, "pipe", "--preset", "default", "--no-llm", wav)
+	bin := buildHowlCLI(t)
+	out, stderr, rc := runBin(t, bin, []string{"HOWL_LANGUAGE=en"}, "pipe", "--preset", "default", "--no-llm", wav)
 	if rc != 0 {
 		t.Fatalf("rc = %d (stderr: %s)", rc, stderr)
 	}

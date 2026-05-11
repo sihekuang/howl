@@ -16,7 +16,7 @@ import (
 	"github.com/voice-keyboard/core/internal/speaker"
 )
 
-// vkb_tse_extract_file runs Target Speaker Extraction on a WAV file
+// howl_tse_extract_file runs Target Speaker Extraction on a WAV file
 // using the user's enrolled speaker embedding. Used by the Mac app's
 // TSE Lab — a debug surface for verifying TSE works on arbitrary
 // inputs (e.g. a 2-speaker mixture saved from another tool).
@@ -26,29 +26,29 @@ import (
 // modelsDir:   directory containing tse_model.onnx and speaker_encoder.onnx.
 // voiceDir:    directory containing enrollment.emb (raw little-endian
 //              float32 array of length backend.EmbeddingDim, written by
-//              vkb_enroll_compute → speaker.SaveEmbedding).
+//              howl_enroll_compute → speaker.SaveEmbedding).
 // onnxLibPath: absolute path to libonnxruntime.dylib.
 //
 // Synchronous and self-contained: doesn't touch the engine's pipeline
 // state, so it's safe to call alongside an in-flight capture. The only
 // shared mutation is InitONNXRuntime (idempotent across the process).
 //
-// Returns 0 on success, -1 on failure. On failure, vkb_last_error
+// Returns 0 on success, -1 on failure. On failure, howl_last_error
 // returns a human-readable description (which the caller must free
-// via vkb_free_string).
+// via howl_free_string).
 //
-//export vkb_tse_extract_file
-func vkb_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath *C.char) C.int {
+//export howl_tse_extract_file
+func howl_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		// No engine — we can't surface the error via setLastError, but
 		// returning -1 is the most we can do. The caller should have
-		// vkb_init'd first; this matches the contract of every other
+		// howl_init'd first; this matches the contract of every other
 		// engine-touching export.
 		return -1
 	}
 	if inputPath == nil || outputPath == nil || modelsDir == nil || voiceDir == nil || onnxLibPath == nil {
-		e.setLastError("vkb_tse_extract_file: NULL argument")
+		e.setLastError("howl_tse_extract_file: NULL argument")
 		return -1
 	}
 
@@ -58,18 +58,18 @@ func vkb_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPat
 	voice := C.GoString(voiceDir)
 	onnxLib := C.GoString(onnxLibPath)
 	if in == "" || out == "" || models == "" || voice == "" || onnxLib == "" {
-		e.setLastError("vkb_tse_extract_file: empty argument")
+		e.setLastError("howl_tse_extract_file: empty argument")
 		return -1
 	}
 
 	if err := runTSEExtractFile(in, out, models, voice, onnxLib); err != nil {
-		e.setLastError("vkb_tse_extract_file: " + err.Error())
+		e.setLastError("howl_tse_extract_file: " + err.Error())
 		return -1
 	}
 	return 0
 }
 
-// runTSEExtractFile is the testable Go-level body of vkb_tse_extract_file.
+// runTSEExtractFile is the testable Go-level body of howl_tse_extract_file.
 // Splitting it out keeps the C ABI thin (string marshalling + error code)
 // and lets unit tests exercise the pipeline without going through cgo.
 func runTSEExtractFile(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath string) error {

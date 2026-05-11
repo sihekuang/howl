@@ -7,17 +7,17 @@
 #
 # Usage:
 #   ./run-whisper.sh
-#   VKB_LANGUAGE=fr ./run-whisper.sh
+#   HOWL_LANGUAGE=fr ./run-whisper.sh
 set -e
 
 cd "$(dirname "$0")"
 
-echo "Building vkb-cli..." >&2
+echo "Building howl..." >&2
 make -C core build-cli >&2
 
-DICT="${VKB_DICT:-}"
+DICT="${HOWL_DICT:-}"
 
-FIFO="$(mktemp -u /tmp/vkb-whisper.XXXXXX.fifo)"
+FIFO="$(mktemp -u /tmp/howl-whisper.XXXXXX.fifo)"
 mkfifo "$FIFO"
 cleanup() { rm -f "$FIFO"; }
 trap cleanup EXIT
@@ -26,7 +26,7 @@ ARGS="--live --no-llm --latency-report"
 [ -n "$DICT" ] && ARGS="$ARGS --dict $DICT"
 
 # shellcheck disable=SC2086
-core/build/vkb-cli pipe $ARGS < "$FIFO" &
+core/build/howl pipe $ARGS < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 

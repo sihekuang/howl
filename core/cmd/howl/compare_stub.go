@@ -8,6 +8,6 @@ import (
 )
 
 func runCompare(_ []string) int {
-	fmt.Fprintln(os.Stderr, "vkb-cli: 'compare' requires -tags whispercpp (whisper.cpp CGo)")
+	fmt.Fprintln(os.Stderr, "howl: 'compare' requires -tags whispercpp (whisper.cpp CGo)")
 	return 1
 }

@@ -8,7 +8,7 @@
 //	└── transcripts/{raw,dict,cleaned}.txt
 //
 // The manifest is the contract between writers (Go pipeline + recorder)
-// and readers (Mac Inspector, vkb-cli, replay engine). Versioned at
+// and readers (Mac Inspector, howl, replay engine). Versioned at
 // birth; new optional fields can be added without bumping `Version`,
 // structural changes bump.
 package sessions

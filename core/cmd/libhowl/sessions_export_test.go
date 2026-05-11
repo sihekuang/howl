@@ -18,7 +18,7 @@ func withTempSessionsStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	getEngine().sessions = sessions.NewStore(dir)
 	t.Cleanup(func() {
@@ -124,7 +124,7 @@ func TestExport_ClearSessions_RemovesAll(t *testing.T) {
 	writeSessionFolder(t, dir, "2026-05-02T14:30:45Z")
 	writeSessionFolder(t, dir, "2026-05-02T14:32:11Z")
 
-	if rc := vkb_clear_sessions(); rc != 0 {
+	if rc := howl_clear_sessions(); rc != 0 {
 		t.Fatalf("clear rc=%d", rc)
 	}
 	entries, _ := os.ReadDir(dir)
@@ -134,7 +134,7 @@ func TestExport_ClearSessions_RemovesAll(t *testing.T) {
 }
 
 func TestExport_AbiVersion_ReturnsExpectedSemver(t *testing.T) {
-	// vkb_init not required for the version probe — versioning is a
+	// howl_init not required for the version probe — versioning is a
 	// library-level constant.
 	got := abiVersionGo()
 	if got != "1.0.0" {

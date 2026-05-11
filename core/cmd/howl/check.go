@@ -23,7 +23,7 @@ func runCheck(args []string) int {
 	}
 
 	// 2. Whisper model
-	modelPath := os.Getenv("VKB_MODEL_PATH")
+	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
 		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
 	}

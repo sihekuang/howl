@@ -16,35 +16,35 @@ import (
 	"github.com/voice-keyboard/core/internal/replay"
 )
 
-// vkb_replay drives a Compare run. sourceID is the originating session
+// howl_replay drives a Compare run. sourceID is the originating session
 // id (folder name under /tmp/voicekeyboard/sessions/). presetsCSV is a
 // comma-separated list of preset names. Returns a JSON array of replay
-// Results — caller frees via vkb_free_string. NULL on engine-not-init.
+// Results — caller frees via howl_free_string. NULL on engine-not-init.
 //
 // Per-preset failures surface as Result.Error rather than aborting the
 // whole call. A top-level error (no session, bad CSV, etc.) returns a
 // JSON object {"error": "..."} so the Swift side can render it as a
 // banner above the result cards.
 //
-//export vkb_replay
-func vkb_replay(sourceIDC, presetsCSVC *C.char) *C.char {
+//export howl_replay
+func howl_replay(sourceIDC, presetsCSVC *C.char) *C.char {
 	e := getEngine()
 	if e == nil {
 		return nil
 	}
 	if sourceIDC == nil || presetsCSVC == nil {
-		return jsonErrorC("vkb_replay: nil argument")
+		return jsonErrorC("howl_replay: nil argument")
 	}
 	sourceID := C.GoString(sourceIDC)
 	presetsCSV := C.GoString(presetsCSVC)
 
 	names := splitCSV(presetsCSV)
 	if len(names) == 0 {
-		return jsonErrorC("vkb_replay: empty preset list")
+		return jsonErrorC("howl_replay: empty preset list")
 	}
 
 	if e.sessions == nil {
-		return jsonErrorC("vkb_replay: sessions store not initialized")
+		return jsonErrorC("howl_replay: sessions store not initialized")
 	}
 	sessionDir := e.sessions.SessionDir(sourceID)
 	wavPath := sessionDir + "/denoise.wav"
@@ -57,11 +57,11 @@ func vkb_replay(sourceIDC, presetsCSVC *C.char) *C.char {
 		Secrets:       secretsFromEngineCfg(e),
 	})
 	if err != nil {
-		return jsonErrorC("vkb_replay: " + err.Error())
+		return jsonErrorC("howl_replay: " + err.Error())
 	}
 	buf, err := json.Marshal(results)
 	if err != nil {
-		return jsonErrorC("vkb_replay: marshal: " + err.Error())
+		return jsonErrorC("howl_replay: marshal: " + err.Error())
 	}
 	return C.CString(string(buf))
 }

@@ -45,7 +45,7 @@ func runEnrollCompute(samples48k []float32, profileDir, encoderPath, onnxLibPath
 	// Backend selection lives in the runtime config; for now buildPipeline
 	// drives that. The enrollment path always uses the default backend
 	// — we don't yet have a path for the host (Swift) to pass a backend
-	// name through vkb_enroll_compute. When a second backend ships, that
+	// name through howl_enroll_compute. When a second backend ships, that
 	// API gains a backend parameter and this resolves it here.
 	backend := speaker.Default
 	emb, err := speaker.ComputeEmbedding(encoderPath, samples16k, backend.EmbeddingDim)

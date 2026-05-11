@@ -18,7 +18,7 @@ func runBackends(args []string) int {
 		return 2
 	}
 	if *modelsDir == "" {
-		*modelsDir = os.Getenv("VKB_MODELS_DIR")
+		*modelsDir = os.Getenv("HOWL_MODELS_DIR")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -47,7 +47,7 @@ func runBackends(args []string) int {
 	}
 	_ = w.Flush()
 	fmt.Println()
-	fmt.Println("* default; pass --tse-backend NAME to vkb-cli pipe to override.")
+	fmt.Println("* default; pass --tse-backend NAME to howl pipe to override.")
 	return 0
 }
 

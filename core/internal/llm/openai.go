@@ -152,7 +152,7 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 		MaxTokens: 1024,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] openai.Clean: sending model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
+	log.Printf("[howl] openai.Clean: sending model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
@@ -165,7 +165,7 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		log.Printf("[vkb] openai.Clean: FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] openai.Clean: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("openai: %w", err)
 	}
 	defer resp.Body.Close()
@@ -178,7 +178,7 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		return "", fmt.Errorf("openai: decode response: %w", err)
 	}
-	log.Printf("[vkb] openai.Clean: response in %v choices=%d", time.Since(t0), len(cr.Choices))
+	log.Printf("[howl] openai.Clean: response in %v choices=%d", time.Since(t0), len(cr.Choices))
 	if len(cr.Choices) == 0 {
 		return "", errors.New("openai: empty response (no choices)")
 	}
@@ -208,7 +208,7 @@ func (o *OpenAI) CleanStream(
 		MaxTokens: 1024,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] openai.CleanStream: starting model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
+	log.Printf("[howl] openai.CleanStream: starting model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
@@ -222,7 +222,7 @@ func (o *OpenAI) CleanStream(
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		log.Printf("[vkb] openai.CleanStream: FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] openai.CleanStream: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("openai: %w", err)
 	}
 	defer resp.Body.Close()
@@ -263,18 +263,18 @@ func (o *OpenAI) CleanStream(
 		if chunk != "" {
 			if firstDeltaAt.IsZero() {
 				firstDeltaAt = time.Now()
-				log.Printf("[vkb] openai.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
+				log.Printf("[howl] openai.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
 			}
 			b.WriteString(chunk)
 			onDelta(chunk)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Printf("[vkb] openai.CleanStream: scan FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] openai.CleanStream: scan FAILED after %v: %v", time.Since(t0), err)
 		return strings.TrimSpace(b.String()), fmt.Errorf("openai: scan: %w", err)
 	}
 	final := strings.TrimSpace(b.String())
-	log.Printf("[vkb] openai.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
+	log.Printf("[howl] openai.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
 	if final == "" {
 		return "", errors.New("openai: empty stream")
 	}

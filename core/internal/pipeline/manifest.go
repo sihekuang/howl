@@ -10,7 +10,7 @@ import (
 // stage's similarity if exposed via LastSimilarity().
 //
 // Single source of truth for the manifest schema both the live engine
-// (libvkb's capture goroutine) and the replay package use. Without a
+// (libhowl's capture goroutine) and the replay package use. Without a
 // shared writer, the schemas drifted — the replay path was missing
 // session.json entirely, so the Mac Compare view's right pane couldn't
 // load the replay's manifest after a Run.

@@ -12,7 +12,7 @@ import (
 
 func TestExport_ListPresets_IncludesBundled(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	got := presetListGo()
 	if got == "" {
@@ -29,7 +29,7 @@ func TestExport_ListPresets_IncludesBundled(t *testing.T) {
 
 func TestExport_GetPreset_DefaultRoundTrips(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	got := presetGetGo("default")
 	if got == "" {
@@ -46,7 +46,7 @@ func TestExport_GetPreset_DefaultRoundTrips(t *testing.T) {
 
 func TestExport_GetPreset_UnknownReturnsEmpty(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	got := presetGetGo("nope")
 	if got != "" {
@@ -56,11 +56,11 @@ func TestExport_GetPreset_UnknownReturnsEmpty(t *testing.T) {
 
 func TestExport_SavePreset_RoundTrips(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	dir := t.TempDir()
 	// Override the user dir so we don't pollute the real ~/Library location.
-	t.Setenv("VKB_PRESETS_USER_DIR", dir)
+	t.Setenv("HOWL_PRESETS_USER_DIR", dir)
 
 	body := `{"name":"my-test","description":"x","frame_stages":[],"chunk_stages":[],"transcribe":{"model_size":"small"},"llm":{"provider":"anthropic"}}`
 	if rc := presetSaveGo("my-test", "x", body); rc != 0 {
@@ -74,7 +74,7 @@ func TestExport_SavePreset_RoundTrips(t *testing.T) {
 
 func TestExport_DeletePreset_BundledNameRejected(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	if rc := presetDeleteGo("default"); rc != 5 {
 		t.Errorf("rc = %d, want 5 (reserved name)", rc)

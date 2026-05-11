@@ -76,7 +76,7 @@ func TestManifest_ReadMissing_ReturnsSentinel(t *testing.T) {
 func TestManifest_WriteProducesCanonicalJSON(t *testing.T) {
 	// Pin one specific manifest's serialized form so any change to
 	// JSON tags (which are this package's effective ABI to Swift +
-	// vkb-cli readers) breaks this test loudly. Update the want
+	// howl readers) breaks this test loudly. Update the want
 	// string ONLY when intentionally evolving the schema.
 	dir := t.TempDir()
 	sim := float32(0.75)

@@ -49,7 +49,7 @@ var LMStudioProvider = &Provider{
 				return nil, errors.New("lmstudio: model not specified and none available (load a model in LM Studio's UI, or pass --llm-model)")
 			}
 			opts.Model = models[0]
-			log.Printf("[vkb] lmstudio: auto-detected model %q (use --llm-model to override; %d available)", opts.Model, len(models))
+			log.Printf("[howl] lmstudio: auto-detected model %q (use --llm-model to override; %d available)", opts.Model, len(models))
 		}
 		timeout := opts.Timeout
 		if timeout == 0 {
@@ -82,7 +82,7 @@ type lmStudioModelsResponse struct {
 
 // lmStudioListModels queries /v1/models and returns model ids in the
 // order LM Studio returned them. Used by the factory's auto-detect
-// path and by Provider.LocalModels for `vkb-cli providers --models`.
+// path and by Provider.LocalModels for `howl providers --models`.
 func lmStudioListModels(baseURL string, timeout time.Duration) ([]string, error) {
 	if baseURL == "" {
 		baseURL = lmStudioDefaultBaseURL

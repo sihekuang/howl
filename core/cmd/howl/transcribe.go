@@ -19,7 +19,7 @@ func runTranscribe(args []string) int {
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: vkb-cli transcribe FILE.wav")
+		fmt.Fprintln(os.Stderr, "usage: howl transcribe FILE.wav")
 		return 2
 	}
 	path := rest[0]
@@ -39,11 +39,11 @@ func runTranscribe(args []string) int {
 		return 1
 	}
 
-	modelPath := os.Getenv("VKB_MODEL_PATH")
+	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
 		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
 	}
-	lang := os.Getenv("VKB_LANGUAGE")
+	lang := os.Getenv("HOWL_LANGUAGE")
 	if lang == "" {
 		lang = "en"
 	}

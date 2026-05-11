@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — record N seconds from the mic and run the full vkb pipeline
+# run.sh — record N seconds from the mic and run the full Howl pipeline
 # end-to-end (mic → denoise → decimate → whisper → dict → LLM cleanup).
 #
 # Post-refactor (audio capture moved to Swift in production), this
@@ -10,15 +10,15 @@
 # Usage:
 #   ./run.sh             # records 4 seconds (default)
 #   ./run.sh 6           # records 6 seconds
-#   ./run.sh --keep-wav  # also save the captured audio to /tmp/vkb-test.wav
-#   VKB_DICT="MCP,WebRTC,Wispr" ./run.sh   # override custom dict
+#   ./run.sh --keep-wav  # also save the captured audio to /tmp/howl-test.wav
+#   HOWL_DICT="MCP,WebRTC,Wispr" ./run.sh   # override custom dict
 #
 # Reads ANTHROPIC_API_KEY from ./.env (KEY=VALUE format).
 # Cleaned text goes to stdout; progress and errors to stderr.
 # Pipe stdout safely:  ./run.sh | pbcopy
 #
 # Tail the Go-side trace while running, in another terminal:
-#   tail -f /tmp/vkb.log
+#   tail -f /tmp/howl.log
 set -e
 
 KEEP_WAV=0
@@ -31,7 +31,7 @@ for arg in "$@"; do
   esac
 done
 
-DICT="${VKB_DICT:-MCP,WebRTC}"
+DICT="${HOWL_DICT:-MCP,WebRTC}"
 
 cd "$(dirname "$0")"
 
@@ -48,8 +48,8 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
 fi
 
 # Build CLI if missing
-if [ ! -x core/build/vkb-cli ]; then
-  echo "Building vkb-cli..." >&2
+if [ ! -x core/build/howl ]; then
+  echo "Building howl..." >&2
   make -C core build-cli >&2
 fi
 
@@ -57,12 +57,12 @@ fi
 # the user can replay the same audio against the pipeline later. The
 # default path is the simpler one-step --live mode.
 if [ "$KEEP_WAV" = "1" ]; then
-  WAV="/tmp/vkb-test.wav"
+  WAV="/tmp/howl-test.wav"
   echo "Recording $SECS seconds to $WAV. Speak now." >&2
-  core/build/vkb-cli capture --secs "$SECS" --out "$WAV"
+  core/build/howl capture --secs "$SECS" --out "$WAV"
   echo "" >&2
   echo "Cleaned output:" >&2
-  core/build/vkb-cli pipe --dict "$DICT" "$WAV"
+  core/build/howl pipe --dict "$DICT" "$WAV"
   exit $?
 fi
 
@@ -70,4 +70,4 @@ fi
 # full pipeline; it stops on Enter (newline on stdin). We deliver that
 # newline after $SECS seconds so the script honors the duration arg.
 echo "Recording $SECS seconds via --live. Speak now." >&2
-( sleep "$SECS"; printf '\n' ) | core/build/vkb-cli pipe --dict "$DICT" --live
+( sleep "$SECS"; printf '\n' ) | core/build/howl pipe --dict "$DICT" --live

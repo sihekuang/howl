@@ -70,12 +70,12 @@ func LoadUserAt(dir string) ([]Preset, error) {
 		path := filepath.Join(dir, ent.Name())
 		buf, err := os.ReadFile(path)
 		if err != nil {
-			log.Printf("[vkb] presets: skipping %s: %v", path, err)
+			log.Printf("[howl] presets: skipping %s: %v", path, err)
 			continue
 		}
 		var p Preset
 		if err := json.Unmarshal(buf, &p); err != nil {
-			log.Printf("[vkb] presets: skipping %s: parse: %v", path, err)
+			log.Printf("[howl] presets: skipping %s: parse: %v", path, err)
 			continue
 		}
 		out = append(out, p)
@@ -114,12 +114,12 @@ func Load() ([]Preset, error) {
 	}
 	dir, err := defaultUserDir()
 	if err != nil {
-		log.Printf("[vkb] presets.Load: no user dir (%v); bundled only", err)
+		log.Printf("[howl] presets.Load: no user dir (%v); bundled only", err)
 		return all, nil
 	}
 	user, err := LoadUserAt(dir)
 	if err != nil {
-		log.Printf("[vkb] presets.Load: LoadUserAt(%s): %v; bundled only", dir, err)
+		log.Printf("[howl] presets.Load: LoadUserAt(%s): %v; bundled only", dir, err)
 		return all, nil
 	}
 	// Skip user presets whose name collides with a bundled name —
@@ -130,7 +130,7 @@ func Load() ([]Preset, error) {
 	}
 	for _, p := range user {
 		if seen[p.Name] {
-			log.Printf("[vkb] presets.Load: skipping user preset %q (collides with bundled)", p.Name)
+			log.Printf("[howl] presets.Load: skipping user preset %q (collides with bundled)", p.Name)
 			continue
 		}
 		all = append(all, p)
@@ -141,10 +141,10 @@ func Load() ([]Preset, error) {
 // defaultUserDir returns the on-disk location for user presets. Creates
 // it if missing so the first save succeeds.
 //
-// Honors VKB_PRESETS_USER_DIR for tests so they can route writes away
+// Honors HOWL_PRESETS_USER_DIR for tests so they can route writes away
 // from the real ~/Library location.
 func defaultUserDir() (string, error) {
-	if dir := os.Getenv("VKB_PRESETS_USER_DIR"); dir != "" {
+	if dir := os.Getenv("HOWL_PRESETS_USER_DIR"); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", err
 		}

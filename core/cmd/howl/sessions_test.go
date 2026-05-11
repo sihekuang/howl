@@ -54,7 +54,7 @@ func TestSessions_UnknownAction(t *testing.T) {
 
 func TestSessions_List_EmptyTable(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	out, rc := captureStdout(t, func() int { return runSessions([]string{"list"}) })
 	if rc != 0 {
 		t.Fatalf("rc = %d", rc)
@@ -66,7 +66,7 @@ func TestSessions_List_EmptyTable(t *testing.T) {
 
 func TestSessions_List_EmptyJSON(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	out, rc := captureStdout(t, func() int { return runSessions([]string{"list", "--json"}) })
 	if rc != 0 {
 		t.Fatalf("rc = %d", rc)
@@ -79,7 +79,7 @@ func TestSessions_List_EmptyJSON(t *testing.T) {
 
 func TestSessions_List_WithFixture_JSON(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T10:00:00Z")
 
 	out, rc := captureStdout(t, func() int { return runSessions([]string{"list", "--json"}) })
@@ -97,7 +97,7 @@ func TestSessions_List_WithFixture_JSON(t *testing.T) {
 
 func TestSessions_List_TableShowsCleanedPreview(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T10:30:00Z")
 
 	out, rc := captureStdout(t, func() int { return runSessions([]string{"list"}) })
@@ -111,7 +111,7 @@ func TestSessions_List_TableShowsCleanedPreview(t *testing.T) {
 
 func TestSessions_Show_UnknownID(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	if rc := runSessions([]string{"show", "no-such-id"}); rc == 0 {
 		t.Errorf("expected non-zero rc")
 	}
@@ -119,7 +119,7 @@ func TestSessions_Show_UnknownID(t *testing.T) {
 
 func TestSessions_Show_KnownID_Human(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T11:00:00Z")
 	out, rc := captureStdout(t, func() int {
 		return runSessions([]string{"show", "2026-05-03T11:00:00Z"})
@@ -134,7 +134,7 @@ func TestSessions_Show_KnownID_Human(t *testing.T) {
 
 func TestSessions_Show_KnownID_JSON(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T11:30:00Z")
 	out, rc := captureStdout(t, func() int {
 		return runSessions([]string{"show", "--json", "2026-05-03T11:30:00Z"})
@@ -153,7 +153,7 @@ func TestSessions_Show_KnownID_JSON(t *testing.T) {
 
 func TestSessions_Delete_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T12:00:00Z")
 	if rc := runSessions([]string{"delete", "2026-05-03T12:00:00Z"}); rc != 0 {
 		t.Fatalf("delete rc = %d", rc)
@@ -165,7 +165,7 @@ func TestSessions_Delete_RoundTrip(t *testing.T) {
 
 func TestSessions_Clear_RequiresForce(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("VKB_SESSIONS_DIR", dir)
+	t.Setenv("HOWL_SESSIONS_DIR", dir)
 	writeFixtureSession(t, dir, "2026-05-03T13:00:00Z")
 
 	if rc := runSessions([]string{"clear"}); rc == 0 {

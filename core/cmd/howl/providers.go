@@ -57,7 +57,7 @@ func runProviders(args []string) int {
 	}
 	_ = w.Flush()
 	fmt.Println()
-	fmt.Println("* default; pass --llm-provider NAME to vkb-cli pipe to override.")
+	fmt.Println("* default; pass --llm-provider NAME to howl pipe to override.")
 	if !*showModels {
 		fmt.Println("Pass --models to also list each provider's available models.")
 	}

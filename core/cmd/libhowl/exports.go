@@ -27,7 +27,7 @@ import (
 )
 
 // openSessionRecorder constructs a recorder.Session for the next capture
-// cycle when DeveloperMode is on. Called from vkb_start_capture before
+// cycle when DeveloperMode is on. Called from howl_start_capture before
 // the capture goroutine is launched, so the engine is single-threaded
 // at this point and lock-free access to e.cfg / e.sessions is fine.
 // The capture goroutine's defer reads e.activeRecorder, writes the
@@ -41,7 +41,7 @@ func openSessionRecorder(e *engine) error {
 		return nil
 	}
 	if err := e.sessions.Prune(10); err != nil {
-		log.Printf("[vkb] openSessionRecorder: prune failed (continuing): %v", err)
+		log.Printf("[howl] openSessionRecorder: prune failed (continuing): %v", err)
 	}
 	id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 	dir := e.sessions.SessionDir(id)
@@ -51,7 +51,7 @@ func openSessionRecorder(e *engine) error {
 		Transcripts: true,
 	})
 	if err != nil {
-		log.Printf("[vkb] openSessionRecorder: recorder.Open failed (continuing without capture): %v", err)
+		log.Printf("[howl] openSessionRecorder: recorder.Open failed (continuing without capture): %v", err)
 		return err
 	}
 	e.activeSessionID = id
@@ -60,23 +60,23 @@ func openSessionRecorder(e *engine) error {
 	return nil
 }
 
-// Mirror Go logs to /tmp/vkb.log so the user can `tail -f` regardless of
+// Mirror Go logs to /tmp/howl.log so the user can `tail -f` regardless of
 // how the app was launched (stderr is invisible when launched from
 // Finder / LaunchServices). Best-effort: if file open fails, just keep
 // stderr.
 func init() {
-	if f, err := os.OpenFile("/tmp/vkb.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+	if f, err := os.OpenFile("/tmp/howl.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.Printf("[vkb] libvkb loaded pid=%d", os.Getpid())
+	log.Printf("[howl] libhowl loaded pid=%d", os.Getpid())
 }
 
-// vkb_init initializes the engine. Idempotent: calling it again on an
+// howl_init initializes the engine. Idempotent: calling it again on an
 // already-initialized engine is a no-op and returns 0.
 //
-//export vkb_init
-func vkb_init() C.int {
+//export howl_init
+func howl_init() C.int {
 	if getEngine() != nil {
 		return 0
 	}
@@ -87,7 +87,7 @@ func vkb_init() C.int {
 	return 0
 }
 
-// vkb_configure parses a JSON-encoded Config and rebuilds the pipeline.
+// howl_configure parses a JSON-encoded Config and rebuilds the pipeline.
 // Returns 0 on success. Non-zero error codes:
 //
 //	1 = engine not initialized
@@ -95,11 +95,11 @@ func vkb_init() C.int {
 //	3 = pipeline build error
 //	4 = busy: a capture is currently in flight
 //
-// On any non-zero return, vkb_last_error provides a human-readable
-// message (which the caller must free via vkb_free_string).
+// On any non-zero return, howl_last_error provides a human-readable
+// message (which the caller must free via howl_free_string).
 //
-//export vkb_configure
-func vkb_configure(jsonC *C.char) C.int {
+//export howl_configure
+func howl_configure(jsonC *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
@@ -107,7 +107,7 @@ func vkb_configure(jsonC *C.char) C.int {
 	gostr := C.GoString(jsonC)
 	var cfg config.Config
 	if err := json.Unmarshal([]byte(gostr), &cfg); err != nil {
-		e.setLastError("vkb_configure: " + err.Error())
+		e.setLastError("howl_configure: " + err.Error())
 		return 2
 	}
 	config.WithDefaults(&cfg)
@@ -115,7 +115,7 @@ func vkb_configure(jsonC *C.char) C.int {
 	e.mu.Lock()
 	if e.pushCh != nil {
 		e.mu.Unlock()
-		e.setLastError("vkb_configure: cannot reconfigure while a capture is in flight")
+		e.setLastError("howl_configure: cannot reconfigure while a capture is in flight")
 		return 4
 	}
 	e.cfg = cfg
@@ -124,7 +124,7 @@ func vkb_configure(jsonC *C.char) C.int {
 	// Build the new pipeline first; if it fails, the old one stays in place.
 	p, err := e.buildPipeline()
 	if err != nil {
-		e.setLastError("vkb_configure: " + err.Error())
+		e.setLastError("howl_configure: " + err.Error())
 		return 3
 	}
 	e.mu.Lock()
@@ -137,30 +137,30 @@ func vkb_configure(jsonC *C.char) C.int {
 	return 0
 }
 
-// vkb_start_capture begins a single-utterance push-driven capture
+// howl_start_capture begins a single-utterance push-driven capture
 // cycle. Returns 0 on successful start, 1 if the engine is not
 // initialized or has no pipeline configured, and 2 if a capture is
-// already in flight. The host (Swift app or vkb-cli) is then expected
-// to feed Float32 mono 48 kHz frames via vkb_push_audio and call
-// vkb_stop_capture to signal end-of-input. Result/error events are
-// delivered asynchronously via vkb_poll_event.
+// already in flight. The host (Swift app or howl) is then expected
+// to feed Float32 mono 48 kHz frames via howl_push_audio and call
+// howl_stop_capture to signal end-of-input. Result/error events are
+// delivered asynchronously via howl_poll_event.
 //
-//export vkb_start_capture
-func vkb_start_capture() C.int {
+//export howl_start_capture
+func howl_start_capture() C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
 	}
-	log.Printf("[vkb] vkb_start_capture: entering")
+	log.Printf("[howl] howl_start_capture: entering")
 	e.mu.Lock()
 	if e.pipeline == nil {
 		e.mu.Unlock()
-		log.Printf("[vkb] vkb_start_capture: REJECTED — pipeline is nil")
+		log.Printf("[howl] howl_start_capture: REJECTED — pipeline is nil")
 		return 1
 	}
 	if e.pushCh != nil {
 		e.mu.Unlock()
-		log.Printf("[vkb] vkb_start_capture: REJECTED — capture already in flight")
+		log.Printf("[howl] howl_start_capture: REJECTED — capture already in flight")
 		return 2
 	}
 	pushCh := make(chan []float32, pushBufferFrames)
@@ -182,7 +182,7 @@ func vkb_start_capture() C.int {
 	// Wrap ctx with the per-preset timeout. The timeout-cancel is
 	// captured by the capture goroutine's defer (below) so it's always
 	// cleaned up when the goroutine exits — independently of whether
-	// vkb_cancel_capture fired the parent cancel first.
+	// howl_cancel_capture fired the parent cancel first.
 	var cancelTimeout context.CancelFunc
 	if timeout > 0 {
 		ctx, cancelTimeout = context.WithTimeout(ctx, timeout)
@@ -232,18 +232,18 @@ func vkb_start_capture() C.int {
 	}
 
 	go func() {
-		log.Printf("[vkb] capture goroutine: started")
+		log.Printf("[howl] capture goroutine: started")
 		defer func() {
 			if cancelTimeout != nil {
 				cancelTimeout()
 			}
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("panic: %v", r)
-				log.Printf("[vkb] capture goroutine: PANIC %s", msg)
+				log.Printf("[howl] capture goroutine: PANIC %s", msg)
 				e.events <- event{Kind: "error", Msg: msg}
 			}
 			// Snapshot session metadata under the lock so we don't race with
-			// a concurrent vkb_configure swapping it out.
+			// a concurrent howl_configure swapping it out.
 			e.mu.Lock()
 			sessionID := e.activeSessionID
 			sessionDir := e.activeSessionDir
@@ -265,9 +265,9 @@ func vkb_start_capture() C.int {
 			// so the live engine and the replay package share one writer.
 			if sessionID != "" && sessionDir != "" {
 				if err := pipe.WriteSessionManifest(sessionDir, sessionID, "default"); err != nil {
-					log.Printf("[vkb] capture goroutine: manifest write failed: %v", err)
+					log.Printf("[howl] capture goroutine: manifest write failed: %v", err)
 				} else {
-					log.Printf("[vkb] capture goroutine: wrote manifest %s/session.json", sessionDir)
+					log.Printf("[howl] capture goroutine: wrote manifest %s/session.json", sessionDir)
 				}
 			}
 
@@ -276,11 +276,11 @@ func vkb_start_capture() C.int {
 			// bytes of audio even though the file has plenty.
 			if rec != nil {
 				if err := rec.Close(); err != nil {
-					log.Printf("[vkb] capture goroutine: recorder.Close failed: %v", err)
+					log.Printf("[howl] capture goroutine: recorder.Close failed: %v", err)
 				}
 			}
 
-			log.Printf("[vkb] capture goroutine: exited (pushes=%d drops=%d)", pushes, drops)
+			log.Printf("[howl] capture goroutine: exited (pushes=%d drops=%d)", pushes, drops)
 		}()
 		res, err := pipe.Run(ctx, pushCh)
 		// Terminal events (error/warning/result) MUST NOT be dropped:
@@ -289,7 +289,7 @@ func vkb_start_capture() C.int {
 		// is over and the channel will drain quickly.
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				log.Printf("[vkb] capture goroutine: pipeline timed out (>%s)", timeout)
+				log.Printf("[howl] capture goroutine: pipeline timed out (>%s)", timeout)
 				e.events <- event{Kind: "warning", Msg: fmt.Sprintf("pipeline timed out after %s", timeout)}
 				// pipe.Run returns (Result{}, err) on context error, not partial
 				// state. Emit an empty result so Swift transitions back to idle.
@@ -297,26 +297,26 @@ func vkb_start_capture() C.int {
 				return
 			}
 			if errors.Is(err, context.Canceled) {
-				log.Printf("[vkb] capture goroutine: pipeline cancelled")
+				log.Printf("[howl] capture goroutine: pipeline cancelled")
 				e.events <- event{Kind: "cancelled"}
 				return
 			}
-			log.Printf("[vkb] capture goroutine: pipe.Run error: %v", err)
+			log.Printf("[howl] capture goroutine: pipe.Run error: %v", err)
 			e.events <- event{Kind: "error", Msg: err.Error()}
 			return
 		}
 		if res.LLMError != nil {
-			log.Printf("[vkb] capture goroutine: emitting warning + fallback result")
+			log.Printf("[howl] capture goroutine: emitting warning + fallback result")
 			e.events <- event{Kind: "warning", Msg: "llm: " + res.LLMError.Error()}
 		}
-		log.Printf("[vkb] capture goroutine: emitting result (len=%d)", len(res.Cleaned))
+		log.Printf("[howl] capture goroutine: emitting result (len=%d)", len(res.Cleaned))
 		e.events <- event{Kind: "result", Text: res.Cleaned}
-		log.Printf("[vkb] capture goroutine: result event delivered")
+		log.Printf("[howl] capture goroutine: result event delivered")
 	}()
 	return 0
 }
 
-// vkb_push_audio enqueues a chunk of Float32 mono 48 kHz audio for the
+// howl_push_audio enqueues a chunk of Float32 mono 48 kHz audio for the
 // in-flight capture. Non-blocking: if the internal buffer is full the
 // frame is dropped and a single "audio buffer full, dropping frames"
 // warning is emitted per cycle (audio threads must not block).
@@ -325,10 +325,10 @@ func vkb_start_capture() C.int {
 //
 //	0 = enqueued (or dropped, but see warning event)
 //	1 = engine not initialized
-//	2 = no capture in flight (must call vkb_start_capture first)
+//	2 = no capture in flight (must call howl_start_capture first)
 //
-//export vkb_push_audio
-func vkb_push_audio(samples *C.float, count C.int) C.int {
+//export howl_push_audio
+func howl_push_audio(samples *C.float, count C.int) C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
@@ -361,7 +361,7 @@ func vkb_push_audio(samples *C.float, count C.int) C.int {
 		pc := e.pushCount
 		e.mu.Unlock()
 		if pc%30 == 1 {
-			log.Printf("[vkb] push_audio: heartbeat n=%d total=%d", n, pc)
+			log.Printf("[howl] push_audio: heartbeat n=%d total=%d", n, pc)
 		}
 	default:
 		e.mu.Lock()
@@ -378,21 +378,21 @@ func vkb_push_audio(samples *C.float, count C.int) C.int {
 	return 0
 }
 
-// vkb_stop_capture signals end-of-input for the in-flight capture by
+// howl_stop_capture signals end-of-input for the in-flight capture by
 // closing the audio push channel. The pipeline goroutine drains
 // remaining frames, runs transcribe/clean, and emits a result event.
 // Idempotent: safe to call when no capture is active. Returns 1 if
 // the engine is not initialized.
 //
-//export vkb_stop_capture
-func vkb_stop_capture() C.int {
+//export howl_stop_capture
+func howl_stop_capture() C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	log.Printf("[vkb] vkb_stop_capture: closing push channel")
+	log.Printf("[howl] howl_stop_capture: closing push channel")
 	if e.pushCh != nil {
 		close(e.pushCh)
 		e.pushCh = nil
@@ -403,13 +403,13 @@ func vkb_stop_capture() C.int {
 	return 0
 }
 
-// vkb_cancel_capture aborts the in-flight capture, drops any buffered
+// howl_cancel_capture aborts the in-flight capture, drops any buffered
 // audio, and emits a "cancelled" event instead of a "result". Idempotent:
 // safe to call when no capture is active. Returns 1 if the engine is
 // not initialized, 0 otherwise.
 //
-//export vkb_cancel_capture
-func vkb_cancel_capture() C.int {
+//export howl_cancel_capture
+func howl_cancel_capture() C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
@@ -423,18 +423,18 @@ func vkb_cancel_capture() C.int {
 	e.cancel = nil
 	e.mu.Unlock()
 	if cancel != nil {
-		log.Printf("[vkb] vkb_cancel_capture: cancelling in-flight pipeline")
+		log.Printf("[howl] howl_cancel_capture: cancelling in-flight pipeline")
 		cancel()
 	}
 	return 0
 }
 
-// vkb_poll_event returns a JSON-encoded event string, or NULL if no
+// howl_poll_event returns a JSON-encoded event string, or NULL if no
 // event is queued. The returned string is heap-allocated; the caller
-// must free it via vkb_free_string.
+// must free it via howl_free_string.
 //
-//export vkb_poll_event
-func vkb_poll_event() *C.char {
+//export howl_poll_event
+func howl_poll_event() *C.char {
 	e := getEngine()
 	if e == nil {
 		return nil
@@ -451,16 +451,16 @@ func vkb_poll_event() *C.char {
 	}
 }
 
-// vkb_destroy tears down the engine. Idempotent: calling on an
+// howl_destroy tears down the engine. Idempotent: calling on an
 // already-destroyed engine is a no-op.
 //
-//export vkb_destroy
-func vkb_destroy() {
+//export howl_destroy
+func howl_destroy() {
 	e := getEngine()
 	if e == nil {
 		return
 	}
-	_ = vkb_stop_capture()
+	_ = howl_stop_capture()
 	e.mu.Lock()
 	pipe := e.pipeline
 	e.pipeline = nil
@@ -471,12 +471,12 @@ func vkb_destroy() {
 	setEngine(nil)
 }
 
-// vkb_last_error returns the last error message as a C string, or NULL
+// howl_last_error returns the last error message as a C string, or NULL
 // if no error is set. The returned string is heap-allocated; the caller
-// must free it via vkb_free_string.
+// must free it via howl_free_string.
 //
-//export vkb_last_error
-func vkb_last_error() *C.char {
+//export howl_last_error
+func howl_last_error() *C.char {
 	e := getEngine()
 	if e == nil {
 		return nil
@@ -489,17 +489,17 @@ func vkb_last_error() *C.char {
 	return C.CString(e.lastErr)
 }
 
-// vkb_free_string frees a C string previously returned by
-// vkb_poll_event or vkb_last_error. Passing NULL is a no-op.
+// howl_free_string frees a C string previously returned by
+// howl_poll_event or howl_last_error. Passing NULL is a no-op.
 //
-//export vkb_free_string
-func vkb_free_string(s *C.char) {
+//export howl_free_string
+func howl_free_string(s *C.char) {
 	if s != nil {
 		C.free(unsafe.Pointer(s))
 	}
 }
 
-// vkb_enroll_compute computes a speaker embedding from a single recorded
+// howl_enroll_compute computes a speaker embedding from a single recorded
 // buffer and writes enrollment.wav, enrollment.emb, and speaker.json
 // atomically to profileDir.
 //
@@ -517,21 +517,21 @@ func vkb_free_string(s *C.char) {
 //	1 = engine not initialized
 //	5 = invalid argument (count <= 0, profileDir empty, sr != 48000,
 //	    speaker_encoder_path / onnx_lib_path not configured)
-//	6 = compute failed (see vkb_last_error)
+//	6 = compute failed (see howl_last_error)
 //
-//export vkb_enroll_compute
-func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profileDirC *C.char) C.int {
+//export howl_enroll_compute
+func howl_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profileDirC *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
 	}
 	if count <= 0 || sampleRate != 48000 || profileDirC == nil {
-		e.setLastError("vkb_enroll_compute: invalid argument")
+		e.setLastError("howl_enroll_compute: invalid argument")
 		return 5
 	}
 	profileDir := C.GoString(profileDirC)
 	if profileDir == "" {
-		e.setLastError("vkb_enroll_compute: empty profile dir")
+		e.setLastError("howl_enroll_compute: empty profile dir")
 		return 5
 	}
 
@@ -540,7 +540,7 @@ func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profile
 	onnxLibPath := e.cfg.ONNXLibPath
 	e.mu.Unlock()
 	if encoderPath == "" || onnxLibPath == "" {
-		e.setLastError("vkb_enroll_compute: speaker_encoder_path or onnx_lib_path not configured")
+		e.setLastError("howl_enroll_compute: speaker_encoder_path or onnx_lib_path not configured")
 		return 5
 	}
 
@@ -552,30 +552,30 @@ func vkb_enroll_compute(samples *C.float, count C.int, sampleRate C.int, profile
 		buf[i] = float32(cSlice[i])
 	}
 
-	log.Printf("[vkb] vkb_enroll_compute: count=%d sr=%d profileDir=%q", n, int(sampleRate), profileDir)
+	log.Printf("[howl] howl_enroll_compute: count=%d sr=%d profileDir=%q", n, int(sampleRate), profileDir)
 	if err := runEnrollCompute(buf, profileDir, encoderPath, onnxLibPath); err != nil {
-		e.setLastError("vkb_enroll_compute: " + err.Error())
-		log.Printf("[vkb] vkb_enroll_compute: FAILED %v", err)
+		e.setLastError("howl_enroll_compute: " + err.Error())
+		log.Printf("[howl] howl_enroll_compute: FAILED %v", err)
 		return 6
 	}
-	log.Printf("[vkb] vkb_enroll_compute: success")
+	log.Printf("[howl] howl_enroll_compute: success")
 	return 0
 }
 
-// vkb_list_sessions returns a JSON array of session manifests, newest
+// howl_list_sessions returns a JSON array of session manifests, newest
 // first. Returns NULL on engine-not-initialized; an empty array "[]"
 // on no sessions. The returned C string is heap-allocated; the caller
-// must free it via vkb_free_string.
+// must free it via howl_free_string.
 //
-//export vkb_list_sessions
-func vkb_list_sessions() *C.char {
+//export howl_list_sessions
+func howl_list_sessions() *C.char {
 	e := getEngine()
 	if e == nil || e.sessions == nil {
 		return nil
 	}
 	manifests, err := e.sessions.List()
 	if err != nil {
-		e.setLastError("vkb_list_sessions: " + err.Error())
+		e.setLastError("howl_list_sessions: " + err.Error())
 		return nil
 	}
 	if manifests == nil {
@@ -583,57 +583,57 @@ func vkb_list_sessions() *C.char {
 	}
 	buf, err := json.Marshal(manifests)
 	if err != nil {
-		e.setLastError("vkb_list_sessions: marshal: " + err.Error())
+		e.setLastError("howl_list_sessions: marshal: " + err.Error())
 		return nil
 	}
 	return C.CString(string(buf))
 }
 
-// vkb_get_session returns a JSON-encoded Manifest for the given id, or
+// howl_get_session returns a JSON-encoded Manifest for the given id, or
 // NULL if the session does not exist or its manifest is unreadable.
-// Caller frees via vkb_free_string.
+// Caller frees via howl_free_string.
 //
-//export vkb_get_session
-func vkb_get_session(idC *C.char) *C.char {
+//export howl_get_session
+func howl_get_session(idC *C.char) *C.char {
 	e := getEngine()
 	if e == nil || e.sessions == nil {
 		return nil
 	}
 	if idC == nil {
-		e.setLastError("vkb_get_session: id is NULL")
+		e.setLastError("howl_get_session: id is NULL")
 		return nil
 	}
 	id := C.GoString(idC)
 	m, err := e.sessions.Get(id)
 	if err != nil {
-		e.setLastError("vkb_get_session: " + err.Error())
+		e.setLastError("howl_get_session: " + err.Error())
 		return nil
 	}
 	buf, err := json.Marshal(m)
 	if err != nil {
-		e.setLastError("vkb_get_session: marshal: " + err.Error())
+		e.setLastError("howl_get_session: marshal: " + err.Error())
 		return nil
 	}
 	return C.CString(string(buf))
 }
 
-// vkb_delete_session removes a single session folder. Idempotent.
+// howl_delete_session removes a single session folder. Idempotent.
 // Returns 0 on success, 1 if the engine is not initialized, 5 on
 // invalid id (path traversal etc.), 6 on filesystem error.
 //
-//export vkb_delete_session
-func vkb_delete_session(idC *C.char) C.int {
+//export howl_delete_session
+func howl_delete_session(idC *C.char) C.int {
 	e := getEngine()
 	if e == nil || e.sessions == nil {
 		return 1
 	}
 	if idC == nil {
-		e.setLastError("vkb_delete_session: id is NULL")
+		e.setLastError("howl_delete_session: id is NULL")
 		return 5
 	}
 	id := C.GoString(idC)
 	if err := e.sessions.Delete(id); err != nil {
-		e.setLastError("vkb_delete_session: " + err.Error())
+		e.setLastError("howl_delete_session: " + err.Error())
 		// Distinguish bad-id (validation) from disk error.
 		if errors.Is(err, sessions.ErrInvalidSessionID) {
 			return 5
@@ -643,53 +643,53 @@ func vkb_delete_session(idC *C.char) C.int {
 	return 0
 }
 
-// vkb_clear_sessions removes every session folder. Returns 0 on
+// howl_clear_sessions removes every session folder. Returns 0 on
 // success, 1 if engine not initialized, 6 on filesystem error.
 //
-//export vkb_clear_sessions
-func vkb_clear_sessions() C.int {
+//export howl_clear_sessions
+func howl_clear_sessions() C.int {
 	e := getEngine()
 	if e == nil || e.sessions == nil {
 		return 1
 	}
 	if err := e.sessions.Clear(); err != nil {
-		e.setLastError("vkb_clear_sessions: " + err.Error())
+		e.setLastError("howl_clear_sessions: " + err.Error())
 		return 6
 	}
 	return 0
 }
 
-// abiVersion is the semver of the libvkb C ABI surface. Bumped when:
+// abiVersion is the semver of the libhowl C ABI surface. Bumped when:
 //   - major: a function signature changes, or one is removed
 //   - minor: a new function is added (additive, back-compat)
 //   - patch: a fix that doesn't change the surface (rare)
 //
-// The Mac app reads this via vkb_abi_version() at startup and asserts
+// The Mac app reads this via howl_abi_version() at startup and asserts
 // it matches the major version it was built against. This catches
 // dev-build vs. shipped-dylib mismatches that would otherwise crash
 // at first call to the new function.
 const abiVersion = "1.0.0"
 
-// vkb_abi_version returns the libvkb ABI semver. Caller frees via
-// vkb_free_string. Never returns NULL.
+// howl_abi_version returns the libhowl ABI semver. Caller frees via
+// howl_free_string. Never returns NULL.
 //
-//export vkb_abi_version
-func vkb_abi_version() *C.char {
+//export howl_abi_version
+func howl_abi_version() *C.char {
 	return C.CString(abiVersion)
 }
 
-// vkb_list_presets returns a JSON array of presets (bundled + user).
-// Caller frees via vkb_free_string. Returns NULL on engine-not-init.
+// howl_list_presets returns a JSON array of presets (bundled + user).
+// Caller frees via howl_free_string. Returns NULL on engine-not-init.
 //
-//export vkb_list_presets
-func vkb_list_presets() *C.char {
+//export howl_list_presets
+func howl_list_presets() *C.char {
 	e := getEngine()
 	if e == nil {
 		return nil
 	}
 	all, err := presets.Load()
 	if err != nil {
-		e.setLastError("vkb_list_presets: " + err.Error())
+		e.setLastError("howl_list_presets: " + err.Error())
 		return nil
 	}
 	if all == nil {
@@ -697,36 +697,36 @@ func vkb_list_presets() *C.char {
 	}
 	buf, err := json.Marshal(all)
 	if err != nil {
-		e.setLastError("vkb_list_presets: marshal: " + err.Error())
+		e.setLastError("howl_list_presets: marshal: " + err.Error())
 		return nil
 	}
 	return C.CString(string(buf))
 }
 
-// vkb_get_preset returns the JSON-encoded Preset for the given name,
-// or NULL if not found. Caller frees via vkb_free_string.
+// howl_get_preset returns the JSON-encoded Preset for the given name,
+// or NULL if not found. Caller frees via howl_free_string.
 //
-//export vkb_get_preset
-func vkb_get_preset(nameC *C.char) *C.char {
+//export howl_get_preset
+func howl_get_preset(nameC *C.char) *C.char {
 	e := getEngine()
 	if e == nil {
 		return nil
 	}
 	if nameC == nil {
-		e.setLastError("vkb_get_preset: name is NULL")
+		e.setLastError("howl_get_preset: name is NULL")
 		return nil
 	}
 	name := C.GoString(nameC)
 	all, err := presets.Load()
 	if err != nil {
-		e.setLastError("vkb_get_preset: " + err.Error())
+		e.setLastError("howl_get_preset: " + err.Error())
 		return nil
 	}
 	for _, p := range all {
 		if p.Name == name {
 			buf, err := json.Marshal(p)
 			if err != nil {
-				e.setLastError("vkb_get_preset: marshal: " + err.Error())
+				e.setLastError("howl_get_preset: marshal: " + err.Error())
 				return nil
 			}
 			return C.CString(string(buf))
@@ -735,27 +735,27 @@ func vkb_get_preset(nameC *C.char) *C.char {
 	return nil
 }
 
-// vkb_save_preset persists a user preset. body is a JSON-encoded
+// howl_save_preset persists a user preset. body is a JSON-encoded
 // Preset. Returns 0 on success, 1 if engine not initialized, 5 for
 // invalid/reserved name, 6 for filesystem error, 2 for JSON parse error.
 //
 // nameC + descriptionC overwrite the body's Name/Description so callers
 // constructing JSON from an EngineConfig don't have to mirror them.
 //
-//export vkb_save_preset
-func vkb_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
+//export howl_save_preset
+func howl_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
 	}
 	if nameC == nil || bodyC == nil {
-		e.setLastError("vkb_save_preset: nil argument")
+		e.setLastError("howl_save_preset: nil argument")
 		return 5
 	}
 	body := C.GoString(bodyC)
 	var p presets.Preset
 	if err := json.Unmarshal([]byte(body), &p); err != nil {
-		e.setLastError("vkb_save_preset: parse: " + err.Error())
+		e.setLastError("howl_save_preset: parse: " + err.Error())
 		return 2
 	}
 	p.Name = C.GoString(nameC)
@@ -763,7 +763,7 @@ func vkb_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
 		p.Description = C.GoString(descriptionC)
 	}
 	if err := presets.SaveUser(p); err != nil {
-		e.setLastError("vkb_save_preset: " + err.Error())
+		e.setLastError("howl_save_preset: " + err.Error())
 		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
 			return 5
 		}
@@ -772,23 +772,23 @@ func vkb_save_preset(nameC, descriptionC, bodyC *C.char) C.int {
 	return 0
 }
 
-// vkb_delete_preset removes a user preset. Returns 0 on success
+// howl_delete_preset removes a user preset. Returns 0 on success
 // (idempotent), 1 if engine not init, 5 for invalid/reserved name,
 // 6 for filesystem error.
 //
-//export vkb_delete_preset
-func vkb_delete_preset(nameC *C.char) C.int {
+//export howl_delete_preset
+func howl_delete_preset(nameC *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		return 1
 	}
 	if nameC == nil {
-		e.setLastError("vkb_delete_preset: name is NULL")
+		e.setLastError("howl_delete_preset: name is NULL")
 		return 5
 	}
 	name := C.GoString(nameC)
 	if err := presets.DeleteUser(name); err != nil {
-		e.setLastError("vkb_delete_preset: " + err.Error())
+		e.setLastError("howl_delete_preset: " + err.Error())
 		if errors.Is(err, presets.ErrInvalidName) || errors.Is(err, presets.ErrReservedName) {
 			return 5
 		}

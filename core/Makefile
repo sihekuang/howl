@@ -21,12 +21,12 @@ build: build-cli build-dylib
 
 build-cli:
 	mkdir -p $(BUILD_DIR)
-	$(GO) build -tags="whispercpp deepfilter" -o $(BUILD_DIR)/vkb-cli ./cmd/vkb-cli
+	$(GO) build -tags="whispercpp deepfilter" -o $(BUILD_DIR)/howl ./cmd/howl
 
 build-dylib:
 	mkdir -p $(BUILD_DIR)
-	$(GO) build -tags="whispercpp deepfilter" -buildmode=c-shared -o $(BUILD_DIR)/libvkb.dylib ./cmd/libvkb
-	install_name_tool -id "@rpath/libvkb.dylib" $(BUILD_DIR)/libvkb.dylib
+	$(GO) build -tags="whispercpp deepfilter" -buildmode=c-shared -o $(BUILD_DIR)/libhowl.dylib ./cmd/libhowl
+	install_name_tool -id "@rpath/libhowl.dylib" $(BUILD_DIR)/libhowl.dylib
 
 test: test-unit
 
@@ -42,8 +42,8 @@ test-integration:
 # (~2GB pip install). Reach for `clean-models` / `clean-venv` /
 # `distclean` when you actually want to nuke those.
 clean:
-	rm -f $(BUILD_DIR)/libvkb.dylib $(BUILD_DIR)/libvkb.h
-	rm -f $(BUILD_DIR)/vkb-cli $(BUILD_DIR)/vkb-enroll
+	rm -f $(BUILD_DIR)/libhowl.dylib $(BUILD_DIR)/libhowl.h
+	rm -f $(BUILD_DIR)/howl $(BUILD_DIR)/enroll
 
 # Drop the TSE ONNX models. Forces the next Release build (or anything
 # that touches TSE) to retrace from PyTorch via ./enroll.sh — ~30+ min.

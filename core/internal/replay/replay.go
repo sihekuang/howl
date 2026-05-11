@@ -2,7 +2,7 @@
 
 // Package replay drives a captured session's raw audio through one or
 // more presets via audio.FakeCapture. Used by the Mac Compare view and
-// (future) the vkb-cli compare subcommand to do A/B evaluation on
+// (future) the howl compare subcommand to do A/B evaluation on
 // identical input.
 package replay
 

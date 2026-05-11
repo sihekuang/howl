@@ -17,10 +17,10 @@ import (
 // TestEvent_ChunkJSONEncoding pins the wire format Swift decodes —
 // kind="chunk" with text payload — so a refactor on the Go side
 // can't silently rename the field and break the EngineEvent.chunk
-// case in VoiceKeyboardCore.
+// case in HowlCore.
 //
-// (Full C ABI integration tests would also exercise vkb_push_audio /
-// vkb_poll_event end-to-end, but Go forbids `import "C"` in _test.go
+// (Full C ABI integration tests would also exercise howl_push_audio /
+// howl_poll_event end-to-end, but Go forbids `import "C"` in _test.go
 // files and the existing pipeline + anthropic streaming tests already
 // cover the goroutine + Listener wiring (EventLLMDelta).)
 func TestEvent_ChunkJSONEncoding(t *testing.T) {
@@ -47,7 +47,7 @@ func TestEvent_ChunkJSONEncoding(t *testing.T) {
 }
 
 // TestCaptureGoroutine_CancelEmitsCancelledNotError verifies that when
-// pipe.Run returns context.Canceled (e.g. because vkb_cancel_capture
+// pipe.Run returns context.Canceled (e.g. because howl_cancel_capture
 // called the engine's cancel func), the capture goroutine emits a
 // "cancelled" event rather than an "error" event.
 //
@@ -56,7 +56,7 @@ func TestEvent_ChunkJSONEncoding(t *testing.T) {
 func TestCaptureGoroutine_CancelEmitsCancelledNotError(t *testing.T) {
 	events := make(chan event, 8)
 
-	// Simulate the relevant block from vkb_start_capture's goroutine.
+	// Simulate the relevant block from howl_start_capture's goroutine.
 	emitForRunErr := func(err error) {
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -88,7 +88,7 @@ func TestCaptureGoroutine_CancelEmitsCancelledNotError(t *testing.T) {
 }
 
 // TestCancelHelper_DropsPushChAndCallsCancel verifies the engine state
-// transitions inside vkb_cancel_capture without going through the C ABI.
+// transitions inside howl_cancel_capture without going through the C ABI.
 func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
 	pushCh := make(chan []float32, 4)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -101,7 +101,7 @@ func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
 	e.pushCh = pushCh
 	e.cancel = wrappedCancel
 
-	// Mirror the body of vkb_cancel_capture (minus the C return code).
+	// Mirror the body of howl_cancel_capture (minus the C return code).
 	e.mu.Lock()
 	c := e.cancel
 	if e.pushCh != nil {
@@ -147,8 +147,8 @@ func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
 func TestCapture_WritesSessionManifest_WhenDeveloperMode(t *testing.T) {
 	t.Skip("end-to-end — requires whisper model; covered by manual smoke + e2e suite")
 	// Documentation of intent: when configured with DeveloperMode=true
-	// and a real audio buffer pushed via vkb_push_audio, after
-	// vkb_stop_capture returns and a result event is observed,
+	// and a real audio buffer pushed via howl_push_audio, after
+	// howl_stop_capture returns and a result event is observed,
 	// e.activeSessionDir must contain a valid session.json whose ID
 	// matches e.activeSessionID and whose Preset is the active preset
 	// name (or "default" until the presets package lands in Slice 2).

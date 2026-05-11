@@ -9,7 +9,7 @@ import (
 
 func TestExport_Replay_RejectsEmptyPresets(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	out := replayGo("any-id", "")
 	if !strings.Contains(out, "error") {
@@ -19,7 +19,7 @@ func TestExport_Replay_RejectsEmptyPresets(t *testing.T) {
 
 func TestExport_Replay_RejectsMissingSession(t *testing.T) {
 	if getEngine() == nil {
-		_ = vkb_init()
+		_ = howl_init()
 	}
 	out := replayGo("does-not-exist", "default")
 	if !strings.Contains(out, "error") {

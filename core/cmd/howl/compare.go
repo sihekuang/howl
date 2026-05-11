@@ -19,7 +19,7 @@ import (
 // runCompare drives a Compare run: replay a captured session's raw audio
 // through one or more named presets and surface the per-preset transcripts.
 //
-//   vkb-cli compare <session-id> --presets a,b,c [--json]
+//   howl compare <session-id> --presets a,b,c [--json]
 //
 // rc convention matches the other subcommands (0 ok, 1 runtime/IO, 2 usage).
 func runCompare(args []string) int {
@@ -30,7 +30,7 @@ func runCompare(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: vkb-cli compare <session-id> --presets a,b,c [--json]")
+		fmt.Fprintln(os.Stderr, "usage: howl compare <session-id> --presets a,b,c [--json]")
 		return 2
 	}
 	id := fs.Arg(0)
@@ -93,8 +93,8 @@ func runCompare(args []string) int {
 	return 0
 }
 
-// splitPresetCSV mirrors the libvkb helper of the same name. Defined
-// here so vkb-cli compiles without depending on libvkb's package main.
+// splitPresetCSV mirrors the libhowl helper of the same name. Defined
+// here so howl compiles without depending on libhowl's package main.
 func splitPresetCSV(s string) []string {
 	if s == "" {
 		return nil
@@ -109,23 +109,23 @@ func splitPresetCSV(s string) []string {
 }
 
 // cliSecrets pulls API keys + model paths from the same env vars the
-// rest of vkb-cli uses. Mirrors the Mac engine's secretsFromEngineCfg
+// rest of howl uses. Mirrors the Mac engine's secretsFromEngineCfg
 // so a Compare run from CLI lands the same audio pipeline through
 // the same LLM as the Mac UI would.
 func cliSecrets() presets.EngineSecrets {
-	modelPath := os.Getenv("VKB_MODEL_PATH")
+	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
 		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
 	}
-	lang := os.Getenv("VKB_LANGUAGE")
+	lang := os.Getenv("HOWL_LANGUAGE")
 	if lang == "" {
 		lang = "en"
 	}
-	modelsDir := os.Getenv("VKB_MODELS_DIR")
+	modelsDir := os.Getenv("HOWL_MODELS_DIR")
 	if modelsDir == "" {
 		modelsDir = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models")
 	}
-	profileDir := os.Getenv("VKB_PROFILE_DIR")
+	profileDir := os.Getenv("HOWL_PROFILE_DIR")
 	if profileDir == "" {
 		profileDir = os.ExpandEnv("$HOME/.config/voice-keyboard")
 	}
@@ -137,12 +137,12 @@ func cliSecrets() presets.EngineSecrets {
 		LLMAPIKey:           os.Getenv("ANTHROPIC_API_KEY"),
 		WhisperModelPath:    modelPath,
 		Language:            lang,
-		DeepFilterModelPath: os.Getenv("VKB_DEEPFILTER_MODEL_PATH"),
+		DeepFilterModelPath: os.Getenv("HOWL_DEEPFILTER_MODEL_PATH"),
 		TSEProfileDir:       profileDir,
 		TSEModelPath:        modelsDir,
 		ONNXLibPath:         onnxLib,
-		LLMProvider:         os.Getenv("VKB_LLM_PROVIDER"),
-		LLMBaseURL:          os.Getenv("VKB_LLM_BASE_URL"),
-		LLMModel:            os.Getenv("VKB_LLM_MODEL"),
+		LLMProvider:         os.Getenv("HOWL_LLM_PROVIDER"),
+		LLMBaseURL:          os.Getenv("HOWL_LLM_BASE_URL"),
+		LLMModel:            os.Getenv("HOWL_LLM_MODEL"),
 	}
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-streaming.sh — interactive harness for the chunked Whisper
-# pipeline. Records from the mic via vkb-cli pipe --live, prints
+# pipeline. Records from the mic via howl pipe --live, prints
 # per-chunk timing and a post-stop latency report when finished.
 #
 # Press any key to STOP and transcribe normally.
@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./run-streaming.sh                # any key stops, q cancels
-#   VKB_DICT="MCP,WebRTC" ./run-streaming.sh
+#   HOWL_DICT="MCP,WebRTC" ./run-streaming.sh
 #
 # Reads ANTHROPIC_API_KEY from ./.env. Cleaned text → stdout.
 # Live chunk events + latency report → stderr.
@@ -20,7 +20,7 @@ for arg in "$@"; do
   esac
 done
 
-DICT="${VKB_DICT:-MCP,WebRTC}"
+DICT="${HOWL_DICT:-MCP,WebRTC}"
 
 cd "$(dirname "$0")"
 
@@ -31,10 +31,10 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY not set (looked in ./.env)" >&2; exit 1
 fi
 
-echo "Building vkb-cli..." >&2
+echo "Building howl..." >&2
 make -C core build-cli >&2
 
-FIFO="$(mktemp -u /tmp/vkb-streaming.XXXXXX.fifo)"
+FIFO="$(mktemp -u /tmp/howl-streaming.XXXXXX.fifo)"
 mkfifo "$FIFO"
 cleanup() { rm -f "$FIFO"; }
 trap cleanup EXIT
@@ -42,7 +42,7 @@ trap cleanup EXIT
 MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
 
 # Start the CLI in the background, with stdin from the fifo.
-ANTHROPIC_MODEL="$MODEL" core/build/vkb-cli pipe --dict "$DICT" --live --latency-report < "$FIFO" &
+ANTHROPIC_MODEL="$MODEL" core/build/howl pipe --dict "$DICT" --live --latency-report < "$FIFO" &
 PID=$!
 exec 3>"$FIFO"
 
