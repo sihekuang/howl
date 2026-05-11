@@ -18,3 +18,13 @@ LibriSpeech citation:
   ASR Corpus Based on Public Domain Audio Books," ICASSP 2015.
 
 Regenerate via `scripts/fetch-tse-test-voices.sh`.
+
+## Transcripts
+
+Files: libri_1272.txt, libri_1462.txt
+Source: LibriSpeech dev-clean (CC BY 4.0)
+Utterance IDs:
+- `libri_1272.txt`: 1272-128104-0001 (first FLAC in tar order for speaker 1272)
+- `libri_1462.txt`: 1462-170138-0027 (first FLAC in tar order for speaker 1462)
+Provenance: extracted from <speaker>/<chapter>/<speaker>-<chapter>.trans.txt
+            via scripts/fetch-libri-transcripts.sh

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,27 @@ func (f *libriSpeechFixture) Voices(t *testing.T) (a, b voiceClip) {
 	a = readLibriClip(t, "libri_1272.wav", "libri-1272-M")
 	b = readLibriClip(t, "libri_1462.wav", "libri-1462-F")
 	return
+}
+
+// Transcripts returns the ground-truth transcripts matching the two
+// voice clips returned by Voices, in the same order (A, B). Reads
+// libri_1272.txt and libri_1462.txt sibling files. Fatals if either
+// is missing — the harness depends on transcripts.
+func (f *libriSpeechFixture) Transcripts(t *testing.T) (a, b string) {
+	t.Helper()
+	a = readLibriTranscript(t, "libri_1272.txt")
+	b = readLibriTranscript(t, "libri_1462.txt")
+	return
+}
+
+func readLibriTranscript(t *testing.T, file string) string {
+	t.Helper()
+	path := filepath.Join(libriVoicesDir, file)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("LibriSpeech transcript missing at %s — run scripts/fetch-libri-transcripts.sh: %v", path, err)
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func readLibriClip(t *testing.T, file, label string) voiceClip {

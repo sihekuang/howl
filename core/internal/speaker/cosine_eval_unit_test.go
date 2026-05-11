@@ -24,3 +24,18 @@ func TestEvaluateCosine_PassthroughReturnsRMSEqual(t *testing.T) {
 		t.Errorf("Passthrough should preserve RMS: in=%f out=%f", res.RMSIn, res.RMSOut)
 	}
 }
+
+func TestLibriSpeechFixture_TranscriptsLoad(t *testing.T) {
+	fix := newLibriSpeechFixture()
+	tA, tB := fix.Transcripts(t)
+	if tA == "" || tB == "" {
+		t.Fatalf("transcripts empty: A=%q B=%q", tA, tB)
+	}
+	if tA == tB {
+		t.Errorf("transcripts identical — wrong files?")
+	}
+	// Sanity: transcripts should each be at least a few words.
+	if len(tA) < 5 || len(tB) < 5 {
+		t.Errorf("transcripts suspiciously short: A=%q B=%q", tA, tB)
+	}
+}
