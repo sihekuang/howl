@@ -1,5 +1,9 @@
+import AVFoundation
 import SwiftUI
+import os
 import VoiceKeyboardCore
+
+private let log = Logger(subsystem: "com.voicekeyboard.app", category: "GeneralTab")
 
 struct GeneralTab: View {
     @Binding var settings: UserSettings
@@ -22,6 +26,7 @@ struct GeneralTab: View {
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     @State private var presetList: [Preset] = []
     @State private var presetLoadError: String? = nil
+    @State private var micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
 
     private let modelSizes: [(size: String, label: String, mb: String)] = [
         ("tiny", "Tiny", "75 MB"),
@@ -54,6 +59,7 @@ struct GeneralTab: View {
                     Text("\(displayName(for: savedUID)) — not connected").tag(savedUID)
                 }
             }
+            micPermissionRow
             Picker("Whisper model", selection: $settings.whisperModelSize) {
                 ForEach(modelSizes, id: \.size) { m in
                     Text(modelLabel(for: m)).tag(m.size)
@@ -77,6 +83,7 @@ struct GeneralTab: View {
         }
         .onChange(of: settings) { _, new in onSave(new) }
         .task {
+            micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
             devices = audioCapture.availableInputDevices()
             // Auto-select a real device when the user hasn't picked one
             // and any are available. Without this the picker sticks on
@@ -163,6 +170,41 @@ struct GeneralTab: View {
             await MainActor.run {
                 self.presetLoadError = "Couldn't load presets: \(error.localizedDescription)"
             }
+        }
+    }
+
+    @ViewBuilder
+    private var micPermissionRow: some View {
+        HStack {
+            if micAuthStatus == .authorized {
+                Label("Microphone permission granted", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green).font(.caption)
+                Spacer()
+            } else {
+                Label(micStatusLabel, systemImage: "mic.slash")
+                    .foregroundStyle(micAuthStatus == .notDetermined ? .orange : .red)
+                    .font(.caption)
+                Spacer()
+                Button("Enable Mic") {
+                    let before = AVCaptureDevice.authorizationStatus(for: .audio)
+                    log.info("Enable Mic clicked: status before=\(before.rawValue, privacy: .public)")
+                    AVCaptureDevice.requestAccess(for: .audio) { granted in
+                        let after = AVCaptureDevice.authorizationStatus(for: .audio)
+                        log.info("Enable Mic requestAccess returned granted=\(granted, privacy: .public) status after=\(after.rawValue, privacy: .public)")
+                        Task { @MainActor in
+                            micAuthStatus = after
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var micStatusLabel: String {
+        switch micAuthStatus {
+        case .notDetermined: "Microphone permission not yet requested"
+        case .denied, .restricted: "Microphone permission denied — click Enable Mic to retry"
+        default: "Microphone permission unknown"
         }
     }
 

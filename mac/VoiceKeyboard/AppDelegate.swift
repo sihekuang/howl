@@ -19,8 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // explicit grant — doing this on launch maximizes the chance
         // the user sees the dialog while the bundle identity is fresh.
         // No-op when status is already determined.
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        log.info("applicationDidFinishLaunching: mic auth status=\(micStatus.rawValue, privacy: .public)")
+        if micStatus == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                let after = AVCaptureDevice.authorizationStatus(for: .audio)
+                log.info("launch requestAccess returned granted=\(granted, privacy: .public) status after=\(after.rawValue, privacy: .public)")
+            }
         }
         // Hide the dock icon again when the user closes the settings
         // window. We flip to .regular in showSettingsWindow so the
