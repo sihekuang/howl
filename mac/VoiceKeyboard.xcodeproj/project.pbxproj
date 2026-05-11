@@ -10,6 +10,7 @@
 		001AE6A90C6DB3AC42838639 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE78B8B41209BBCD38B64D71 /* RecordingOverlayController.swift */; };
 		009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945B1FA01BC8077164E634C /* CompositionRoot.swift */; };
 		03F7F37742368064BBB5B75A /* StageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FB8F17C8D38AF596BCE09D1 /* StageList.swift */; };
+		04BE78C04A4A51407BC3FC6A /* DeletePresetConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E189B9CB1D52EC2C0F7690 /* DeletePresetConfirmSheet.swift */; };
 		09599C79C42E022362D8ED46 /* ComparePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4A574AD3273776A3CF5697 /* ComparePane.swift */; };
 		0C270374BAE9F0553FD77BEB /* AppRelaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9540121FBBE6AB420FD5EA7 /* AppRelaunch.swift */; };
 		0EBA9578DE6D2C95D15325A6 /* PipelineTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEB6360C931EC47097D3762 /* PipelineTab.swift */; };
@@ -73,6 +74,7 @@
 		18FA1218DF9D8268E17C4E2F /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
 		1F287FCB6F83DF2D891C3E3F /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
 		2382DB48DAB4DC17501AE130 /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
+		23E189B9CB1D52EC2C0F7690 /* DeletePresetConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletePresetConfirmSheet.swift; sourceTree = "<group>"; };
 		251226AFC921562507D69444 /* VoiceKeyboardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VoiceKeyboardCore; path = Packages/VoiceKeyboardCore; sourceTree = SOURCE_ROOT; };
 		27C663581F8C2ABD3A3E0A98 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
 		285119D243E63164DD0E6DD6 /* TSELabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TSELabView.swift; sourceTree = "<group>"; };
@@ -189,6 +191,7 @@
 				CB4A574AD3273776A3CF5697 /* ComparePane.swift */,
 				169E53A353A79BEBD5CA829A /* CompareSourceLoader.swift */,
 				D1D15493CA03941D9F207F9F /* CompareView.swift */,
+				23E189B9CB1D52EC2C0F7690 /* DeletePresetConfirmSheet.swift */,
 				FB29BB613B981351CFED403B /* EditorView.swift */,
 				373AA8E3A3960939BAC3787E /* ManageElsewhereButton.swift */,
 				2BB3B6B23AD7F003AEB4832B /* OverwriteConfirmSheet.swift */,
@@ -488,6 +491,7 @@
 				E3BCBDC784A40305F1167446 /* CompareView.swift in Sources */,
 				009C67AB6312F2F280589682 /* CompositionRoot.swift in Sources */,
 				C9EC9655A03C94EEED801AF8 /* CueSound.swift in Sources */,
+				04BE78C04A4A51407BC3FC6A /* DeletePresetConfirmSheet.swift in Sources */,
 				1B5710675B52690DB60363CE /* DictionaryTab.swift in Sources */,
 				9A74204B8830395A6C2F1D2B /* EditorView.swift in Sources */,
 				789F2C4BF7718DD124B97B43 /* EngineCoordinator.swift in Sources */,

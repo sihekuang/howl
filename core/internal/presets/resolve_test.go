@@ -25,8 +25,8 @@ func TestResolve_DefaultPresetMatchesEngineConfig(t *testing.T) {
 	if got.DisableNoiseSuppression {
 		t.Errorf("default should have noise suppression on")
 	}
-	if !got.TSEEnabled {
-		t.Errorf("default should have TSE on")
+	if got.TSEEnabled {
+		t.Errorf("default should have TSE off")
 	}
 }
 

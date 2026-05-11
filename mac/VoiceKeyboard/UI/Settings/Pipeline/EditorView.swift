@@ -21,8 +21,10 @@ struct EditorView: View {
     @State private var loadError: String? = nil
     @State private var saveSheetVisible = false
     @State private var overwriteConfirmVisible = false
+    @State private var deleteConfirmVisible = false
     @State private var saveError: String? = nil
     @State private var saving = false
+    @State private var deleting = false
     /// Increments on every "click on a disabled control while a bundled
     /// preset is selected" — drives a transient pulse on the Save as…
     /// button so the user notices the alternative.
@@ -59,6 +61,16 @@ struct EditorView: View {
                     saving: saving,
                     onCancel: { overwriteConfirmVisible = false },
                     onConfirm: { Task { await performOverwrite() } }
+                )
+            }
+        }
+        .sheet(isPresented: $deleteConfirmVisible) {
+            if let draft = draft {
+                DeletePresetConfirmSheet(
+                    presetName: draft.source.name,
+                    deleting: deleting,
+                    onCancel: { deleteConfirmVisible = false },
+                    onConfirm: { Task { await performDelete() } }
                 )
             }
         }
@@ -142,6 +154,12 @@ struct EditorView: View {
                 } label: { Label("Reset", systemImage: "arrow.uturn.backward") }
                 .controlSize(.small)
                 .disabled(draft?.isDirty != true || isBundled)
+                if !isBundled, draft != nil {
+                    Button(role: .destructive) {
+                        deleteConfirmVisible = true
+                    } label: { Label("Delete", systemImage: "trash") }
+                    .controlSize(.small)
+                }
             }
         }
     }
@@ -200,6 +218,37 @@ struct EditorView: View {
         } catch {
             await MainActor.run {
                 self.loadError = "Failed to load presets: \(error)"
+            }
+        }
+    }
+
+    private func performDelete() async {
+        guard let draft = draft else { return }
+        let name = draft.source.name
+        await MainActor.run { deleting = true; saveError = nil }
+        do {
+            try await presets.delete(name)
+            await MainActor.run {
+                deleteConfirmVisible = false
+                deleting = false
+                // Drop the deleted entry from the in-memory list and
+                // pick a successor — prefer "default" if present, else
+                // the first remaining preset.
+                self.presetList.removeAll { $0.name == name }
+                let next = self.presetList.first(where: { $0.name == "default" })
+                    ?? self.presetList.first
+                if let next {
+                    self.selectedName = next.name
+                    self.draft = PresetDraft(next)
+                } else {
+                    self.selectedName = ""
+                    self.draft = nil
+                }
+            }
+        } catch {
+            await MainActor.run {
+                saveError = "Delete failed: \(error)"
+                deleting = false
             }
         }
     }
