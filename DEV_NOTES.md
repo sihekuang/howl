@@ -273,3 +273,190 @@ points of closed leaders. **For streaming dictation**, nothing published is
 - [Thinking in Cocktail Party: CoT + RL for TS-ASR (arXiv 2509.15612)](https://arxiv.org/html/2509.15612)
 - [TS-ASR-Whisper code (BUT)](https://github.com/BUTSpeechFIT/TS-ASR-Whisper)
 - [DiCoW code](https://github.com/BUTSpeechFIT/DiCoW)
+
+---
+
+## Personalized denoiser survey — candidates (2026-05-11)
+
+### Goal recap
+
+Replace the now-disabled ConvTasNet TSE block with a personalized cleanup stage
+that produces audio (waveform or mask-applied) cleaned of both non-speech noise
+and competing voices, before Whisper. Single-user dictation: enrolled ECAPA-TDNN
+192-d embedding already on disk; default pipeline today is DFN v0.5.6 →
+Whisper-small. We prefer **mask-domain over waveform reconstruction** (less ASR
+drift), **streaming-capable** (today's UX is partial transcripts), **commercially
+usable license**, and **directly downloadable weights** that we can export to
+ONNX/CoreML. We're optimistic about ECAPA-conditioned mask filters, sceptical of
+embedding-free attention-based TSE (forces us to re-enroll), and explicitly
+ruling out anything PyTorch-only with no export path.
+
+### Comparison table
+
+| Name | Arch | Embedding | Params / size | License | Weights public? | Streaming | Notes |
+|---|---|---|---|---|---|---|---|
+| DeepFilterNet3 (non-personalized, baseline) | Mask (ERB + complex DF) | none | 2.31M / ~6 MB | MIT/Apache-2.0 dual | Yes (ONNX in repo) | Yes (causal) | Current default. Not target-speaker. |
+| pDeepFilterNet2 (Tang et al. 2024) | Mask (dual-stage DF) | **ECAPA 192-d, frozen** | 2.31–2.71M / ~7 MB | Paper only — no code/weights released | No | Yes (causal) | Exactly the architecture we want; nothing to download. |
+| DPDFNet (Ceva 2025) | Mask (DPRNN-enhanced DF) | none | ~3M / ~10 MB | Apache-2.0 | Yes (PyTorch + ONNX + TFLite) | Yes (causal) | Stronger DFN successor; non-personalized. |
+| VoiceFilter (mindslab-ai / maum-ai 2019) | Mask (mag-spec, iSTFT) | d-vector (own, ~256-d) | ~8M / ~32 MB | Apache-2.0 (code) | Author-trained on Google internal data; unofficial repro weights only | No (offline) | Author abandoned: "use at your own risk." Mag-only iSTFT degrades phase. |
+| VoiceFilter-Lite (Google, 2020) | Mask (log-Mel features, asym loss) | d-vector | ~2.2 MB (TFLite) | Paper only — never open-sourced | **No** | Yes (streaming) | The gold-standard reference. No public weights. |
+| SpeakerBeam (BUT/NTT) | Time-domain Conv-TasNet variant, waveform output | enrollment utt → adapt layer (mul), **not external embedding** | ~8M (TD-SB) / ~30 MB | **Evaluation-only / non-commercial, no redistribution** | Train-it-yourself only | Causal variants exist (SpeakerBeam-SS) | License kills it for shipping. Same arch family as our current ConvTasNet. |
+| SpeakerBeam-SS (NTT 2024) | Conv-TasNet + state-space, waveform | enrollment utt | smaller than TD-SB | Same BUT/NTT eval license | No weights released | Streaming (causal, RTF -78%) | Same license blocker. |
+| ESPnet TD-SpeakerBeam (Libri2Mix) | Time-domain, waveform | enrollment **segment** (3 s wav, 48k samples) — `use_spk_emb: false` | ~8M | Code Apache-2.0; **weights CC-BY-4.0** | **Yes** (HF: `espnet/Wangyou_Zhang_librimix_train_enh_tse_td_speakerbeam_raw`) | No (offline, full-utt) | The only SpeakerBeam-family weights we can actually ship. Wants raw enrollment audio, not our 192-d ECAPA. |
+| SpEx / SpEx+ (xuchenglin28) | Time-domain, waveform | own ResBlock encoder (or i-vec/x-vec swap) | ~10M | **GPL-3.0** | No pretrained weights released | No | GPL = viral; non-starter for a closed Mac app. |
+| USEF-TSE (TFGridNet / SepFormer backbones) | Both variants; TFGridNet T-F masking, SepFormer time-domain | **Embedding-free** (cross-attention to enrollment audio) | Not stated; TFGridNet backbone ~6M | **CC-BY-NC-4.0** | Yes (HF checkpoints) | No (offline) | Best published numbers but (a) NC license blocks commercial, (b) bypasses our enrolled ECAPA — needs raw enrollment audio at inference. |
+| WeSep (toolkit) | All of above (SpEx+, pBSRNN, pDPCCN, tf-gridnet) | Wespeaker integration OR joint | varies | **No LICENSE file in repo** | Toolkit ships, "Pretrained models" still TODO per README | Some recipes causal | Toolkit + ONNX export path are real, but no off-the-shelf weights at this writing. |
+| ESPnet `enh` TSE recipes | Multiple; mostly time-domain (Conv-TasNet, td_speakerbeam) | Enrollment utt | varies | Apache-2.0 | A handful on HF (above) | No | All published recipes target Libri2Mix offline; no streaming TSE recipe. |
+| SpeechBrain TSE | No first-class TSE recipe ships today | — | — | Apache-2.0 | No TSE model in `speechbrain/*` HF org | — | We already use SpeechBrain ECAPA encoder; TSE is not on the menu. |
+| pyannote `speech-separation-ami-1.0` | Waveform (PixIT joint diar+sep) | none — it diarizes then separates | model size not published | MIT (code+weights) | Yes | No (offline window) | Not TSE. Outputs N source streams + labels; we'd post-select with ECAPA. |
+| WavLM-base-plus-sd | Frame-level diarization head on WavLM | none | ~94M backbone + tiny head | MIT | Yes | No (full-seq self-attn) | Source separation downstream task, not target-conditioned. Useful as a diarizer feature, not a denoiser. |
+| FlowTSE (Aiola 2025) / AD-FlowTSE / MeanFlow-TSE | Generative (flow matching on mel + vocoder) | enrollment audio → mel | not disclosed | Paper only | No | No (iterative generation) | Generative pipelines reconstruct mel + vocode — worst-case ASR artifact profile. Skip. |
+| E3Net (Microsoft 2022) | Waveform 1D-conv encoder | speaker embed vector | small (KD'd students 2–4× faster than teacher) | Paper only | **No** | Yes (causal) | Closest published cousin to MS Teams Voice Isolation; nothing to download. |
+
+### Per-candidate deep dives
+
+Only candidates that meet the basic bar (downloadable weights AND commercially-usable code path, OR clearly-runnable open code we can train ourselves) are expanded below. Everything else is filed under "paper only" or "license blocker" above.
+
+#### DeepFilterNet3 + ECAPA gating (current baseline, no personalization)
+
+Already in our pipeline; nothing to integrate. Calling it out because the cheapest "personalized denoiser" is **DFN3 (as-is) plus a personal-VAD gate** built on our existing ECAPA enrollment. That's not a new model, it's the personal-VAD path from the previous section's "halfway path". Strongest single lever for shipping soon.
+
+#### DPDFNet (Ceva, 2025)
+
+`github.com/ceva-ip/DPDFNet`, Apache-2.0, PyTorch + **ONNX + TFLite checkpoints
+shipped in the repo**. DPRNN blocks bolted onto DeepFilterNet2's two-stage
+filter — same mask-domain shape, stronger long-range temporal modelling, causal.
+Drop-in replacement for our current DFN stage; **no speaker conditioning**, so
+this is a denoiser upgrade, not a TSE replacement. Worth a measurement run since
+it's truly drop-in.
+
+#### ESPnet TD-SpeakerBeam (HF: `espnet/Wangyou_Zhang_librimix_train_enh_tse_td_speakerbeam_raw`)
+
+Weights CC-BY-4.0 (commercial OK with attribution), code Apache-2.0. Time-domain
+Conv-TasNet extractor; `use_spk_emb: false` in the config — it expects a **3-second
+raw enrollment audio segment**, not our 192-d ECAPA embedding. So integration
+means either (a) keep a 3 s enrollment clip on disk and pass it in alongside
+every chunk, or (b) train a head that maps our ECAPA vector into the model's
+internal adapt layer. Architecture is the *same family* as the ConvTasNet TSE
+we just disabled — same 2-channel-separator failure mode is plausible. No
+streaming. Marginal upgrade over what we deleted; only interesting because the
+weights are actually shippable.
+
+#### VoiceFilter (maum-ai / mindslab-ai)
+
+Apache-2.0 code. d-vector embedding (not ECAPA-compatible without retraining the
+condition head). Mask-domain on mag-spectrogram + iSTFT — phase reconstruction
+artefact-prone, which is *exactly* the failure mode VoiceFilter-Lite was designed
+to fix. **No author-shipped weights trained on public data** — community repos
+provide their own checkpoints of variable quality, and the original author
+publicly told users "use this code at your own risk" and stopped maintaining.
+Useful as a reference implementation to copy, not as a shippable artefact.
+
+#### USEF-TSE (ZBang)
+
+CC-BY-NC-4.0 — **non-commercial**, so a no for shipping. Two backbones
+(USEF-SepFormer time-domain, USEF-TFGridNet T-F mask-domain). The crucial
+property for us: **embedding-free**. It runs cross-attention between the
+mixture and an enrollment audio clip at inference time; our pre-computed 192-d
+ECAPA embedding is not part of its input shape. Even if licensing changed,
+adopting it means re-architecting enrollment to keep raw audio around (longer,
+heavier, privacy-uncomfortable). Strong WERs in the paper, but the path forward
+is closed.
+
+#### WeSep (toolkit)
+
+GitHub `wenet-e2e/wesep`. Toolkit (not a single model) covering SpEx+, pBSRNN,
+pDPCCN, tf-gridnet — including the personalized mask-domain pBSRNN that's a
+close cousin to what we want. **Repo has no LICENSE file** as of this writing
+(github.com API returns null) and README explicitly lists "Pretrained models" as
+a TODO. Active enough to be worth watching, but today it's a code path we'd
+have to train models on, not a download. ONNX export and C++ deployment scaffold
+do exist in the repo, which is the part worth keeping in mind for any later
+in-house training of pBSRNN/pDPCCN.
+
+#### pyannote `speech-separation-ami-1.0`
+
+MIT, weights public, waveform output, PixIT joint diarization + separation. Not
+target-speaker, but the dictation single-user case lets us cheat: separate
+into N sources, embed each source with our ECAPA encoder, hard-select by cosine
+similarity to enrolled vector. That's literally the structure of our current
+`SpeakerGate` — we'd just be swapping ConvTasNet (2-source separator) for a
+diarization-aware separator that can fit 3+ sources. Doesn't solve the
+"separator artefact propagates to Whisper" critique, but it does fix the
+narrow architectural failure (2-channel separator vs 3+ source mixture) we
+flagged in the May 7 notes. Worth a measurement run.
+
+#### pDeepFilterNet2 (Tang et al., IJST 2024)
+
+Paper-only. ECAPA-TDNN 192-d (exact match to our enrollment), dual-stage mask
+DF on top of DFN2, 0.4G MACs, RTF 0.025 on CPU, PESQ 2.36 on synth test. This is
+the *ideal* candidate architecturally: same ECAPA dim we use, mask-domain,
+causal/streaming, ~6 MB on disk. The demo page (`pdeepfilternet2.github.io`)
+ships audio samples only, **no code, no weights**. Until they release, we'd
+have to reproduce: that's a model-training project, not an integration project.
+
+### Shortlist
+
+Strict reading of "runnable today, ship-licensable today, replaces our TSE today" leaves a thin shelf.
+
+1. **Personal-VAD on top of DeepFilterNet3** — not a new model. Reuses our ECAPA
+   embedding to gate non-target frames after DFN3 cleans noise. Streaming, tiny,
+   ships under licenses we already have. The "halfway path" from the May 7 memo
+   is still the highest-EV move; this survey didn't surface a shippable
+   ECAPA-conditioned mask filter that beats it.
+2. **DPDFNet as a DFN3 upgrade** (Apache-2.0, ONNX-shipped) layered with that
+   same personal-VAD gate. Same shape as #1, slightly better denoiser.
+3. **pyannote `speech-separation-ami-1.0` + ECAPA post-selection** as a
+   replacement for ConvTasNet specifically when 3+ sources are present.
+   MIT-licensed, weights public, fixes the narrow architectural bug we deleted
+   ConvTasNet over. Risk: still waveform-reconstruction, still feeds Whisper
+   reconstructed audio.
+
+Honourable mention: **ESPnet TD-SpeakerBeam** weights are the only TSE
+checkpoint with a commercial-friendly license, but it's the same architecture
+family that just failed us, expects 3 s of enrollment audio rather than our
+ECAPA vector, and isn't streaming. Not worth prototyping ahead of #1–#3.
+
+### Open questions
+
+- Does the pDeepFilterNet2 group plan a code release? Last paper traffic
+  April 2024 — worth one nudge before assuming "never."
+- Measured RTF on M2/M3 for DPDFNet ONNX through `onnxruntime_go` — paper
+  numbers are CPU-only PyTorch, no Core ML / NE benchmark.
+- WER (not just SDR / PESQ) when pyannote-sep + ECAPA-pick feeds Whisper-small.
+  Separator artefacts are the whole reason we're sceptical; until measured,
+  this is a guess.
+- Whether anyone has shipped a reproduction of VoiceFilter-Lite that we missed.
+  The Google paper is heavily-cited (~300+) but the "lite" weights specifically
+  remain Google-internal; if a strong open reproduction exists it's the
+  best-fit architecture for our problem.
+- Whether ESPnet TD-SpeakerBeam can be retrained with `use_spk_emb: true` to
+  accept our 192-d ECAPA directly, on top of the existing CC-BY-4.0 weights as
+  a starting point. Cheaper than scratch training; would make those weights
+  actually useful for our enrollment shape.
+
+### Sources
+
+- [pDeepFilterNet2 paper (arXiv 2404.08022)](https://arxiv.org/html/2404.08022v1)
+- [pDeepFilterNet2 demo site](https://pdeepfilternet2.github.io/)
+- [DeepFilterNet GitHub](https://github.com/Rikorose/DeepFilterNet)
+- [DPDFNet (Ceva) GitHub](https://github.com/ceva-ip/DPDFNet)
+- [VoiceFilter (maum-ai) GitHub](https://github.com/maum-ai/voicefilter)
+- [VoiceFilter-Lite paper (arXiv 2009.04323)](https://arxiv.org/abs/2009.04323)
+- [VoiceFilter-Lite project page](https://google.github.io/speaker-id/publications/VoiceFilter-Lite/)
+- [SpeakerBeam GitHub (BUT/NTT)](https://github.com/BUTSpeechFIT/speakerbeam)
+- [SpeakerBeam evaluation-only license (LICENSE.txt)](https://github.com/BUTSpeechFIT/speakerbeam/blob/main/LICENSE.txt)
+- [SpeakerBeam-SS paper (arXiv 2407.01857)](https://arxiv.org/abs/2407.01857)
+- [TD-SpeakerBeam paper (arXiv 2001.08378)](https://arxiv.org/abs/2001.08378)
+- [ESPnet TD-SpeakerBeam pretrained (HF)](https://huggingface.co/espnet/Wangyou_Zhang_librimix_train_enh_tse_td_speakerbeam_raw)
+- [SpEx+ / speaker_extraction_SpEx GitHub](https://github.com/xuchenglin28/speaker_extraction_SpEx)
+- [USEF-TSE GitHub](https://github.com/ZBang/USEF-TSE)
+- [USEF-TSE paper (arXiv 2409.02615)](https://arxiv.org/abs/2409.02615)
+- [WeSep GitHub](https://github.com/wenet-e2e/wesep)
+- [WeSep paper (arXiv 2409.15799)](https://arxiv.org/abs/2409.15799)
+- [pyannote speech-separation-ami-1.0 (HF)](https://huggingface.co/pyannote/speech-separation-ami-1.0)
+- [pyannote-audio GitHub](https://github.com/pyannote/pyannote-audio)
+- [WavLM base-plus-sd (HF)](https://huggingface.co/microsoft/wavlm-base-plus-sd)
+- [E3Net paper (arXiv 2204.00771)](https://arxiv.org/abs/2204.00771)
+- [FlowTSE paper (arXiv 2505.14465)](https://arxiv.org/abs/2505.14465)
+- [SpeechBrain ECAPA-TDNN (HF)](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
