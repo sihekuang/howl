@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Howl</AssemblyName>
+    <RootNamespace>Howl</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\bin\libhowl.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\bin\libwhisper.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\bin\ggml.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\bin\ggml-base.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\bin\ggml-cpu.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

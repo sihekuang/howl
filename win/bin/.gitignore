@@ -1,0 +1,5 @@
+# Ignore all build outputs in this directory
+*
+# …but keep the placeholder and this file
+!.gitkeep
+!.gitignore

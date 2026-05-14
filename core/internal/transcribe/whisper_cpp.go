@@ -3,8 +3,10 @@
 package transcribe
 
 /*
-#cgo CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include -I/opt/homebrew/include
-#cgo LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -L/opt/homebrew/lib -lwhisper -lggml -lggml-base
+#cgo darwin CFLAGS: -I/opt/homebrew/opt/whisper-cpp/include -I/opt/homebrew/include
+#cgo darwin LDFLAGS: -L/opt/homebrew/opt/whisper-cpp/lib -L/opt/homebrew/lib -lwhisper -lggml -lggml-base
+#cgo windows CFLAGS: -IC:/dev/whisper-dist/include
+#cgo windows LDFLAGS: -LC:/dev/whisper-dist/lib -lwhisper -lggml -lggml-base
 
 #include <stdlib.h>
 #include "whisper.h"

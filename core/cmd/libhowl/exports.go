@@ -15,6 +15,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 	"unsafe"
@@ -43,7 +44,7 @@ func openSessionRecorder(e *engine) error {
 	if err := e.sessions.Prune(10); err != nil {
 		log.Printf("[howl] openSessionRecorder: prune failed (continuing): %v", err)
 	}
-	id := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
+	id := time.Now().UTC().Format("20060102T150405.000000000Z")
 	dir := e.sessions.SessionDir(id)
 	rec, err := recorder.Open(recorder.Options{
 		Dir:         dir,
@@ -65,7 +66,7 @@ func openSessionRecorder(e *engine) error {
 // Finder / LaunchServices). Best-effort: if file open fails, just keep
 // stderr.
 func init() {
-	if f, err := os.OpenFile("/tmp/howl.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+	if f, err := os.OpenFile(filepath.Join(os.TempDir(), "howl.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
@@ -80,9 +81,16 @@ func howl_init() C.int {
 	if getEngine() != nil {
 		return 0
 	}
+	sessionDir := filepath.Join(os.TempDir(), "howl", "sessions") // fallback if UserConfigDir fails
+	if configDir, err := os.UserConfigDir(); err == nil {
+		sessionDir = filepath.Join(configDir, "Howl", "sessions")
+	}
+	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+		log.Printf("[howl] howl_init: MkdirAll %s failed: %v", sessionDir, err)
+	}
 	setEngine(&engine{
 		events:   make(chan event, 32),
-		sessions: sessions.NewStore("/tmp/voicekeyboard/sessions"),
+		sessions: sessions.NewStore(sessionDir),
 	})
 	return 0
 }
