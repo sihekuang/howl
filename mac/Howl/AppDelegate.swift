@@ -4,7 +4,7 @@ import SwiftUI
 import os
 import HowlCore
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Setup")
+private let log = Logger(subsystem: "com.howl.app", category: "Setup")
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

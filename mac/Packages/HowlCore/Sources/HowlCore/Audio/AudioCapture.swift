@@ -4,7 +4,7 @@ import CoreAudio
 import AppKit
 import os
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "AudioCapture")
+private let log = Logger(subsystem: "com.howl.app", category: "AudioCapture")
 
 /// Captures Float32 mono 48 kHz audio from the default system input
 /// device and pushes frames to a callback. Lifetime: one start/stop

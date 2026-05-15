@@ -12,7 +12,7 @@ import os
 /// just what the user clicked.
 @MainActor
 enum LaunchAtLogin {
-    private static let log = Logger(subsystem: "com.voicekeyboard.app", category: "LaunchAtLogin")
+    private static let log = Logger(subsystem: "com.howl.app", category: "LaunchAtLogin")
 
     static var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled
