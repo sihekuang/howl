@@ -105,9 +105,11 @@ public struct ModifierFlags: OptionSet, Codable, Sendable {
 
 public protocol HotkeyMonitor: Sendable {
     /// Begin monitoring for the given shortcut. Replaces any prior shortcut.
-    /// Throws if the OS rejects the registration (binding already in use,
-    /// event handler install failed, etc.).
-    func start(_ shortcut: KeyboardShortcut, onPress: @escaping @Sendable () -> Void, onRelease: @escaping @Sendable () -> Void) throws
+    /// Async to allow implementations to retry transient registration
+    /// failures with backoff (e.g. CGEventTap.tapCreate returning nil during
+    /// the TCC trust-cache propagation race that follows app launch on
+    /// macOS). Throws only after retries are exhausted.
+    func start(_ shortcut: KeyboardShortcut, onPress: @escaping @Sendable () -> Void, onRelease: @escaping @Sendable () -> Void) async throws
 
     /// Cancel the current shortcut binding (idempotent).
     func stop()

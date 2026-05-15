@@ -3,7 +3,7 @@ import Carbon
 import CoreGraphics
 import os
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
+private let log = Logger(subsystem: "com.howl.app", category: "Hotkey")
 
 /// Carbon Event-Manager-based global hotkey monitor.
 ///
@@ -33,11 +33,27 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
 
     public init() {}
 
+    /// Backoff schedule for the CGEventTap registration retry. macOS's TCC
+    /// trust cache lags new-process Accessibility checks by anywhere from a
+    /// few hundred ms to a couple of seconds — `tapCreate` returns nil
+    /// during that window even when the user has granted permission. Five
+    /// attempts spanning ~5 s covers the realistic propagation window.
+    /// Carbon's `RegisterEventHotKey` doesn't have this race (it never
+    /// touches TCC) and isn't retried — its failure mode is "another app
+    /// holds this hotkey," which doesn't resolve over time.
+    private static let tapCreateRetryDelaysNs: [UInt64] = [
+        0,
+        250_000_000,    // 250 ms
+        750_000_000,    // 750 ms
+        1_500_000_000,  // 1.5 s
+        3_000_000_000,  // 3.0 s
+    ]
+
     public func start(
         _ shortcut: KeyboardShortcut,
         onPress: @escaping @Sendable () -> Void,
         onRelease: @escaping @Sendable () -> Void
-    ) throws {
+    ) async throws {
         stop()
         bound = Bound(onPress: onPress, onRelease: onRelease, isHeld: false)
 
@@ -48,7 +64,7 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             fnRequired = shortcut.modifiers
             fnLetterKeyCode = shortcut.isFnLetterCombo ? Int64(shortcut.keyCode) : -1
             let reqRaw = fnRequired.rawValue
-            log.info("PTT (CGEventTap/fn) start: mods=0x\(String(format: "%X", reqRaw), privacy: .public) letterKC=\(self.fnLetterKeyCode, privacy: .public)")
+            log.notice("PTT (CGEventTap/fn) start: mods=0x\(String(format: "%X", reqRaw), privacy: .public) letterKC=\(self.fnLetterKeyCode, privacy: .public)")
 
             let mask = CGEventMask(
                 (1 << CGEventType.flagsChanged.rawValue) |
@@ -60,15 +76,29 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             // fn-alone / fn+modifier can stay listenOnly — flagsChanged can't be swallowed.
             let tapOptions: CGEventTapOptions = shortcut.isFnLetterCombo ? CGEventTapOptions(rawValue: 0)! : .listenOnly
             let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-            guard let tap = CGEvent.tapCreate(
-                tap: .cghidEventTap,
-                place: .headInsertEventTap,
-                options: tapOptions,
-                eventsOfInterest: mask,
-                callback: fnGlobeEventTapCallback,
-                userInfo: selfPtr
-            ) else {
-                log.error("PTT (CGEventTap/fn): tapCreate failed — Accessibility permission required")
+            var tap: CFMachPort?
+            for (attemptIdx, delay) in Self.tapCreateRetryDelaysNs.enumerated() {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                }
+                if let created = CGEvent.tapCreate(
+                    tap: .cghidEventTap,
+                    place: .headInsertEventTap,
+                    options: tapOptions,
+                    eventsOfInterest: mask,
+                    callback: fnGlobeEventTapCallback,
+                    userInfo: selfPtr
+                ) {
+                    tap = created
+                    if attemptIdx > 0 {
+                        log.notice("PTT (CGEventTap/fn): tapCreate succeeded on attempt \(attemptIdx + 1, privacy: .public)")
+                    }
+                    break
+                }
+                log.error("PTT (CGEventTap/fn): tapCreate attempt \(attemptIdx + 1, privacy: .public)/\(Self.tapCreateRetryDelaysNs.count, privacy: .public) returned nil — TCC trust-cache may not have propagated yet")
+            }
+            guard let tap else {
+                log.error("PTT (CGEventTap/fn): tapCreate failed after \(Self.tapCreateRetryDelaysNs.count, privacy: .public) attempts — verify Accessibility permission is granted in System Settings")
                 throw HotkeyError.tapInstallFailed
             }
             fnEventTap = tap
@@ -76,11 +106,11 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
             fnRunLoopSource = src
-            log.info("PTT (CGEventTap/fn): tap registered")
+            log.notice("PTT (CGEventTap/fn): tap registered")
             return
         }
 
-        log.info("PTT (Carbon) start: key=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
+        log.notice("PTT (Carbon) start: key=\(shortcut.keyCode, privacy: .public) mods=\(String(format: "0x%X", shortcut.modifiers.rawValue), privacy: .public)")
 
         // Install one handler that watches BOTH press and release events.
         var specs: [EventTypeSpec] = [
@@ -139,7 +169,7 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
             throw HotkeyError.tapInstallFailed
         }
         hotKeyRef = ref
-        log.info("PTT (Carbon) start: hotkey registered")
+        log.notice("PTT (Carbon) start: hotkey registered")
     }
 
     public func stop() {
