@@ -4,7 +4,7 @@ import Carbon
 import os
 import HowlCore
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Hotkey")
+private let log = Logger(subsystem: "com.howl.app", category: "Hotkey")
 
 struct HotkeyTab: View {
     @Binding var settings: UserSettings

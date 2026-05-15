@@ -12,7 +12,7 @@ import os
 /// ever running and you hear nothing.
 @MainActor
 final class CueSound {
-    private let log = Logger(subsystem: "com.voicekeyboard.app", category: "CueSound")
+    private let log = Logger(subsystem: "com.howl.app", category: "CueSound")
     private var player: AVAudioPlayer?
 
     /// Lazy load + cache the player. The MP3 lives in the bundle

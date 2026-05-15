@@ -2,7 +2,7 @@ import Foundation
 import os
 import HowlCore
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Engine")
+private let log = Logger(subsystem: "com.howl.app", category: "Engine")
 
 @MainActor
 public final class EngineCoordinator {
@@ -51,7 +51,7 @@ public final class EngineCoordinator {
     }
 
     public func start() async {
-        log.info("coordinator.start: applying config and binding hotkey")
+        log.notice("coordinator.start: applying config and binding hotkey")
         // Apply current settings to the engine
         await applyConfig()
         // Pre-warm Ollama if it's the active provider so the user's
@@ -60,7 +60,7 @@ public final class EngineCoordinator {
         // Hook hotkey
         do {
             let settings = try composition.settings.get()
-            try composition.hotkey.start(
+            try await composition.hotkey.start(
                 settings.hotkey,
                 onPress: { [weak self] in
                     Task { @MainActor in await self?.onPress() }
@@ -69,8 +69,16 @@ public final class EngineCoordinator {
                     Task { @MainActor in await self?.onRelease() }
                 }
             )
+            // Clear any prior registration error from a previous launch
+            // or a failed reapply — we're good now.
+            composition.appState.hotkeyRegistrationError = nil
         } catch {
-            setTransientWarning("Hotkey: \(error)")
+            // Persistent indicator (not the 5-second toast). Hotkey
+            // registration failure is the rare class of error where
+            // dictation is silently broken until the user acts; auto-
+            // clearing the warning would hide that.
+            log.error("coordinator.start: hotkey registration FAILED after retries: \(String(describing: error), privacy: .public)")
+            composition.appState.hotkeyRegistrationError = "Open System Settings → Privacy & Security → Accessibility and confirm Howl is granted, then reopen the app."
         }
         // Begin polling
         pollTask?.cancel()
@@ -104,7 +112,7 @@ public final class EngineCoordinator {
         do {
             let settings = try composition.settings.get()
             composition.hotkey.stop()
-            try composition.hotkey.start(
+            try await composition.hotkey.start(
                 settings.hotkey,
                 onPress: { [weak self] in
                     Task { @MainActor in await self?.onPress() }
@@ -113,8 +121,10 @@ public final class EngineCoordinator {
                     Task { @MainActor in await self?.onRelease() }
                 }
             )
+            composition.appState.hotkeyRegistrationError = nil
         } catch {
-            setTransientWarning("reapply: \(error)")
+            log.error("reapplyConfig: hotkey registration FAILED: \(String(describing: error), privacy: .public)")
+            composition.appState.hotkeyRegistrationError = "Open System Settings → Privacy & Security → Accessibility and confirm Howl is granted, then reopen the app."
         }
     }
 
@@ -138,7 +148,7 @@ public final class EngineCoordinator {
         hotkeyPaused = false
         do {
             let settings = try composition.settings.get()
-            try composition.hotkey.start(
+            try await composition.hotkey.start(
                 settings.hotkey,
                 onPress: { [weak self] in
                     Task { @MainActor in await self?.onPress() }
@@ -147,9 +157,11 @@ public final class EngineCoordinator {
                     Task { @MainActor in await self?.onRelease() }
                 }
             )
-            log.info("hotkey resumed after recording cancel")
+            composition.appState.hotkeyRegistrationError = nil
+            log.notice("hotkey resumed after recording cancel")
         } catch {
-            setTransientWarning("hotkey resume: \(error)")
+            log.error("resumeHotkeyAfterRecording: hotkey registration FAILED: \(String(describing: error), privacy: .public)")
+            composition.appState.hotkeyRegistrationError = "Open System Settings → Privacy & Security → Accessibility and confirm Howl is granted, then reopen the app."
         }
     }
 

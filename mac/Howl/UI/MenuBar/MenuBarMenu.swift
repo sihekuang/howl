@@ -22,6 +22,15 @@ struct MenuBarMenu: View {
         Button(statusText) { }
             .disabled(true)
 
+        if let hotkeyErr = appState.hotkeyRegistrationError {
+            // Persistent — stays until registration succeeds or the user
+            // resolves the underlying issue (typically Accessibility
+            // permission). Shown above the transient warning so it's
+            // the first thing the user sees in the menu.
+            Button("⚠️ Hotkey not active: \(hotkeyErr)") { }
+                .disabled(true)
+        }
+
         if let warning = appState.transientWarning {
             Button(warning) { }
                 .disabled(true)

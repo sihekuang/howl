@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 import os
 
-private let log = Logger(subsystem: "com.voicekeyboard.app", category: "Injector")
+private let log = Logger(subsystem: "com.howl.app", category: "Injector")
 
 /// Types text at the focused field via synthetic Unicode keyboard
 /// events. Used for streaming LLM output: each delta gets posted as a

@@ -22,6 +22,13 @@ public final class AppState {
     public var setupGate: SetupGate = .ready
     public var liveRMS: Float = 0
     public var transientWarning: String?
+    /// Non-nil when global hotkey registration failed and didn't recover
+    /// after retries. Distinct from `transientWarning` because it must
+    /// stay visible until either (a) registration eventually succeeds or
+    /// (b) the user takes action — e.g. opens System Settings to verify
+    /// Accessibility permission. Cleared on the next successful
+    /// `composition.hotkey.start(...)`.
+    public var hotkeyRegistrationError: String?
 
     public init() {}
 }
