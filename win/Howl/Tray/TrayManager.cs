@@ -1,33 +1,55 @@
 using System.Drawing;
-using System.Windows.Forms;
+using System.IO;
+using System.Windows.Controls;
+using H.NotifyIcon;
+using H.NotifyIcon.Core;
 
 namespace Howl.Tray;
 
 internal sealed class TrayManager : IDisposable
 {
-    private readonly NotifyIcon _icon;
+    private readonly TaskbarIcon _icon;
 
-    internal TrayManager(Action quit)
+    internal TrayManager(Action openSettings, Action quit)
     {
-        _icon = new NotifyIcon
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "howl.ico");
+        var icon = File.Exists(iconPath) ? new Icon(iconPath, 32, 32) : SystemIcons.Application;
+
+        _icon = new TaskbarIcon
         {
-            Text = "Howl — press Ctrl+Shift+Space to dictate",
-            Icon = SystemIcons.Application,
-            Visible = true,
-            ContextMenuStrip = BuildMenu(quit),
+            ToolTipText = "Howl — press Ctrl+Shift+Space to dictate",
+            Icon = icon,
+            ContextMenu = BuildMenu(openSettings, quit),
         };
+        _icon.ForceCreate();
+        _icon.ShowNotification("Howl", "Howl is running — right-click this icon for options.");
     }
 
-    private static ContextMenuStrip BuildMenu(Action quit)
+    internal void ShowError(string message) =>
+        _icon.ShowNotification("Howl", message, NotificationIcon.Error);
+
+    internal void ShowInfo(string message) =>
+        _icon.ShowNotification("Howl", message, NotificationIcon.Info);
+
+    internal void SetTooltip(string tip) =>
+        _icon.ToolTipText = tip;
+
+    private static ContextMenu BuildMenu(Action openSettings, Action quit)
     {
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Quit Howl", image: null, onClick: (_, _) => quit());
+        var menu = new ContextMenu();
+
+        var settingsItem = new MenuItem { Header = "Settings…" };
+        settingsItem.Click += (_, _) => openSettings();
+        menu.Items.Add(settingsItem);
+
+        menu.Items.Add(new Separator());
+
+        var quitItem = new MenuItem { Header = "Quit Howl" };
+        quitItem.Click += (_, _) => quit();
+        menu.Items.Add(quitItem);
+
         return menu;
     }
 
-    public void Dispose()
-    {
-        _icon.Visible = false;
-        _icon.Dispose();
-    }
+    public void Dispose() => _icon.Dispose();
 }
