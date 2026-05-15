@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/pipeline"
@@ -50,7 +51,24 @@ type engine struct {
 	dropCount int
 	pushCount int
 
-	cancel context.CancelFunc
+	// cancel aborts the in-flight pipeline as a user-driven cancel
+	// (howl_cancel_capture). cancelWithCause is the underlying
+	// cause-aware cancel — used by the post-stop watchdog timer so the
+	// goroutine can tell timer-fired from user-fired cancellation via
+	// context.Cause(ctx). Both nil between cycles.
+	cancel          context.CancelFunc
+	cancelWithCause context.CancelCauseFunc
+
+	// timeoutAfterStop is copied from cfg.PipelineTimeoutValue() at
+	// howl_start_capture. 0 disables the watchdog. The recording phase
+	// itself is unbounded — the timer doesn't start until
+	// howl_stop_capture, so it covers only Whisper drain + LLM cleanup,
+	// where stage hangs actually happen.
+	timeoutAfterStop time.Duration
+	// stopTimer is the post-stop watchdog. Started by howl_stop_capture
+	// when timeoutAfterStop > 0; stopped by the goroutine's defer on
+	// normal exit and by howl_cancel_capture on user cancel.
+	stopTimer *time.Timer
 
 	events chan event
 

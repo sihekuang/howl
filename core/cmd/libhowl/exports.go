@@ -60,6 +60,15 @@ func openSessionRecorder(e *engine) error {
 	return nil
 }
 
+// Sentinel causes attached to the pipeline context's cancellation. The
+// goroutine reads context.Cause(ctx) to decide which event to emit when
+// pipe.Run returns context.Canceled: timer-fired → warning + empty
+// result; user-fired → "cancelled".
+var (
+	errUserCanceled     = errors.New("howl: user cancelled")
+	errPipelineTimedOut = errors.New("howl: pipeline timed out")
+)
+
 // Mirror Go logs to /tmp/howl.log so the user can `tail -f` regardless of
 // how the app was launched (stderr is invisible when launched from
 // Finder / LaunchServices). Best-effort: if file open fails, just keep
@@ -164,7 +173,7 @@ func howl_start_capture() C.int {
 		return 2
 	}
 	pushCh := make(chan []float32, pushBufferFrames)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancelWithCause := context.WithCancelCause(context.Background())
 	pipe := e.pipeline
 	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
@@ -175,18 +184,18 @@ func howl_start_capture() C.int {
 		pipe.Recorder = e.activeRecorder
 	}
 	e.pushCh = pushCh
-	e.cancel = cancel
+	e.cancelWithCause = cancelWithCause
+	// e.cancel is the user-cancel entrypoint. howl_cancel_capture calls
+	// it; the wrapper attaches errUserCanceled so the goroutine can
+	// distinguish this from a timer-fired cancel via context.Cause(ctx).
+	e.cancel = func() { cancelWithCause(errUserCanceled) }
+	// timeoutAfterStop is read by howl_stop_capture to arm the post-stop
+	// watchdog. We deliberately do NOT wrap ctx with context.WithTimeout
+	// here — the timer must not start counting until the user releases
+	// PTT, otherwise long dictations get cut off mid-sentence.
+	e.timeoutAfterStop = timeout
 	e.dropCount = 0
 	e.mu.Unlock()
-
-	// Wrap ctx with the per-preset timeout. The timeout-cancel is
-	// captured by the capture goroutine's defer (below) so it's always
-	// cleaned up when the goroutine exits — independently of whether
-	// howl_cancel_capture fired the parent cancel first.
-	var cancelTimeout context.CancelFunc
-	if timeout > 0 {
-		ctx, cancelTimeout = context.WithTimeout(ctx, timeout)
-	}
 
 	// Throttle level events to ~30Hz, taking max RMS in each window.
 	// Stream LLM cleaned-text deltas to Swift as they arrive via EventLLMDelta.
@@ -234,17 +243,20 @@ func howl_start_capture() C.int {
 	go func() {
 		log.Printf("[howl] capture goroutine: started")
 		defer func() {
-			if cancelTimeout != nil {
-				cancelTimeout()
-			}
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("panic: %v", r)
 				log.Printf("[howl] capture goroutine: PANIC %s", msg)
 				e.events <- event{Kind: "error", Msg: msg}
 			}
 			// Snapshot session metadata under the lock so we don't race with
-			// a concurrent howl_configure swapping it out.
+			// a concurrent howl_configure swapping it out. Also tear down
+			// the post-stop watchdog if it's still pending — pipe.Run
+			// beat it to the finish line.
 			e.mu.Lock()
+			if e.stopTimer != nil {
+				e.stopTimer.Stop()
+				e.stopTimer = nil
+			}
 			sessionID := e.activeSessionID
 			sessionDir := e.activeSessionDir
 			rec := e.activeRecorder
@@ -253,6 +265,8 @@ func howl_start_capture() C.int {
 			e.activeRecorder = nil
 			e.pushCh = nil
 			e.cancel = nil
+			e.cancelWithCause = nil
+			e.timeoutAfterStop = 0
 			drops := e.dropCount
 			pushes := e.pushCount
 			e.dropCount = 0
@@ -288,15 +302,18 @@ func howl_start_capture() C.int {
 		// blocking here — by the time we're stopping, level emission
 		// is over and the channel will drain quickly.
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				log.Printf("[howl] capture goroutine: pipeline timed out (>%s)", timeout)
-				e.events <- event{Kind: "warning", Msg: fmt.Sprintf("pipeline timed out after %s", timeout)}
-				// pipe.Run returns (Result{}, err) on context error, not partial
-				// state. Emit an empty result so Swift transitions back to idle.
-				e.events <- event{Kind: "result", Text: ""}
-				return
-			}
 			if errors.Is(err, context.Canceled) {
+				// Both the post-stop watchdog and howl_cancel_capture
+				// surface as context.Canceled; the cause distinguishes
+				// them so we emit the right event to Swift.
+				if errors.Is(context.Cause(ctx), errPipelineTimedOut) {
+					log.Printf("[howl] capture goroutine: pipeline timed out (>%s after stop)", timeout)
+					e.events <- event{Kind: "warning", Msg: fmt.Sprintf("pipeline timed out after %s", timeout)}
+					// pipe.Run returns (Result{}, err) on context error, not partial
+					// state. Emit an empty result so Swift transitions back to idle.
+					e.events <- event{Kind: "result", Text: ""}
+					return
+				}
 				log.Printf("[howl] capture goroutine: pipeline cancelled")
 				e.events <- event{Kind: "cancelled"}
 				return
@@ -397,8 +414,19 @@ func howl_stop_capture() C.int {
 		close(e.pushCh)
 		e.pushCh = nil
 	}
-	if e.cancel != nil {
-		e.cancel = nil
+	// Arm the post-stop watchdog. Only now — at end-of-recording —
+	// does the pipeline-timeout budget start counting. It covers the
+	// remaining post-capture work (Whisper drain + LLM cleanup), which
+	// is where stage hangs actually happen. The goroutine's defer or
+	// howl_cancel_capture will Stop the timer if pipe.Run finishes
+	// first or the user cancels.
+	if e.timeoutAfterStop > 0 && e.cancelWithCause != nil && e.stopTimer == nil {
+		cwc := e.cancelWithCause
+		d := e.timeoutAfterStop
+		log.Printf("[howl] howl_stop_capture: arming post-stop watchdog (%s)", d)
+		e.stopTimer = time.AfterFunc(d, func() {
+			cwc(errPipelineTimedOut)
+		})
 	}
 	return 0
 }
@@ -416,11 +444,20 @@ func howl_cancel_capture() C.int {
 	}
 	e.mu.Lock()
 	cancel := e.cancel
+	// Stop the watchdog before invoking user-cancel so a racing timer
+	// can't override the user-cancel cause. (cancelWithCause is
+	// first-write-wins; stopping the timer first ensures the
+	// errUserCanceled cause sticks.)
+	if e.stopTimer != nil {
+		e.stopTimer.Stop()
+		e.stopTimer = nil
+	}
 	if e.pushCh != nil {
 		close(e.pushCh)
 		e.pushCh = nil
 	}
 	e.cancel = nil
+	e.cancelWithCause = nil
 	e.mu.Unlock()
 	if cancel != nil {
 		log.Printf("[howl] howl_cancel_capture: cancelling in-flight pipeline")

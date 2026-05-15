@@ -43,11 +43,14 @@ type Config struct {
 	// disables the gate entirely (current default behavior).
 	TSEThreshold *float32 `json:"tse_threshold,omitempty"`
 
-	// PipelineTimeoutSec bounds total pipeline runtime per dictation.
-	// 0 disables the bound (legacy behavior). Wired into engine via
-	// context.WithTimeout(pipe.Run ctx). On expiry the pipeline returns
-	// whatever cleaned text streamed so far (or dict-corrected raw if no
-	// LLM output yet).
+	// PipelineTimeoutSec bounds the POST-STOP pipeline budget — Whisper
+	// drain + LLM cleanup, measured from howl_stop_capture. The recording
+	// phase itself runs unbounded; the user holds PTT as long as they
+	// want without risk of being cut off mid-sentence. 0 disables the
+	// watchdog (legacy behavior). On expiry the pipeline emits a warning
+	// event ("pipeline timed out") and an empty result so the host
+	// transitions back to idle. Future work: preserve dict-corrected
+	// text on timeout instead of dropping the transcript.
 	PipelineTimeoutSec int `json:"pipeline_timeout_sec,omitempty"`
 }
 
