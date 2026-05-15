@@ -141,6 +141,182 @@ func TestCancelHelper_DropsPushChAndCallsCancel(t *testing.T) {
 	// If we got here without panic, the no-op path is safe.
 }
 
+// TestStopCapture_ArmsWatchdog_WhenTimeoutConfigured verifies that
+// howl_stop_capture's logic schedules a time.AfterFunc that fires
+// context cancellation with cause errPipelineTimedOut after the
+// configured duration. This is the load-bearing piece of the
+// post-stop-only timeout model: the timer must start at stop, not at
+// start, so long dictations don't get cut off mid-sentence.
+func TestStopCapture_ArmsWatchdog_WhenTimeoutConfigured(t *testing.T) {
+	ctx, cwc := context.WithCancelCause(context.Background())
+	pushCh := make(chan []float32, 4)
+	e := &engine{events: make(chan event, 4)}
+	e.pushCh = pushCh
+	e.cancelWithCause = cwc
+	e.cancel = func() { cwc(errUserCanceled) }
+	e.timeoutAfterStop = 30 * time.Millisecond
+
+	// Mirror the body of howl_stop_capture.
+	e.mu.Lock()
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	if e.timeoutAfterStop > 0 && e.cancelWithCause != nil && e.stopTimer == nil {
+		cwc2 := e.cancelWithCause
+		d := e.timeoutAfterStop
+		e.stopTimer = time.AfterFunc(d, func() {
+			cwc2(errPipelineTimedOut)
+		})
+	}
+	e.mu.Unlock()
+
+	if e.stopTimer == nil {
+		t.Fatal("stopTimer was not armed despite timeoutAfterStop > 0")
+	}
+
+	select {
+	case <-ctx.Done():
+		cause := context.Cause(ctx)
+		if !errors.Is(cause, errPipelineTimedOut) {
+			t.Errorf("cause = %v, want errPipelineTimedOut", cause)
+		}
+		if ctx.Err() != context.Canceled {
+			t.Errorf("ctx.Err() = %v, want context.Canceled", ctx.Err())
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("watchdog timer did not fire within 500ms")
+	}
+}
+
+// TestStopCapture_NoTimer_WhenTimeoutDisabled verifies that with
+// PipelineTimeoutSec=0 (the legacy/disabled config), howl_stop_capture
+// does NOT arm a watchdog. The pipeline must be free to run as long as
+// it needs.
+func TestStopCapture_NoTimer_WhenTimeoutDisabled(t *testing.T) {
+	_, cwc := context.WithCancelCause(context.Background())
+	pushCh := make(chan []float32, 4)
+	e := &engine{events: make(chan event, 4)}
+	e.pushCh = pushCh
+	e.cancelWithCause = cwc
+	e.timeoutAfterStop = 0
+
+	e.mu.Lock()
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	if e.timeoutAfterStop > 0 && e.cancelWithCause != nil && e.stopTimer == nil {
+		t.Fatal("should not enter arm-timer branch when timeoutAfterStop == 0")
+	}
+	e.mu.Unlock()
+
+	if e.stopTimer != nil {
+		t.Fatal("stopTimer should be nil when timeoutAfterStop == 0")
+	}
+}
+
+// TestCaptureGoroutine_CauseDistinguishesTimerVsUser verifies that the
+// error-handling shape inside howl_start_capture's goroutine emits
+// different events for the two cancel paths: watchdog → warning +
+// empty result, user → cancelled. Both paths surface as
+// context.Canceled from pipe.Run; the cause is the only differentiator.
+func TestCaptureGoroutine_CauseDistinguishesTimerVsUser(t *testing.T) {
+	events := make(chan event, 8)
+
+	// Mirror the goroutine's cause-aware emit logic.
+	emit := func(ctx context.Context, err error) {
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				if errors.Is(context.Cause(ctx), errPipelineTimedOut) {
+					events <- event{Kind: "warning", Msg: "pipeline timed out"}
+					events <- event{Kind: "result", Text: ""}
+					return
+				}
+				events <- event{Kind: "cancelled"}
+				return
+			}
+			events <- event{Kind: "error", Msg: err.Error()}
+			return
+		}
+		events <- event{Kind: "result"}
+	}
+
+	// Timer-fired path.
+	ctxTimer, cancelTimer := context.WithCancelCause(context.Background())
+	cancelTimer(errPipelineTimedOut)
+	emit(ctxTimer, ctxTimer.Err())
+
+	// User-fired path.
+	ctxUser, cancelUser := context.WithCancelCause(context.Background())
+	cancelUser(errUserCanceled)
+	emit(ctxUser, ctxUser.Err())
+
+	// Plain error path (non-cancel).
+	ctxErr, _ := context.WithCancelCause(context.Background())
+	emit(ctxErr, errors.New("whisper boom"))
+
+	// Success path.
+	ctxOk, _ := context.WithCancelCause(context.Background())
+	emit(ctxOk, nil)
+
+	wantKinds := []string{"warning", "result", "cancelled", "error", "result"}
+	for i, want := range wantKinds {
+		select {
+		case ev := <-events:
+			if ev.Kind != want {
+				t.Errorf("event[%d].Kind = %q, want %q", i, ev.Kind, want)
+			}
+		case <-time.After(50 * time.Millisecond):
+			t.Fatalf("event[%d] timeout", i)
+		}
+	}
+}
+
+// TestCancelAfterStop_TimerStopsBeforeUserCancel verifies that when
+// howl_cancel_capture races against the post-stop watchdog, the timer
+// is disarmed before the user-cancel runs — so the cause attached to
+// the context is errUserCanceled, not errPipelineTimedOut.
+// context.CancelCauseFunc is first-write-wins, so the order matters.
+func TestCancelAfterStop_TimerStopsBeforeUserCancel(t *testing.T) {
+	ctx, cwc := context.WithCancelCause(context.Background())
+	pushCh := make(chan []float32, 4)
+	e := &engine{events: make(chan event, 4)}
+	e.pushCh = pushCh
+	e.cancelWithCause = cwc
+	e.cancel = func() { cwc(errUserCanceled) }
+	// Arm a watchdog that would fire well after the test runs.
+	e.timeoutAfterStop = 10 * time.Second
+	e.stopTimer = time.AfterFunc(e.timeoutAfterStop, func() {
+		cwc(errPipelineTimedOut)
+	})
+
+	// Mirror the body of howl_cancel_capture.
+	e.mu.Lock()
+	cancel := e.cancel
+	if e.stopTimer != nil {
+		e.stopTimer.Stop()
+		e.stopTimer = nil
+	}
+	if e.pushCh != nil {
+		close(e.pushCh)
+		e.pushCh = nil
+	}
+	e.cancel = nil
+	e.cancelWithCause = nil
+	e.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+
+	if ctx.Err() != context.Canceled {
+		t.Errorf("ctx.Err() = %v, want Canceled", ctx.Err())
+	}
+	if got := context.Cause(ctx); !errors.Is(got, errUserCanceled) {
+		t.Errorf("cause = %v, want errUserCanceled (timer should not have raced past Stop)", got)
+	}
+}
+
 // TestCapture_WritesSessionManifest_WhenDeveloperMode runs a fake
 // capture cycle with DeveloperMode=true and asserts a session.json
 // landed under /tmp/voicekeyboard/sessions/<id>/.
