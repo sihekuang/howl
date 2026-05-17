@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
+        Background="#CC000000"
         Topmost="True"
         ShowInTaskbar="False"
+        ShowActivated="False"
         IsHitTestVisible="False"
         Width="240" Height="44"
         WindowStartupLocation="Manual">

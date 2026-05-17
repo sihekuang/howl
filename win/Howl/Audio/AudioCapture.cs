@@ -16,9 +16,17 @@ internal sealed class AudioCapture : IDisposable
 
     internal void Start()
     {
-        var device = string.IsNullOrEmpty(_deviceId)
-            ? new MMDeviceEnumerator().GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications)
-            : new MMDeviceEnumerator().GetDevice(_deviceId);
+        var enumerator = new MMDeviceEnumerator();
+        MMDevice device;
+        if (!string.IsNullOrEmpty(_deviceId))
+        {
+            try   { device = enumerator.GetDevice(_deviceId); }
+            catch { device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia); }
+        }
+        else
+        {
+            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
+        }
 
         _capture = new WasapiCapture(device)
         {
@@ -52,8 +60,8 @@ internal sealed class AudioCapture : IDisposable
         _rawBuffer!.AddSamples(e.Buffer, 0, e.BytesRecorded);
 
         var chunk = new float[4096];
-        int read;
-        while ((read = _pipeline!.Read(chunk, 0, chunk.Length)) > 0)
+        int read = _pipeline!.Read(chunk, 0, chunk.Length);
+        if (read > 0)
             NativeMethods.howl_push_audio(chunk, read);
     }
 

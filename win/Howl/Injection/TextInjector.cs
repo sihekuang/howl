@@ -5,23 +5,29 @@ namespace Howl.Injection;
 
 internal static class TextInjector
 {
-    // ── SendInput structures ──────────────────────────────────────────────
-
-    private const uint InputKeyboard    = 1;
-    private const ushort VkControl      = 0x11;
-    private const ushort VkV            = 0x56;
-    private const uint KeyUp            = 0x0002;
-    private const uint KeyUnicode       = 0x0004;
+    private const uint InputKeyboard = 1;
+    private const ushort VkControl   = 0x11;
+    private const ushort VkV         = 0x56;
+    private const uint KeyUp         = 0x0002;
+    private const uint KeyUnicode    = 0x0004;
+    private const uint WmPaste       = 0x0302;
 
     [DllImport("user32.dll")] private static extern uint SendInput(uint n, INPUT[] inputs, int size);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll")] private static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO info);
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr w, IntPtr l);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct KEYBDINPUT
+    private struct GUITHREADINFO
     {
-        public ushort wVk, wScan;
-        public uint dwFlags, time;
-        public IntPtr dwExtraInfo;
+        public int cbSize, flags;
+        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+        public int left, top, right, bottom;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
 
     [StructLayout(LayoutKind.Explicit)]
     private struct INPUT_UNION { [FieldOffset(0)] public KEYBDINPUT ki; }
@@ -29,14 +35,41 @@ internal static class TextInjector
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT { public uint type; public INPUT_UNION u; }
 
-    // ── Streaming: inject text character-by-character via SendInput ───────
-    // Used for LLM chunk events so text appears at the cursor as it streams.
+    private static IntPtr _targetWindow;
+
+    internal static void CaptureTargetWindow() => _targetWindow = GetForegroundWindow();
+
+    // ── Clipboard inject: set clipboard then WM_PASTE directly to target control ──
+
+    internal static async Task InjectClipboardAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        // Snapshot the focused control inside the target window right now.
+        // GetGUIThreadInfo doesn't need the window to be foreground.
+        uint targetThread = GetWindowThreadProcessId(_targetWindow, out _);
+        var gti = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
+        GetGUIThreadInfo(targetThread, ref gti);
+        IntPtr targetControl = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : _targetWindow;
+
+        // Set clipboard (already on UI/STA thread via DispatcherTimer continuation).
+        string? saved = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+        Clipboard.SetText(text);
+
+        // Send WM_PASTE directly — works without stealing focus.
+        PostMessage(targetControl, WmPaste, IntPtr.Zero, IntPtr.Zero);
+
+        await Task.Delay(100);
+
+        if (saved is not null) Clipboard.SetText(saved);
+        else Clipboard.Clear();
+    }
+
+    // ── Unicode streaming (for future streaming injection) ──────────────────
 
     internal static void InjectStreaming(string text)
     {
         if (string.IsNullOrEmpty(text)) return;
-
-        // Convert to UTF-16 code units (handles surrogates automatically)
         var units = text.Select(c => (ushort)c).ToArray();
         var inputs = new INPUT[units.Length * 2];
         for (int i = 0; i < units.Length; i++)
@@ -44,44 +77,6 @@ internal static class TextInjector
             inputs[i * 2]     = MakeUnicode(units[i], 0);
             inputs[i * 2 + 1] = MakeUnicode(units[i], KeyUp);
         }
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-    }
-
-    // ── Clipboard paste: save → set → Ctrl+V → restore ───────────────────
-    // Used for the final result event (fallback when no chunks were streamed).
-
-    internal static async Task InjectClipboardAsync(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return;
-
-        string? saved = null;
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            saved = Clipboard.ContainsText() ? Clipboard.GetText() : null;
-            Clipboard.SetText(text);
-        });
-
-        SendCtrlV();
-        await Task.Delay(50);
-
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (saved is not null) Clipboard.SetText(saved);
-            else Clipboard.Clear();
-        });
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private static void SendCtrlV()
-    {
-        INPUT[] inputs =
-        [
-            MakeVKey(VkControl, 0),
-            MakeVKey(VkV,       0),
-            MakeVKey(VkV,       KeyUp),
-            MakeVKey(VkControl, KeyUp),
-        ];
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 

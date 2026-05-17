@@ -30,7 +30,7 @@ public sealed class AppSettings
     [JsonPropertyName("input_device_id")]    public string InputDeviceId     { get; set; } = "";
     [JsonPropertyName("custom_dict")]        public List<string> CustomDict   { get; set; } = [];
     [JsonPropertyName("launch_at_login")]    public bool LaunchAtLogin        { get; set; } = false;
-    [JsonPropertyName("pipeline_timeout_sec")] public int PipelineTimeout    { get; set; } = 10;
+    [JsonPropertyName("pipeline_timeout_sec")] public int PipelineTimeout    { get; set; } = 30;
     [JsonPropertyName("selected_preset")]    public string SelectedPreset     { get; set; } = "";
 
     // ── In-memory only (decrypted) ────────────────────────────────────────

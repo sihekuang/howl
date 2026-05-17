@@ -190,6 +190,8 @@ public partial class App : Application
 
         _isCapturing    = true;
         _chunksReceived = false;
+        TextInjector.CaptureTargetWindow();
+        File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] hotkey pressed — starting capture");
 
         CheckOrLog(NativeMethods.howl_start_capture(), "howl_start_capture");
         _capture = new AudioCapture(_settings.InputDeviceId);
@@ -202,6 +204,7 @@ public partial class App : Application
     private void OnHotkeyReleased(object? sender, EventArgs e)
     {
         if (!_isCapturing) return;
+        File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] hotkey released — stopping capture");
         StopCapture();
         _overlay?.SetProcessing();
     }
@@ -209,6 +212,7 @@ public partial class App : Application
     private void OnHotkeyCancelled(object? sender, EventArgs e)
     {
         if (!_isCapturing) return;
+        File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] hotkey cancelled");
         StopCapture(cancel: true);
         _overlay?.HideOverlay();
     }
@@ -220,10 +224,30 @@ public partial class App : Application
         _capture     = null;
         _isCapturing = false;
 
-        if (cancel)
-            CheckOrLog(NativeMethods.howl_cancel_capture(), "howl_cancel_capture");
-        else
-            CheckOrLog(NativeMethods.howl_stop_capture(), "howl_stop_capture");
+        // Run the blocking native call on a thread pool thread so the Dispatcher
+        // (and the 30ms engine poller timer) stays responsive to receive the result.
+        Task.Run(() =>
+        {
+            int rc = cancel
+                ? NativeMethods.howl_cancel_capture()
+                : NativeMethods.howl_stop_capture();
+            File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] stop_capture done (cancel={cancel}, rc={rc})");
+            if (rc != 0)
+            {
+                var msg = NativeMethods.MarshalAndFree(NativeMethods.howl_last_error()) ?? "(no detail)";
+                File.AppendAllText(LogPath, $"\n  → {msg}");
+            }
+        });
+
+        // Safety net: if the pipeline never completes, hide the overlay after 40s.
+        _ = Task.Delay(40_000).ContinueWith(_ =>
+        {
+            if (_overlay?.IsVisible == true)
+            {
+                File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] safety timeout — force-hiding overlay");
+                Dispatcher.Invoke(() => _overlay?.HideOverlay());
+            }
+        });
     }
 
     // ── Engine event handlers ────────────────────────────────────────────
@@ -232,15 +256,17 @@ public partial class App : Application
     {
         if (string.IsNullOrEmpty(text)) return;
         _chunksReceived = true;
-        TextInjector.InjectStreaming(text);
+        File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] chunk: {text}");
+        // Streaming key injection deferred — inject full text via clipboard on result.
     }
 
     private async void OnResult(object? sender, string text)
     {
+        File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] result: '{text}'");
         _overlay?.HideOverlay();
         SoundCue.PlayDone();
 
-        if (!_chunksReceived && !string.IsNullOrWhiteSpace(text))
+        if (!string.IsNullOrWhiteSpace(text))
             await TextInjector.InjectClipboardAsync(text);
 
         _chunksReceived = false;
@@ -286,8 +312,10 @@ public partial class App : Application
 
     private void OnDispatcherException(object sender, DispatcherUnhandledExceptionEventArgs ex)
     {
-        File.WriteAllText(LogPath, ex.Exception.ToString());
+        File.AppendAllText(LogPath, $"\n[dispatcher] {ex.Exception.GetType().Name}: {ex.Exception.Message}");
         ex.Handled = true;
+        // Win32Exception from the rendering system (e.g. layered window quota) is non-fatal.
+        if (ex.Exception is System.ComponentModel.Win32Exception) return;
         Shutdown(1);
     }
 
