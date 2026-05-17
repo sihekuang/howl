@@ -103,10 +103,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore NuGet
-        run: dotnet restore win/Howl/Howl.csproj
+        run: dotnet restore win/Howl/Howl.csproj -r win-x64
 
       - name: Build WPF app
-        run: dotnet build win/Howl/Howl.csproj -c Release --no-restore
+        run: dotnet build win/Howl/Howl.csproj -c Release -r win-x64 --no-restore
 
       - name: Publish
         run: |
