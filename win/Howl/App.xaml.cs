@@ -33,7 +33,6 @@ public partial class App : Application
     private RecordingOverlay? _overlay;
     private AppSettings       _settings = new();
     private bool              _isCapturing;
-    private bool              _chunksReceived;
     private bool              _needsConfigure;
 
     // ── Native return-code helpers ────────────────────────────────────────
@@ -191,7 +190,6 @@ public partial class App : Application
         }
 
         _isCapturing    = true;
-        _chunksReceived = false;
         TextInjector.CaptureTargetWindow();
         File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] hotkey pressed — starting capture");
 
@@ -257,7 +255,6 @@ public partial class App : Application
     private void OnChunk(object? sender, string text)
     {
         if (string.IsNullOrEmpty(text)) return;
-        _chunksReceived = true;
         File.AppendAllText(LogPath, $"\n[{DateTime.Now:HH:mm:ss}] chunk: {text}");
         // Streaming key injection deferred — inject full text via clipboard on result.
     }
@@ -271,7 +268,6 @@ public partial class App : Application
         if (!string.IsNullOrWhiteSpace(text))
             await TextInjector.InjectClipboardAsync(text);
 
-        _chunksReceived = false;
     }
 
     private void OnLevel(object? sender, float rms) => _overlay?.UpdateLevel(rms);

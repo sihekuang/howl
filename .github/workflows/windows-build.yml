@@ -74,16 +74,27 @@ jobs:
           Set-Location core/cmd/libhowl
           go build -buildmode=c-shared -tags=whispercpp -o ../../../win/bin/libhowl.dll .
 
-      # ── Copy runtime DLLs ─────────────────────────────────────────────
-      - name: Copy runtime DLLs
+      # ── Copy whisper runtime DLLs (from cmake install) ───────────────
+      - name: Copy whisper DLLs
         run: |
           $dist = "C:\dev\whisper-dist\bin"
-          $msys = "C:\msys64\ucrt64\bin"
           $out  = "win\bin"
           @("libwhisper.dll","ggml.dll","ggml-base.dll","ggml-cpu.dll") |
-            ForEach-Object { Copy-Item "$dist\$_" $out -Force -ErrorAction SilentlyContinue }
-          @("libgcc_s_seh-1.dll","libstdc++-6.dll","libwinpthread-1.dll","libgomp-1.dll") |
-            ForEach-Object { Copy-Item "$msys\$_" $out -Force -ErrorAction SilentlyContinue }
+            ForEach-Object { Copy-Item "$dist\$_" $out -Force }
+
+      # ── Copy MinGW runtime DLLs (must run inside MSYS2 to resolve paths) ─
+      - name: Copy MinGW runtime DLLs
+        shell: msys2 {0}
+        run: |
+          OUT="$(cygpath "$GITHUB_WORKSPACE/win/bin")"
+          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll; do
+            src=$(find /ucrt64/bin -name "$dll" 2>/dev/null | head -1)
+            if [ -n "$src" ]; then
+              cp "$src" "$OUT/" && echo "copied $dll"
+            else
+              echo "warning: $dll not found in MSYS2, skipping"
+            fi
+          done
 
       # ── .NET ──────────────────────────────────────────────────────────
       - name: Set up .NET

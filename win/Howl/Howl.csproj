@@ -28,10 +28,11 @@
     <Content Include="..\bin\ggml.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\bin\ggml-base.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\bin\ggml-cpu.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\bin\libgcc_s_seh-1.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\bin\libstdc++-6.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\bin\libwinpthread-1.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\bin\libgomp-1.dll" CopyToOutputDirectory="PreserveNewest" />
+    <!-- MinGW runtime DLLs — present after build, absent in a clean checkout -->
+    <Content Condition="Exists('..\bin\libgcc_s_seh-1.dll')"  Include="..\bin\libgcc_s_seh-1.dll"  CopyToOutputDirectory="PreserveNewest" />
+    <Content Condition="Exists('..\bin\libstdc++-6.dll')"     Include="..\bin\libstdc++-6.dll"     CopyToOutputDirectory="PreserveNewest" />
+    <Content Condition="Exists('..\bin\libwinpthread-1.dll')" Include="..\bin\libwinpthread-1.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Condition="Exists('..\bin\libgomp-1.dll')"       Include="..\bin\libgomp-1.dll"       CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
