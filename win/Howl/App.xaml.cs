@@ -84,6 +84,8 @@ public partial class App : Application
                 _needsConfigure = true;
             }
 
+            TextInjector.Log = msg => File.AppendAllText(LogPath, $"\n{msg}");
+
             File.AppendAllText(LogPath, "\nstep: overlay");
             _overlay = new RecordingOverlay();
 
@@ -138,7 +140,7 @@ public partial class App : Application
 
         var result = MessageBox.Show(
             $"Howl needs the Whisper model to transcribe speech.\n\n" +
-            $"Download ggml-base.en.bin (~142 MB) now?\n\n" +
+            $"Download ggml-small.en.bin (~244 MB) now?\n\n" +
             $"Destination: {_settings.WhisperModelPath}",
             "Howl — model not found",
             MessageBoxButton.YesNo,
@@ -314,8 +316,9 @@ public partial class App : Application
     {
         File.AppendAllText(LogPath, $"\n[dispatcher] {ex.Exception.GetType().Name}: {ex.Exception.Message}");
         ex.Handled = true;
-        // Win32Exception from the rendering system (e.g. layered window quota) is non-fatal.
+        // Non-fatal: Win32 rendering quota errors and COM clipboard race conditions.
         if (ex.Exception is System.ComponentModel.Win32Exception) return;
+        if (ex.Exception is System.Runtime.InteropServices.COMException) return;
         Shutdown(1);
     }
 

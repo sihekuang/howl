@@ -57,6 +57,13 @@
                         <Rectangle Height="1" Fill="#E0E0E0" Margin="0,0,0,10"/>
 
                         <DockPanel Margin="0,0,0,4">
+                            <TextBlock Text="Model size" Style="{StaticResource Label}"/>
+                            <ComboBox x:Name="ModelSizeBox" HorizontalAlignment="Left" Width="280"
+                                      SelectionChanged="ModelSize_Changed"/>
+                        </DockPanel>
+                        <TextBlock x:Name="ModelSizeHint" Style="{StaticResource Caption}" Margin="120,0,0,8"/>
+
+                        <DockPanel Margin="0,0,0,4">
                             <TextBlock Text="Model file" Style="{StaticResource Label}"/>
                             <Button DockPanel.Dock="Right" Content="Browse…" Margin="8,0,0,0"
                                     Click="BrowseModel_Click" Padding="8,3" FontSize="12"/>

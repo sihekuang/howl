@@ -33,6 +33,14 @@ public partial class SettingsWindow : Window
         ("lmstudio",  "LM Studio — local",  "no key needed"),
     ];
 
+    private static readonly (string Size, string Label, string Hint)[] ModelSizes =
+    [
+        ("tiny",   "Tiny (~39 MB) — fastest, lowest accuracy",       "Good for testing; struggles with accents"),
+        ("base",   "Base (~142 MB) — balanced",                       "Default; works well for clear speech"),
+        ("small",  "Small (~244 MB) — recommended for accents",       "Noticeably better accuracy, still fast"),
+        ("medium", "Medium (~769 MB) — highest accuracy",             "Best quality; slower processing (~5-10s extra)"),
+    ];
+
     private IReadOnlyList<(string Id, string Name)> _devices = [];
     private List<(string Name, string Description)> _presets = [];
 
@@ -56,6 +64,11 @@ public partial class SettingsWindow : Window
 
     private void PopulateGeneral()
     {
+        ModelSizeBox.ItemsSource = ModelSizes.Select(m => m.Label).ToArray();
+        int sizeIdx = DetectModelSizeIndex(_settings.WhisperModelPath);
+        ModelSizeBox.SelectedIndex = sizeIdx >= 0 ? sizeIdx : 2; // default small
+        UpdateModelSizeHint();
+
         ModelPathBox.Text = _settings.WhisperModelPath;
         UpdateModelStatus();
 
@@ -78,6 +91,31 @@ public partial class SettingsWindow : Window
             : "⚠ File not found — click Download to fetch it automatically.";
     }
 
+    private void ModelSize_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        UpdateModelSizeHint();
+        int idx = ModelSizeBox.SelectedIndex;
+        if (idx < 0 || idx >= ModelSizes.Length) return;
+        // Auto-update the model path to match the selected size
+        var dir = Path.GetDirectoryName(AppSettings.DefaultModelPath)!;
+        ModelPathBox.Text = Path.Combine(dir, $"ggml-{ModelSizes[idx].Size}.en.bin");
+        UpdateModelStatus();
+    }
+
+    private void UpdateModelSizeHint()
+    {
+        int idx = ModelSizeBox.SelectedIndex;
+        ModelSizeHint.Text = (idx >= 0 && idx < ModelSizes.Length) ? ModelSizes[idx].Hint : "";
+    }
+
+    private static int DetectModelSizeIndex(string path)
+    {
+        var file = Path.GetFileName(path);
+        for (int i = 0; i < ModelSizes.Length; i++)
+            if (file.Contains(ModelSizes[i].Size, StringComparison.OrdinalIgnoreCase)) return i;
+        return -1;
+    }
+
     private void BrowseModel_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -98,13 +136,16 @@ public partial class SettingsWindow : Window
         var destPath = ModelPathBox.Text.Trim();
         if (string.IsNullOrEmpty(destPath)) destPath = AppSettings.DefaultModelPath;
 
-        ModelStatusText.Text = "Downloading… 0%";
+        int sizeIdx = ModelSizeBox.SelectedIndex;
+        string size = (sizeIdx >= 0 && sizeIdx < ModelSizes.Length) ? ModelSizes[sizeIdx].Size : "small";
+
+        ModelStatusText.Text = $"Downloading {size} model… 0%";
         IsEnabled = false;
 
         try
         {
-            await ModelDownloader.DownloadAsync("base", destPath,
-                p => Dispatcher.Invoke(() => ModelStatusText.Text = $"Downloading… {p * 100:0}%"));
+            await ModelDownloader.DownloadAsync(size, destPath,
+                p => Dispatcher.Invoke(() => ModelStatusText.Text = $"Downloading {size} model… {p * 100:0}%"));
 
             ModelPathBox.Text = destPath;
             UpdateModelStatus();

@@ -15,7 +15,7 @@ public sealed class AppSettings
     internal static readonly string DefaultModelPath =
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Howl", "models", "ggml-base.en.bin");
+            "Howl", "models", "ggml-small.en.bin");
 
     private static readonly string SettingsPath = Path.Combine(Dir, "settings.json");
     private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
