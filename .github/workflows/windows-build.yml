@@ -1,0 +1,122 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main, windows-port]
+    tags: ['win-v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'win/**'
+      - 'core/**'
+      - '.github/workflows/windows-build.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Go ────────────────────────────────────────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: core/go.sum
+
+      # ── MSYS2 + MinGW toolchain ───────────────────────────────────────
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      # ── Build whisper.cpp ──────────────────────────────────────────────
+      - name: Clone whisper.cpp
+        run: git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git C:\whisper-src
+
+      - name: Build whisper.cpp
+        shell: msys2 {0}
+        run: |
+          cd /c/whisper-src
+          cmake -B build -G Ninja \
+            -DCMAKE_INSTALL_PREFIX=/c/dev/whisper-dist \
+            -DBUILD_SHARED_LIBS=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF
+          cmake --build build --parallel
+          cmake --install build
+
+      # ── Resolve gcc path from MSYS2 (not on PATH for pwsh steps) ────────
+      - name: Get MinGW gcc path
+        id: mingw
+        shell: msys2 {0}
+        run: echo "gcc=$(cygpath -w $(which gcc))" >> $GITHUB_OUTPUT
+
+      # ── Build libhowl.dll ─────────────────────────────────────────────
+      - name: Build libhowl.dll
+        run: |
+          $env:GOOS        = "windows"
+          $env:GOARCH      = "amd64"
+          $env:CGO_ENABLED = "1"
+          $env:CC          = "${{ steps.mingw.outputs.gcc }}"
+          $env:CGO_CFLAGS  = "-IC:/dev/whisper-dist/include"
+          $env:CGO_LDFLAGS = "-LC:/dev/whisper-dist/lib -lwhisper -lggml -lggml-base"
+          Set-Location core/cmd/libhowl
+          go build -buildmode=c-shared -tags=whispercpp -o ../../../win/bin/libhowl.dll .
+
+      # ── Copy whisper runtime DLLs (from cmake install) ───────────────
+      - name: Copy whisper DLLs
+        run: |
+          $dist = "C:\dev\whisper-dist\bin"
+          $out  = "win\bin"
+          @("libwhisper.dll","ggml.dll","ggml-base.dll","ggml-cpu.dll") |
+            ForEach-Object { Copy-Item "$dist\$_" $out -Force }
+
+      # ── Copy MinGW runtime DLLs (must run inside MSYS2 to resolve paths) ─
+      - name: Copy MinGW runtime DLLs
+        shell: msys2 {0}
+        run: |
+          OUT="$(cygpath "$GITHUB_WORKSPACE/win/bin")"
+          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll; do
+            src=$(find /ucrt64/bin -name "$dll" 2>/dev/null | head -1)
+            if [ -n "$src" ]; then
+              cp "$src" "$OUT/" && echo "copied $dll"
+            else
+              echo "warning: $dll not found in MSYS2, skipping"
+            fi
+          done
+
+      # ── .NET ──────────────────────────────────────────────────────────
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet
+        run: dotnet restore win/Howl/Howl.csproj -r win-x64
+
+      - name: Build WPF app
+        run: dotnet build win/Howl/Howl.csproj -c Release -r win-x64 --no-restore
+
+      - name: Publish
+        run: |
+          dotnet publish win/Howl/Howl.csproj -c Release -r win-x64 `
+            --self-contained false -o win/out --no-restore
+
+      # ── Artifact ──────────────────────────────────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: howl-windows-${{ github.sha }}
+          path: win/out/
+          if-no-files-found: error
