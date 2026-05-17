@@ -112,9 +112,16 @@ internal sealed class AudioCapture : IDisposable
             int frames = read / _channels;
             for (int i = 0; i < frames; i++)
             {
-                float sum = 0;
-                for (int c = 0; c < _channels; c++) sum += _interleaved[i * _channels + c];
-                buffer[offset + i] = sum / _channels;
+                // Take the loudest channel rather than averaging — on multi-channel
+                // devices only one channel typically carries the mic signal, so
+                // averaging would dilute the amplitude by 1/N.
+                float peak = 0;
+                for (int c = 0; c < _channels; c++)
+                {
+                    float s = _interleaved[i * _channels + c];
+                    if (Math.Abs(s) > Math.Abs(peak)) peak = s;
+                }
+                buffer[offset + i] = peak;
             }
             return frames;
         }
