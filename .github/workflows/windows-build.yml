@@ -56,13 +56,19 @@ jobs:
           cmake --build build --parallel
           cmake --install build
 
+      # ── Resolve gcc path from MSYS2 (not on PATH for pwsh steps) ────────
+      - name: Get MinGW gcc path
+        id: mingw
+        shell: msys2 {0}
+        run: echo "gcc=$(cygpath -w $(which gcc))" >> $GITHUB_OUTPUT
+
       # ── Build libhowl.dll ─────────────────────────────────────────────
       - name: Build libhowl.dll
         run: |
           $env:GOOS        = "windows"
           $env:GOARCH      = "amd64"
           $env:CGO_ENABLED = "1"
-          $env:CC          = "C:\msys64\ucrt64\bin\gcc.exe"
+          $env:CC          = "${{ steps.mingw.outputs.gcc }}"
           $env:CGO_CFLAGS  = "-IC:/dev/whisper-dist/include"
           $env:CGO_LDFLAGS = "-LC:/dev/whisper-dist/lib -lwhisper -lggml -lggml-base"
           Set-Location core/cmd/libhowl
