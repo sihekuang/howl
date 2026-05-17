@@ -41,11 +41,13 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
 
       # ── Build whisper.cpp ──────────────────────────────────────────────
+      - name: Clone whisper.cpp
+        run: git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git C:\whisper-src
+
       - name: Build whisper.cpp
         shell: msys2 {0}
         run: |
-          git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git /tmp/whisper-src
-          cd /tmp/whisper-src
+          cd /c/whisper-src
           cmake -B build -G Ninja \
             -DCMAKE_INSTALL_PREFIX=/c/dev/whisper-dist \
             -DBUILD_SHARED_LIBS=ON \
