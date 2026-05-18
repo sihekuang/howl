@@ -51,13 +51,13 @@ public final class EngineCoordinator {
     }
 
     public func start() async {
-        log.notice("coordinator.start: applying config and binding hotkey")
-        // Apply current settings to the engine
-        await applyConfig()
-        // Pre-warm Ollama if it's the active provider so the user's
-        // first dictation isn't blocked by a 5–15 s cold model load.
-        await prewarmOllamaIfActive()
-        // Hook hotkey
+        log.notice("coordinator.start: binding hotkey then applying config")
+        // Bind the hotkey FIRST. applyConfig blocks for several seconds on
+        // the Whisper model cold load; if we delayed registration until
+        // after, the menu bar would say "Ready" while presses silently
+        // dropped during that window. onPress guards on engineLoading
+        // and surfaces a clear "still loading" warning until applyConfig
+        // returns.
         do {
             let settings = try composition.settings.get()
             try await composition.hotkey.start(
@@ -80,7 +80,8 @@ public final class EngineCoordinator {
             log.error("coordinator.start: hotkey registration FAILED after retries: \(String(describing: error), privacy: .public)")
             composition.appState.hotkeyRegistrationError = "Open System Settings → Privacy & Security → Accessibility and confirm Howl is granted, then reopen the app."
         }
-        // Begin polling
+        // Begin polling now so the loop is live by the time applyConfig
+        // builds the pipeline and starts emitting events.
         pollTask?.cancel()
         pollTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -91,6 +92,16 @@ public final class EngineCoordinator {
                 try? await Task.sleep(nanoseconds: 30_000_000)
             }
         }
+        // Apply current settings to the engine. engineLoading is true at
+        // launch (AppState default); flip it back to false after the
+        // pipeline build returns so the menu bar status and onPress gate
+        // unblock.
+        composition.appState.engineLoading = true
+        await applyConfig()
+        composition.appState.engineLoading = false
+        // Pre-warm Ollama if it's the active provider so the user's
+        // first dictation isn't blocked by a 5–15 s cold model load.
+        await prewarmOllamaIfActive()
     }
 
     public func stop() {
@@ -104,7 +115,13 @@ public final class EngineCoordinator {
     /// after the user changes any field. If the hotkey changed, restart the
     /// hotkey monitor too.
     public func reapplyConfig() async {
+        // Mark loading for the duration of the rebuild — same reason as
+        // the initial start path: applyConfig blocks on whisper model
+        // loading and we don't want presses sneaking through against a
+        // half-built pipeline.
+        composition.appState.engineLoading = true
         await applyConfig()
+        composition.appState.engineLoading = false
         guard !hotkeyPaused else {
             log.info("reapplyConfig: hotkey paused for recording — skipping hotkey restart")
             return
@@ -197,6 +214,18 @@ public final class EngineCoordinator {
 
     private func onPress() async {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
+        // Preflight: the engine pipeline may not be built yet on a cold
+        // launch — `coordinator.start` registers the hotkey before
+        // applyConfig finishes loading the Whisper model so the user
+        // sees the registration; pressing during that window would
+        // otherwise call howl_start_capture with a nil pipeline and
+        // throw an opaque "rc=1" error. Show a clear loading hint and
+        // bail without state churn or the listening cue.
+        if composition.appState.engineLoading {
+            log.info("onPress: engine still loading — refusing capture")
+            setTransientWarning("Howl is still loading — try again in a moment.")
+            return
+        }
         // Preflight: AVAudioEngine throws an opaque error when no input
         // device is available (mic disconnected, all devices in use by
         // another app, TCC denial). Surface a useful message instead so

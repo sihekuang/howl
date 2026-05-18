@@ -52,6 +52,14 @@ struct MenuBarMenu: View {
     private var statusText: String {
         switch appState.setupGate {
         case .ready:
+            // engineLoading wins over engineState so the user sees
+            // "Loading model…" instead of "Ready — hold …" during the
+            // multi-second whisper cold start. The hotkey is already
+            // registered but onPress refuses capture until loading
+            // finishes; the menu text is what tells the user to wait.
+            if appState.engineLoading {
+                return "Loading model…"
+            }
             switch appState.engineState {
             case .idle:       return "Ready — hold \(hotkey) to dictate"
             case .recording:  return "Listening…"

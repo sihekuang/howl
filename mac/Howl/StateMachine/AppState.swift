@@ -29,6 +29,13 @@ public final class AppState {
     /// Accessibility permission. Cleared on the next successful
     /// `composition.hotkey.start(...)`.
     public var hotkeyRegistrationError: String?
+    /// True while the engine pipeline is being (re)built. Starts true on
+    /// app launch and stays true until the initial `applyConfig` finishes
+    /// loading the Whisper model — a multi-second cold start. The hotkey
+    /// is already registered by then, so the menu bar and the press-time
+    /// warning can tell the user "still loading" instead of pretending
+    /// everything's ready and silently dropping presses.
+    public var engineLoading: Bool = true
 
     public init() {}
 }
