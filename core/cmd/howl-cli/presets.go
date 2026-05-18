@@ -213,7 +213,7 @@ func userPresetsDirForReport() string {
 	if err != nil {
 		return "<user dir>"
 	}
-	return filepath.Join(home, "Library", "Application Support", "VoiceKeyboard", "presets")
+	return filepath.Join(home, "Library", "Application Support", "Howl", "presets")
 }
 
 func printPresetHuman(p presets.Preset) {

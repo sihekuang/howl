@@ -15,11 +15,13 @@ public enum SecretStoreError: Error {
 }
 
 /// Keychain-backed production impl. Stores under
-/// service="VoiceKeyboard", account="\(provider).api_key", so each
+/// service="Howl", account="\(provider).api_key", so each
 /// provider keeps a distinct slot. Existing "anthropic.api_key" entries
-/// from before this refactor are read transparently.
+/// from before this refactor are read transparently. Pre-0.5.5
+/// installs stored under service="VoiceKeyboard" — the Mac app's
+/// DataMigration moves them on launch, so this store only sees Howl.
 public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
-    private let service = "VoiceKeyboard"
+    private let service = "Howl"
 
     public init() {}
 

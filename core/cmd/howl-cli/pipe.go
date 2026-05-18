@@ -99,7 +99,7 @@ func runPipe(args []string) int {
 
 	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
-		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
+		modelPath = os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	}
 	lang := os.Getenv("HOWL_LANGUAGE")
 	if lang == "" {
@@ -200,7 +200,7 @@ func runPipe(args []string) int {
 		}
 		modelsDir := os.Getenv("HOWL_MODELS_DIR")
 		if modelsDir == "" {
-			modelsDir = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models")
+			modelsDir = os.ExpandEnv("$HOME/Library/Application Support/Howl/models")
 		}
 		onnxLib := os.Getenv("ONNXRUNTIME_LIB_PATH")
 		if onnxLib == "" {

@@ -14,7 +14,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
     public var inputDeviceUID: String?
     /// Whether to apply Target Speaker Extraction during capture.
     /// Requires a completed voice enrollment in
-    /// ~/Library/Application Support/VoiceKeyboard/voice/.
+    /// ~/Library/Application Support/Howl/voice/.
     public var tseEnabled: Bool
     /// Cosine-similarity threshold for the post-extract speaker gate.
     /// nil or 0 disables gating. Stamped in by `applying(_:)` from the
@@ -136,7 +136,7 @@ public protocol SettingsStore: Sendable {
 /// UserDefaults-backed production impl.
 public final class UserDefaultsSettingsStore: SettingsStore, @unchecked Sendable {
     private let defaults: UserDefaults
-    private let key = "VoiceKeyboard.UserSettings.v1"
+    private let key = "Howl.UserSettings.v1"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

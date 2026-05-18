@@ -13,7 +13,7 @@ import (
 )
 
 func TestWhisperCpp_TranscribesSamples(t *testing.T) {
-	modelPath := os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	if _, err := os.Stat(modelPath); err != nil {
 		t.Skipf("model not available at %s; download via the curl in Task 12 step 2", modelPath)
 	}

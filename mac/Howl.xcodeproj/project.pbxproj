@@ -58,6 +58,7 @@
 		E907E73CE0876ECFA7F387BE /* PipelineTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96DAE47622718B513B8B584 /* PipelineTab.swift */; };
 		E971DE02D1A415D7DA606F49 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ED694E605A92B6C58EA4C3F /* WaveformView.swift */; };
 		EA367CE838A372E5777C22F4 /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E59955941D1FDC3B9EB246 /* MenuBarMenu.swift */; };
+		F0B5D1B4EFAD130161AF91E9 /* DataMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57AB1B11B1EFB431EF92B27C /* DataMigration.swift */; };
 		F3C60668F1CD1F297EBEE66C /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E81A2DB7A4A5F03241872E5 /* ModelDownloadPanel.swift */; };
 		F6AF37B90F231A5FEF940B84 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA7F55A2C984A93AAF14FB13 /* HotkeyTab.swift */; };
 		F9677F5AE8E50D92C5ECEAFA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2F52C68CF045C2C2C20E383 /* Assets.xcassets */; };
@@ -82,6 +83,7 @@
 		4ED694E605A92B6C58EA4C3F /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		50B9006A6B68ED094075CF61 /* ManageElsewhereButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageElsewhereButton.swift; sourceTree = "<group>"; };
 		53F5C4B22DE9F69EDA5E7AA8 /* SaveAsPresetSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveAsPresetSheet.swift; sourceTree = "<group>"; };
+		57AB1B11B1EFB431EF92B27C /* DataMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataMigration.swift; sourceTree = "<group>"; };
 		57E59955941D1FDC3B9EB246 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
 		5D6FA7659981634693F0DBA7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5E9C61491EA888B42D6D4941 /* AccessibilityPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPanel.swift; sourceTree = "<group>"; };
@@ -221,6 +223,7 @@
 				724D229C9524B15ABED3630B /* AppDelegate.swift */,
 				2326637738B87FC0C45EAFC9 /* AppRelaunch.swift */,
 				A2F52C68CF045C2C2C20E383 /* Assets.xcassets */,
+				57AB1B11B1EFB431EF92B27C /* DataMigration.swift */,
 				A1E09796499424206A294D0B /* HowlApp.swift */,
 				9ABBFC60F5C3C78098493B86 /* Composition */,
 				6AB56C2B3A6380A9FB1DA983 /* Engine */,
@@ -451,7 +454,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n# Debug builds skip the model copy: ModelPaths.tseModel falls\n# back to ~/Library/Application Support/VoiceKeyboard/models/,\n# which the dev should have populated once via enroll.sh. Saves\n# ~32MB of cp work and keeps fresh-clone Debug builds from\n# erroring on missing models.\nif [ \"$CONFIGURATION\" != \"Release\" ]; then\n  echo \"Skipping TSE model copy (Debug — using ~/Library/Application Support fallback).\"\n  exit 0\nfi\nSRC=\"$SRCROOT/../core/build/models\"\nDST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nfor f in tse_model.onnx speaker_encoder.onnx; do\n  if [ ! -f \"$SRC/$f\" ]; then\n    echo \"error: $SRC/$f missing — run ./enroll.sh once from the repo root to build the TSE models\" >&2\n    exit 1\n  fi\ndone\nmkdir -p \"$DST\"\ncp -f \"$SRC/tse_model.onnx\"       \"$DST/\"\ncp -f \"$SRC/speaker_encoder.onnx\" \"$DST/\"\n";
+			shellScript = "set -e\n# Debug builds skip the model copy: ModelPaths.tseModel falls\n# back to ~/Library/Application Support/Howl/models/,\n# which the dev should have populated once via enroll.sh. Saves\n# ~32MB of cp work and keeps fresh-clone Debug builds from\n# erroring on missing models.\nif [ \"$CONFIGURATION\" != \"Release\" ]; then\n  echo \"Skipping TSE model copy (Debug — using ~/Library/Application Support fallback).\"\n  exit 0\nfi\nSRC=\"$SRCROOT/../core/build/models\"\nDST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nfor f in tse_model.onnx speaker_encoder.onnx; do\n  if [ ! -f \"$SRC/$f\" ]; then\n    echo \"error: $SRC/$f missing — run ./enroll.sh once from the repo root to build the TSE models\" >&2\n    exit 1\n  fi\ndone\nmkdir -p \"$DST\"\ncp -f \"$SRC/tse_model.onnx\"       \"$DST/\"\ncp -f \"$SRC/speaker_encoder.onnx\" \"$DST/\"\n";
 		};
 		F90F20254533295B71743D65 /* Build Go core */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -491,6 +494,7 @@
 				D1F082E9368E7A8B6C10C85C /* CompareView.swift in Sources */,
 				21577F8EE39FFEF4EFD6D4A4 /* CompositionRoot.swift in Sources */,
 				1DB693BC9BE9744EA8749364 /* CueSound.swift in Sources */,
+				F0B5D1B4EFAD130161AF91E9 /* DataMigration.swift in Sources */,
 				B1604986F93A96D00C7510DB /* DeletePresetConfirmSheet.swift in Sources */,
 				0FD95748B0BC75C4E76BB590 /* DictionaryTab.swift in Sources */,
 				55B63CA458D56967C9AD669B /* EditorView.swift in Sources */,

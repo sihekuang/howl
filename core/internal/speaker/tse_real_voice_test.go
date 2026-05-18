@@ -132,7 +132,7 @@ func resolveModelPath(t *testing.T, envVar, basename string) string {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates,
-			filepath.Join(home, "Library", "Application Support", "VoiceKeyboard", "models", basename))
+			filepath.Join(home, "Library", "Application Support", "Howl", "models", basename))
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {

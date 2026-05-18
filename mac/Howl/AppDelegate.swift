@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var openWindowBridge: ((String) -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Migrate VoiceKeyboard-era data dir / Keychain / UserDefaults
+        // into the Howl namespace before any consumer reads. No-op on
+        // already-migrated installs.
+        DataMigration.runIfNeeded()
         // Trigger the macOS mic permission dialog at launch rather than
         // on first Record click. TCC has been observed to silently
         // resolve `requestAccess` to "denied" on later calls if a
@@ -154,7 +158,7 @@ enum ModelPaths {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
-        return appSupport.appendingPathComponent("VoiceKeyboard/models")
+        return appSupport.appendingPathComponent("Howl/models")
     }
     static func whisperModel(size: String) -> URL {
         modelsDir.appendingPathComponent("ggml-\(size).en.bin")
@@ -162,7 +166,7 @@ enum ModelPaths {
     /// TSE separation model. Bundled with the .app at build time (see the
     /// "Copy TSE models into Resources" build phase). Falls back to
     /// modelsDir so a developer can drop a custom-trained model into
-    /// ~/Library/Application Support/VoiceKeyboard/models/ without rebuilding.
+    /// ~/Library/Application Support/Howl/models/ without rebuilding.
     static var tseModel: URL {
         if let bundled = Bundle.main.url(forResource: "tse_model", withExtension: "onnx"),
            FileManager.default.fileExists(atPath: bundled.path) {
@@ -185,7 +189,7 @@ enum ModelPaths {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
-        return appSupport.appendingPathComponent("VoiceKeyboard/voice")
+        return appSupport.appendingPathComponent("Howl/voice")
     }
     /// Path to the ONNX Runtime shared library. The Mac app bundles
     /// libonnxruntime + its transitive Homebrew deps into Frameworks
