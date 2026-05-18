@@ -176,13 +176,20 @@ targets:
           walk() {
             local real
             real="$(readlink -f "$1" 2>/dev/null || echo "$1")"
-            if grep -qFx "$real" "$SEEN" 2>/dev/null; then return; fi
+            if grep -qFx "$real" "$SEEN" 2>/dev/null; then return 0; fi
             echo "$real" >> "$SEEN"
             local deps
             deps="$(otool -L "$real" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true)"
             while IFS= read -r dep; do
               [ -n "$dep" ] && walk "$dep"
             done <<< "$deps"
+            # The while loop's exit code is the last body's exit code,
+            # which is 1 when the body's `[ -n "$dep" ]` test fails on the
+            # trailing empty line that herestring injects. Returning the
+            # naked while-exit propagates that 1 up, and `set -e` in a
+            # caller's for-loop body (like the ggml backend walk below)
+            # then kills the script. Pin to 0 — callers don't read this.
+            return 0
           }
           walk "$BREW_PREFIX/lib/libonnxruntime.dylib"
           # Walk libhowl's deps. Note: libhowl itself isn't in $SEEN
@@ -191,6 +198,37 @@ targets:
           for dep in $(otool -L "$DST/libhowl.dylib" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
             walk "$dep"
           done
+
+          # ggml >= 0.11 ships its compute backends (libggml-cpu-apple_*.so,
+          # libggml-metal.so, libggml-blas.so) as separate plugins under
+          # Cellar/ggml/<ver>/libexec, dlopen'd at runtime by libggml.dylib.
+          # otool can't see them — they're not in the LC_LOAD_DYLIB graph —
+          # so the closure walk above misses them. Without them libggml
+          # registers zero compute devices and ggml_backend_dev_init(NULL)
+          # asserts on the first whisper_init_from_file. The backends
+          # themselves go into Contents/MacOS/ in a dedicated pass below
+          # (that's where ggml's get_executable_path() search looks); here
+          # we only walk their /opt/homebrew deps (libomp for the
+          # cpu-apple_* variants) into SEEN so the main loop bundles them
+          # in Frameworks/ like any other transitive dep.
+          GGML_BUNDLED_DYLIB="$(grep "/Cellar/ggml/.*libggml\.[0-9].*\.dylib$" "$SEEN" | head -1)"
+          GGML_LIBEXEC=""
+          if [ -n "$GGML_BUNDLED_DYLIB" ]; then
+            GGML_LIBEXEC="$(dirname "$(dirname "$GGML_BUNDLED_DYLIB")")/libexec"
+            if [ -d "$GGML_LIBEXEC" ]; then
+              for so in "$GGML_LIBEXEC"/libggml-*.so; do
+                [ -e "$so" ] || continue
+                for dep in $(otool -L "$so" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
+                  walk "$dep"
+                done
+              done
+            else
+              echo "warning: ggml libexec not found at $GGML_LIBEXEC — backends won't be bundled" >&2
+              GGML_LIBEXEC=""
+            fi
+          else
+            echo "warning: no ggml dylib in SEEN — skipping backend bundle" >&2
+          fi
 
           echo "Bundling $(wc -l < "$SEEN") Homebrew dylibs from $BREW_PREFIX into $DST"
 
@@ -270,6 +308,36 @@ targets:
           done < "$SEEN"
           codesign "${SIGN_FLAGS[@]}" "$DST/libhowl.dylib"
           codesign "${SIGN_FLAGS[@]}" "$DST/libdf.dylib"
+
+          # Fifth pass: install ggml backend plugins into Contents/MacOS/.
+          # libggml's ggml_backend_load_all() searches three default paths:
+          # (1) the GGML_BACKEND_DIR compile-time string baked into the
+          # dylib (Cellar/ggml/<ver>/libexec on the build runner — doesn't
+          # exist on a user's Mac), (2) the directory containing the
+          # running main executable, (3) the current working directory.
+          # Only (2) is reachable inside a distributed .app. The .so files
+          # keep their existing @rpath/libggml-base.0.dylib dep — at
+          # dlopen-time dyld walks up to the main app's
+          # @executable_path/../Frameworks rpath and finds the bundled
+          # libggml-base there. The cpu-apple_* variants also reference
+          # /opt/homebrew/opt/libomp/lib/libomp.dylib; we rewrite that to
+          # @rpath/libomp.dylib (libomp got bundled in Frameworks/ via
+          # the deps walk above).
+          if [ -n "$GGML_LIBEXEC" ] && [ -d "$GGML_LIBEXEC" ]; then
+            EXEC_DST="$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH"
+            for so_src in "$GGML_LIBEXEC"/libggml-*.so; do
+              [ -e "$so_src" ] || continue
+              base="$(basename "$so_src")"
+              cp -f "$so_src" "$EXEC_DST/$base"
+              chmod u+w "$EXEC_DST/$base"
+              for dep in $(otool -L "$EXEC_DST/$base" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true); do
+                dep_real="$(readlink -f "$dep" 2>/dev/null || echo "$dep")"
+                dep_base="$(basename "$dep_real")"
+                install_name_tool -change "$dep" "@rpath/$dep_base" "$EXEC_DST/$base"
+              done
+              codesign "${SIGN_FLAGS[@]}" "$EXEC_DST/$base"
+            done
+          fi
 
           # Mark the bundle as up-to-date so the next warm build can skip.
           touch "$SENTINEL"
