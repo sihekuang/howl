@@ -87,7 +87,7 @@ targets:
         script: |
           set -e
           # Debug builds skip the model copy: ModelPaths.tseModel falls
-          # back to ~/Library/Application Support/VoiceKeyboard/models/,
+          # back to ~/Library/Application Support/Howl/models/,
           # which the dev should have populated once via enroll.sh. Saves
           # ~32MB of cp work and keeps fresh-clone Debug builds from
           # erroring on missing models.

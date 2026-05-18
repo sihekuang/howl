@@ -104,7 +104,7 @@ func DeleteUserAt(dir, name string) error {
 // Used by the C ABI / CLI; production callers want this. Tests use the
 // per-dir variants for isolation.
 //
-// User presets are loaded from `~/Library/Application Support/VoiceKeyboard/presets/`
+// User presets are loaded from `~/Library/Application Support/Howl/presets/`
 // on macOS. Errors loading user presets are logged but not returned —
 // the bundled list is always available even if disk is unreadable.
 func Load() ([]Preset, error) {
@@ -154,7 +154,7 @@ func defaultUserDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, "Library", "Application Support", "VoiceKeyboard", "presets")
+	dir := filepath.Join(home, "Library", "Application Support", "Howl", "presets")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

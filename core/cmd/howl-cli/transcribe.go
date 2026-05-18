@@ -41,7 +41,7 @@ func runTranscribe(args []string) int {
 
 	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
-		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
+		modelPath = os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	}
 	lang := os.Getenv("HOWL_LANGUAGE")
 	if lang == "" {

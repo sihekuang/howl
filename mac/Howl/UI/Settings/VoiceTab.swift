@@ -126,7 +126,7 @@ struct VoiceTab: View {
         core/build/models/ (Ctrl+C the recording prompt if you only want the \
         models — voice enrollment itself happens via the Enroll button \
         below, not the script). Then copy tse_model.onnx and \
-        speaker_encoder.onnx into ~/Library/Application Support/VoiceKeyboard/models/.
+        speaker_encoder.onnx into ~/Library/Application Support/Howl/models/.
         """
     }
 

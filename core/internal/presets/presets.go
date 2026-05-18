@@ -3,7 +3,7 @@
 // Bundled presets live in pipeline-presets.json (embedded at build
 // time). User presets live in
 //
-//	~/Library/Application Support/VoiceKeyboard/presets/<name>.json
+//	~/Library/Application Support/Howl/presets/<name>.json
 //
 // (one file per preset).
 //

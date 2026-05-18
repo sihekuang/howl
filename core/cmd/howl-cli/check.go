@@ -25,7 +25,7 @@ func runCheck(args []string) int {
 	// 2. Whisper model
 	modelPath := os.Getenv("HOWL_MODEL_PATH")
 	if modelPath == "" {
-		modelPath = os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
+		modelPath = os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	}
 	if _, err := os.Stat(modelPath); err != nil {
 		fmt.Printf("[FAIL] Whisper model not found at %s\n", modelPath)

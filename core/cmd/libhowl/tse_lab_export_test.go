@@ -30,11 +30,11 @@ func TestHowlTSEExtractFile_Smoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	modelsDir := filepath.Join(home, "Library", "Application Support", "VoiceKeyboard", "models")
+	modelsDir := filepath.Join(home, "Library", "Application Support", "Howl", "models")
 	if _, err := os.Stat(filepath.Join(modelsDir, "tse_model.onnx")); err != nil {
 		t.Skipf("TSE model not at %s — skipping", modelsDir)
 	}
-	voiceDir := filepath.Join(home, "Library", "Application Support", "VoiceKeyboard", "voice")
+	voiceDir := filepath.Join(home, "Library", "Application Support", "Howl", "voice")
 	if _, err := os.Stat(filepath.Join(voiceDir, "enrollment.emb")); err != nil {
 		t.Skipf("no enrollment at %s — skipping", voiceDir)
 	}
