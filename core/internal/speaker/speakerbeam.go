@@ -196,13 +196,34 @@ func (g *SpeakerGate) encodeExtracted(audio []float32) ([]float32, error) {
 	return out, nil
 }
 
-// applyThreshold returns zeros same length as in if similarity is below
-// threshold AND threshold is positive. Otherwise returns in unchanged.
+// applyThreshold applies a soft similarity gate. Instead of binary
+// silence/pass, it scales the output linearly between a floor and
+// the threshold:
+//
+//	similarity >= threshold → pass through at full volume
+//	similarity <= floor     → silence
+//	in between              → scale by (similarity - floor) / (threshold - floor)
+//
+// The floor is half the threshold (e.g. threshold=0.40 → floor=0.20).
+// This avoids the harsh cutoff that silences legitimate speech when
+// the ConvTasNet extraction slightly degrades the similarity score.
 func applyThreshold(in []float32, similarity, threshold float32) []float32 {
-	if threshold > 0 && similarity < threshold {
+	if threshold <= 0 {
+		return in
+	}
+	if similarity >= threshold {
+		return in
+	}
+	floor := threshold * 0.5
+	if similarity <= floor {
 		return make([]float32, len(in))
 	}
-	return in
+	gain := (similarity - floor) / (threshold - floor)
+	out := make([]float32, len(in))
+	for i, s := range in {
+		out[i] = s * gain
+	}
+	return out
 }
 
 // cosineSimilarity assumes a is L2-normalized (the enrolled reference is)
