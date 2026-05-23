@@ -13,6 +13,7 @@ struct PipelineTab: View {
     let sessions: any SessionsClient
     let presets: any PresetsClient
     let replay: any ReplayClient
+    let audioCapture: any AudioCapture
     @Binding var settings: UserSettings
     let navigateTo: (SettingsPage) -> Void
 
@@ -49,7 +50,10 @@ struct PipelineTab: View {
             case .compare:
                 CompareView(sessions: sessions, presets: presets, replay: replay)
             case .tseLab:
-                TSELabView(client: tseLabClient)
+                TSELabView(
+                    client: tseLabClient,
+                    recorder: TSELabRecorder(audioCapture: audioCapture)
+                )
             }
         }
     }

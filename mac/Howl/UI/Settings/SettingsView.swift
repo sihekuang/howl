@@ -233,6 +233,7 @@ private struct DetailView: View {
                 sessions: LibVKBSessionsClient(engine: composition.engine),
                 presets: LibVKBPresetsClient(engine: composition.engine),
                 replay: LibVKBReplayClient(engine: composition.engine),
+                audioCapture: composition.audioCapture,
                 settings: $settings,
                 navigateTo: navigateTo
             )
