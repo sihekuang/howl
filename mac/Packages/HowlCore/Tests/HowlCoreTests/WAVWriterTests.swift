@@ -29,6 +29,7 @@ struct WAVWriterTests {
         let file = try AVAudioFile(forReading: url)
         #expect(file.processingFormat.sampleRate == 16000)
         #expect(file.processingFormat.channelCount == 1)
+        #expect(file.fileFormat.commonFormat == .pcmFormatInt16)
         #expect(file.length == Int64(n))
     }
 

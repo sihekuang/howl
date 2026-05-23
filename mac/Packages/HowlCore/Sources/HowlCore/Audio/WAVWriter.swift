@@ -28,11 +28,10 @@ public enum WAVWriter {
             throw Error.formatUnsupported
         }
 
-        if FileManager.default.fileExists(atPath: url.path) {
-            try? FileManager.default.removeItem(at: url)
-        }
-
         do {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
             let file = try AVAudioFile(forWriting: url, settings: outFormat.settings)
             if samples.isEmpty { return }
 
@@ -49,7 +48,7 @@ public enum WAVWriter {
                 throw Error.formatUnsupported
             }
             buf.frameLength = AVAudioFrameCount(samples.count)
-            let ch = buf.floatChannelData![0]
+            guard let ch = buf.floatChannelData?[0] else { throw Error.formatUnsupported }
             for i in 0..<samples.count {
                 let s = samples[i]
                 ch[i] = s > 1 ? 1 : (s < -1 ? -1 : s)
