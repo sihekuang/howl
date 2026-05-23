@@ -139,6 +139,7 @@ struct TSELabView: View {
             if recorder.isRecording {
                 Label("Stop", systemImage: "stop.circle.fill")
                     .symbolRenderingMode(.multicolor)
+                    .symbolEffect(.pulse, options: .repeating)
             } else {
                 Label("Record", systemImage: "mic.circle")
             }

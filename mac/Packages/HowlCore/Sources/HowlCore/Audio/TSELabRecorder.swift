@@ -40,6 +40,8 @@ public final class TSELabRecorder: ObservableObject {
     }
 
     public func start() async throws {
+        // Idempotent: ignore a re-entrant start while one is already in flight or active.
+        guard !isRecording else { return }
         samples.removeAll(keepingCapacity: true)
         startedAt = Date()
         elapsed = 0
