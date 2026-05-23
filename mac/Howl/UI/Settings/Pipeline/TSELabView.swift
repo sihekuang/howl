@@ -40,7 +40,14 @@ struct TSELabView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             inputRow
-            runButton
+            if status == .running {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Running TSE…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if let err = errorMessage {
                 Text(err)
                     .font(.callout)
@@ -64,7 +71,7 @@ struct TSELabView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("TSE Lab")
                 .font(.title3).bold()
-            Text("Upload a 2-speaker WAV (16 kHz mono) or record live, then run Target Speaker Extraction against your enrolled voice. Listen to original vs extracted side-by-side.")
+            Text("Upload a 2-speaker WAV (16 kHz mono) or record live; Target Speaker Extraction runs automatically against your enrolled voice. Listen to original vs extracted side-by-side.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -159,27 +166,6 @@ struct TSELabView: View {
         )
         .contentShape(Rectangle())
         .gesture(dragGesture)
-    }
-
-    @ViewBuilder
-    private var runButton: some View {
-        HStack {
-            Button {
-                Task { await runTSE() }
-            } label: {
-                if status == .running {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Running…")
-                    }
-                } else {
-                    Label("Run TSE", systemImage: "play.circle")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(inputURL == nil || status == .running || recorder.isRecording)
-            Spacer()
-        }
     }
 
     @ViewBuilder
@@ -303,6 +289,7 @@ struct TSELabView: View {
         outputURL = nil
         errorMessage = nil
         status = .idle
+        Task { await runTSE() }
     }
 
     private func cleanupPreviousRecording() {
