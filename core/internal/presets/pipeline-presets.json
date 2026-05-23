@@ -3,13 +3,13 @@
   "presets": [
     {
       "name": "default",
-      "description": "Standard pipeline: denoise → decimate → Whisper → dict → LLM cleanup.",
+      "description": "Standard pipeline: denoise → TSE (soft gate) → decimate → Whisper → dict → LLM cleanup.",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.25}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
@@ -17,7 +17,7 @@
     },
     {
       "name": "minimal",
-      "description": "No denoise, no TSE — fastest, lowest quality. Useful baseline.",
+      "description": "No denoise, no TSE — fastest, lowest latency. Works well for quiet environments.",
       "frame_stages": [
         {"name": "denoise",   "enabled": false},
         {"name": "decimate3", "enabled": true}
@@ -31,13 +31,13 @@
     },
     {
       "name": "aggressive",
-      "description": "Denoise + TSE + larger Whisper. Higher quality, more latency.",
+      "description": "Denoise + TSE with moderate gate + larger Whisper. ⚠️ May cut audio in quiet environments — best when another speaker is nearby.",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.0}
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.35}
       ],
       "transcribe": {"model_size": "base"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
@@ -45,13 +45,13 @@
     },
     {
       "name": "paranoid",
-      "description": "Default + TSE threshold 0.7 (silences low-confidence chunks; resists hallucinations in noisy rooms).",
+      "description": "Denoise + TSE with strict gate — silences low-confidence chunks. ⚠️ Will cut audio unless someone is literally talking next to you.",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.7}
+        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.45}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},

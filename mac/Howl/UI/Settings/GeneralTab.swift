@@ -120,7 +120,7 @@ struct GeneralTab: View {
                     Text("\(current) (missing)").tag(current)
                 }
                 ForEach(presetList) { p in
-                    Text(displayName(p)).tag(p.name)
+                    Text(p.displayName).tag(p.name)
                 }
             }
         }
@@ -151,10 +151,6 @@ struct GeneralTab: View {
                 settings = settings.applying(p)
             }
         )
-    }
-
-    private func displayName(_ p: Preset) -> String {
-        p.isBundled ? "\(p.name) (default)" : p.name
     }
 
     private func loadPresets() async {

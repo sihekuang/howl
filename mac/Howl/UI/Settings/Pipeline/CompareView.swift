@@ -101,7 +101,7 @@ struct CompareView: View {
                     Text("(no presets)").tag("")
                 } else {
                     ForEach(presetList) { p in
-                        Text(p.name).tag(p.name)
+                        Text(p.displayName).tag(p.name)
                     }
                 }
             }

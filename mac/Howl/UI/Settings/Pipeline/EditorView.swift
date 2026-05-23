@@ -123,7 +123,7 @@ struct EditorView: View {
                         Text("(none)").tag("")
                     } else {
                         ForEach(presetList) { p in
-                            Text(displayName(p)).tag(p.name)
+                            Text(p.displayName).tag(p.name)
                         }
                     }
                 }
@@ -164,9 +164,6 @@ struct EditorView: View {
         }
     }
 
-    private func displayName(_ p: Preset) -> String {
-        p.isBundled ? "\(p.name) (default)" : p.name
-    }
 
     // MARK: - Right pane
 

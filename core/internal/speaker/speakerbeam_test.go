@@ -65,15 +65,31 @@ func TestCosineSimilarity_LengthMismatchReturnsZero(t *testing.T) {
 	}
 }
 
-func TestApplyThreshold_BelowReturnsZeros(t *testing.T) {
+func TestApplyThreshold_BelowFloorReturnsZeros(t *testing.T) {
 	in := []float32{1, 2, 3, 4}
-	out := applyThreshold(in, 0.3, 0.5)
+	// threshold=0.5, floor=0.25; similarity 0.1 is below floor → silence
+	out := applyThreshold(in, 0.1, 0.5)
 	if len(out) != len(in) {
 		t.Fatalf("len = %d, want %d", len(out), len(in))
 	}
 	for i, v := range out {
 		if v != 0 {
 			t.Errorf("out[%d] = %v, want 0", i, v)
+		}
+	}
+}
+
+func TestApplyThreshold_BetweenFloorAndThresholdScales(t *testing.T) {
+	in := []float32{1, 2, 3, 4}
+	// threshold=0.5, floor=0.25; similarity=0.375 is midpoint → gain=0.5
+	out := applyThreshold(in, 0.375, 0.5)
+	if len(out) != 4 {
+		t.Fatalf("len = %d, want 4", len(out))
+	}
+	for i, v := range out {
+		want := in[i] * 0.5
+		if diff := v - want; diff > 0.001 || diff < -0.001 {
+			t.Errorf("out[%d] = %v, want %v (gain=0.5)", i, v, want)
 		}
 	}
 }

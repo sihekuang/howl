@@ -25,8 +25,8 @@ func TestResolve_DefaultPresetMatchesEngineConfig(t *testing.T) {
 	if got.DisableNoiseSuppression {
 		t.Errorf("default should have noise suppression on")
 	}
-	if got.TSEEnabled {
-		t.Errorf("default should have TSE off")
+	if !got.TSEEnabled {
+		t.Errorf("built-in should have TSE on")
 	}
 }
 
@@ -48,8 +48,8 @@ func TestResolve_ParanoidPropagatesThresholdInTSEBackend(t *testing.T) {
 	p := findPreset(t, all, "paranoid")
 	got := Resolve(p, EngineSecrets{})
 
-	if got.TSEThreshold == nil || *got.TSEThreshold != 0.7 {
-		t.Errorf("TSEThreshold = %v, want 0.7", got.TSEThreshold)
+	if got.TSEThreshold == nil || *got.TSEThreshold != 0.45 {
+		t.Errorf("TSEThreshold = %v, want 0.45", got.TSEThreshold)
 	}
 }
 
