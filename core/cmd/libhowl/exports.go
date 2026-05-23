@@ -280,7 +280,7 @@ func howl_start_capture() C.int {
 			if sessionID != "" && sessionDir != "" {
 				presetName := e.cfg.PresetName
 				if presetName == "" {
-					presetName = "built-in"
+					presetName = "default"
 				}
 				if err := pipe.WriteSessionManifest(sessionDir, sessionID, presetName); err != nil {
 					log.Printf("[howl] capture goroutine: manifest write failed: %v", err)

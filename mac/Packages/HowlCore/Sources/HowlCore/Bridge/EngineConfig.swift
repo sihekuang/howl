@@ -59,7 +59,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         tseThreshold: Float? = nil,
         tseBackend: String = "",
         pipelineTimeoutSec: Int = 0,
-        presetName: String = "built-in"
+        presetName: String = "default"
     ) {
         self.whisperModelPath = whisperModelPath
         self.whisperModelSize = whisperModelSize
@@ -135,7 +135,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
         self.tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
         self.pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 0
-        self.presetName = try c.decodeIfPresent(String.self, forKey: .presetName) ?? "built-in"
+        self.presetName = try c.decodeIfPresent(String.self, forKey: .presetName) ?? "default"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -235,7 +235,7 @@ public extension EngineConfig {
             tseThreshold: settings.tseThreshold,
             tseBackend: settings.tseBackend,
             pipelineTimeoutSec: settings.pipelineTimeoutSec,
-            presetName: settings.selectedPresetName ?? "built-in"
+            presetName: settings.selectedPresetName ?? "default"
         )
     }
 }

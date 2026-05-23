@@ -13,7 +13,7 @@ extension Preset {
     /// picker rows. If a bundled preset is added or removed in the
     /// JSON, update this set in the same commit.
     public static let bundledNames: Set<String> = [
-        "built-in",
+        "default",
         "minimal",
         "aggressive",
         "paranoid",

@@ -101,7 +101,7 @@ struct CompareView: View {
                     Text("(no presets)").tag("")
                 } else {
                     ForEach(presetList) { p in
-                        Text(p.name).tag(p.name)
+                        Text(p.isBundled ? "\(p.name) (built-in)" : p.name).tag(p.name)
                     }
                 }
             }
@@ -223,12 +223,12 @@ struct CompareView: View {
             if selectedSourceID == nil { selectedSourceID = sessionList.first?.id }
             if selectedPresetName == nil {
                 // Default to the source's own preset if it's known,
-                // else "built-in", else first available.
+                // else "default", else first available.
                 let sourcePreset = sourceManifest?.preset ?? ""
                 if presetList.contains(where: { $0.name == sourcePreset }) {
                     selectedPresetName = sourcePreset
-                } else if presetList.contains(where: { $0.name == "built-in" }) {
-                    selectedPresetName = "built-in"
+                } else if presetList.contains(where: { $0.name == "default" }) {
+                    selectedPresetName = "default"
                 } else {
                     selectedPresetName = presetList.first?.name
                 }

@@ -165,7 +165,7 @@ struct EditorView: View {
     }
 
     private func displayName(_ p: Preset) -> String {
-        p.isBundled ? "\(p.name) (default)" : p.name
+        p.isBundled ? "\(p.name) (built-in)" : p.name
     }
 
     // MARK: - Right pane
@@ -232,10 +232,10 @@ struct EditorView: View {
                 deleteConfirmVisible = false
                 deleting = false
                 // Drop the deleted entry from the in-memory list and
-                // pick a successor — prefer "built-in" if present, else
+                // pick a successor — prefer "default" if present, else
                 // the first remaining preset.
                 self.presetList.removeAll { $0.name == name }
-                let next = self.presetList.first(where: { $0.name == "built-in" })
+                let next = self.presetList.first(where: { $0.name == "default" })
                     ?? self.presetList.first
                 if let next {
                     self.selectedName = next.name

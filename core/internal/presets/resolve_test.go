@@ -8,7 +8,7 @@ import (
 
 func TestResolve_DefaultPresetMatchesEngineConfig(t *testing.T) {
 	all, _ := loadBundled()
-	def := findPreset(t, all, "built-in")
+	def := findPreset(t, all, "default")
 
 	got := Resolve(def, EngineSecrets{LLMAPIKey: "test-key"})
 
@@ -55,7 +55,7 @@ func TestResolve_ParanoidPropagatesThresholdInTSEBackend(t *testing.T) {
 
 func TestResolve_BackendSelected(t *testing.T) {
 	all, _ := loadBundled()
-	def := findPreset(t, all, "built-in")
+	def := findPreset(t, all, "default")
 	got := Resolve(def, EngineSecrets{})
 	if got.TSEBackend != "ecapa" {
 		t.Errorf("TSEBackend = %q, want ecapa", got.TSEBackend)
@@ -78,7 +78,7 @@ var _ = config.Config{}
 
 func TestResolve_DefaultTimeoutPropagates(t *testing.T) {
 	all, _ := loadBundled()
-	def := findPreset(t, all, "built-in")
+	def := findPreset(t, all, "default")
 	got := Resolve(def, EngineSecrets{})
 	if got.PipelineTimeoutSec != 10 {
 		t.Errorf("PipelineTimeoutSec = %d, want 10", got.PipelineTimeoutSec)
@@ -87,7 +87,7 @@ func TestResolve_DefaultTimeoutPropagates(t *testing.T) {
 
 func TestMatch_DivergedTimeoutReturnsCustom(t *testing.T) {
 	all, _ := loadBundled()
-	def := findPreset(t, all, "built-in")
+	def := findPreset(t, all, "default")
 	cfg := Resolve(def, EngineSecrets{})
 	cfg.PipelineTimeoutSec = 99 // diverge
 
@@ -109,7 +109,7 @@ func TestMatch_AllBundledPresetsAreSelfMatching(t *testing.T) {
 
 func TestMatch_DivergedConfigReturnsCustom(t *testing.T) {
 	all, _ := loadBundled()
-	def := findPreset(t, all, "built-in")
+	def := findPreset(t, all, "default")
 	cfg := Resolve(def, EngineSecrets{})
 	cfg.DisableNoiseSuppression = !cfg.DisableNoiseSuppression // diverge
 

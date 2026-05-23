@@ -14,7 +14,7 @@ func TestLoad_BundledFileParses(t *testing.T) {
 	if len(got) < 4 {
 		t.Errorf("expected at least 4 bundled presets, got %d", len(got))
 	}
-	wantNames := map[string]bool{"built-in": false, "minimal": false, "aggressive": false, "paranoid": false}
+	wantNames := map[string]bool{"default": false, "minimal": false, "aggressive": false, "paranoid": false}
 	for _, p := range got {
 		if _, ok := wantNames[p.Name]; ok {
 			wantNames[p.Name] = true
@@ -48,7 +48,7 @@ func TestLoad_RejectsMalformedJSON(t *testing.T) {
 func TestPreset_BuiltInPresetTSEThreshold025(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {
-		if p.Name != "built-in" {
+		if p.Name != "default" {
 			continue
 		}
 		for _, s := range p.ChunkStages {
@@ -83,7 +83,7 @@ func TestPreset_ParanoidPresetTSEThreshold045(t *testing.T) {
 func TestPreset_DefaultPresetHasTimeoutSec10(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {
-		if p.Name != "built-in" {
+		if p.Name != "default" {
 			continue
 		}
 		if p.TimeoutSec == nil || *p.TimeoutSec != 10 {
