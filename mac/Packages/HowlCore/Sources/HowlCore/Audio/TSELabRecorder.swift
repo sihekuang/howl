@@ -79,6 +79,10 @@ public final class TSELabRecorder: ObservableObject {
     public func stop() async throws -> URL {
         guard isRecording else { throw TSELabRecorderError.notRecording }
         audioCapture.stop()
+        // Drain any pending main-actor append tasks dispatched from the
+        // off-main onFrame path before we snapshot. Without this we'd
+        // silently drop a few ms of tail audio.
+        await Task.yield()
         timerCancellable?.cancel()
         timerCancellable = nil
         isRecording = false
