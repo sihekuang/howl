@@ -232,10 +232,10 @@ struct EditorView: View {
                 deleteConfirmVisible = false
                 deleting = false
                 // Drop the deleted entry from the in-memory list and
-                // pick a successor — prefer "default" if present, else
+                // pick a successor — prefer "built-in" if present, else
                 // the first remaining preset.
                 self.presetList.removeAll { $0.name == name }
-                let next = self.presetList.first(where: { $0.name == "default" })
+                let next = self.presetList.first(where: { $0.name == "built-in" })
                     ?? self.presetList.first
                 if let next {
                     self.selectedName = next.name

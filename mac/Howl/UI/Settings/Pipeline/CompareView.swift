@@ -223,12 +223,12 @@ struct CompareView: View {
             if selectedSourceID == nil { selectedSourceID = sessionList.first?.id }
             if selectedPresetName == nil {
                 // Default to the source's own preset if it's known,
-                // else "default", else first available.
+                // else "built-in", else first available.
                 let sourcePreset = sourceManifest?.preset ?? ""
                 if presetList.contains(where: { $0.name == sourcePreset }) {
                     selectedPresetName = sourcePreset
-                } else if presetList.contains(where: { $0.name == "default" }) {
-                    selectedPresetName = "default"
+                } else if presetList.contains(where: { $0.name == "built-in" }) {
+                    selectedPresetName = "built-in"
                 } else {
                     selectedPresetName = presetList.first?.name
                 }

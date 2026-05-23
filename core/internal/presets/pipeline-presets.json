@@ -2,7 +2,7 @@
   "version": 1,
   "presets": [
     {
-      "name": "default",
+      "name": "built-in",
       "description": "Standard pipeline: denoise → TSE (soft gate) → decimate → Whisper → dict → LLM cleanup.",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},

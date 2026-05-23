@@ -30,7 +30,7 @@ func TestSaveUser_RoundTrips(t *testing.T) {
 
 func TestSaveUser_RejectsBundledNameCollision(t *testing.T) {
 	dir := t.TempDir()
-	for _, bad := range []string{"default", "minimal", "aggressive", "paranoid"} {
+	for _, bad := range []string{"built-in", "minimal", "aggressive", "paranoid"} {
 		err := SaveUserAt(dir, Preset{Name: bad})
 		if !errors.Is(err, ErrReservedName) {
 			t.Errorf("SaveUserAt(%q) error = %v, want ErrReservedName", bad, err)
@@ -84,7 +84,7 @@ func TestDeleteUser_RemovesFile(t *testing.T) {
 
 func TestDeleteUser_RejectsBundled(t *testing.T) {
 	dir := t.TempDir()
-	for _, bad := range []string{"default", "minimal", "aggressive", "paranoid"} {
+	for _, bad := range []string{"built-in", "minimal", "aggressive", "paranoid"} {
 		if err := DeleteUserAt(dir, bad); !errors.Is(err, ErrReservedName) {
 			t.Errorf("DeleteUserAt(%q) error = %v, want ErrReservedName", bad, err)
 		}

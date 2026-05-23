@@ -14,7 +14,7 @@ func TestLoad_BundledFileParses(t *testing.T) {
 	if len(got) < 4 {
 		t.Errorf("expected at least 4 bundled presets, got %d", len(got))
 	}
-	wantNames := map[string]bool{"default": false, "minimal": false, "aggressive": false, "paranoid": false}
+	wantNames := map[string]bool{"built-in": false, "minimal": false, "aggressive": false, "paranoid": false}
 	for _, p := range got {
 		if _, ok := wantNames[p.Name]; ok {
 			wantNames[p.Name] = true
@@ -45,35 +45,35 @@ func TestLoad_RejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestPreset_DefaultPresetTSEThresholdIsZero(t *testing.T) {
+func TestPreset_BuiltInPresetTSEThreshold025(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {
-		if p.Name != "default" {
+		if p.Name != "built-in" {
 			continue
 		}
 		for _, s := range p.ChunkStages {
 			if s.Name == "tse" {
-				if s.Threshold == nil || *s.Threshold != 0.0 {
-					t.Errorf("default preset's tse threshold = %v, want 0.0", s.Threshold)
+				if s.Threshold == nil || *s.Threshold != 0.25 {
+					t.Errorf("built-in preset's tse threshold = %v, want 0.25", s.Threshold)
 				}
 				return
 			}
 		}
-		t.Error("default preset has no tse chunk stage")
+		t.Error("built-in preset has no tse chunk stage")
 	}
-	t.Error("default preset missing")
+	t.Error("built-in preset missing")
 }
 
-func TestPreset_ParanoidPresetTSEThresholdIs07(t *testing.T) {
+func TestPreset_ParanoidPresetTSEThreshold045(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {
 		if p.Name == "paranoid" {
 			for _, s := range p.ChunkStages {
-				if s.Name == "tse" && s.Threshold != nil && *s.Threshold == 0.7 {
+				if s.Name == "tse" && s.Threshold != nil && *s.Threshold == 0.45 {
 					return
 				}
 			}
-			t.Error("paranoid preset's tse threshold is not 0.7")
+			t.Error("paranoid preset's tse threshold is not 0.45")
 			return
 		}
 	}
@@ -83,7 +83,7 @@ func TestPreset_ParanoidPresetTSEThresholdIs07(t *testing.T) {
 func TestPreset_DefaultPresetHasTimeoutSec10(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {
-		if p.Name != "default" {
+		if p.Name != "built-in" {
 			continue
 		}
 		if p.TimeoutSec == nil || *p.TimeoutSec != 10 {
