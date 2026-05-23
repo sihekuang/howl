@@ -39,14 +39,6 @@ struct VoiceTab: View {
 
             Divider()
 
-            Toggle("Filter out background speakers (TSE)",
-                   isOn: tseToggleBinding)
-                .disabled(!modelsPresent || !profilePresent)
-            Text("Uses your voice profile to suppress other speakers in the same recording.")
-                .font(.caption).foregroundStyle(.secondary)
-
-            Divider()
-
             SettingsGroupHeader("Pipeline timeout")
             HStack(spacing: 6) {
                 Text("Stop after")
@@ -68,8 +60,6 @@ struct VoiceTab: View {
                 onComplete: {
                     sheetPresented = false
                     presenceTick += 1
-                    // Auto-enable TSE when the user successfully enrolled.
-                    var s = settings; s.tseEnabled = true; settings = s; onSave(s)
                 },
                 onCancel: { sheetPresented = false }
             )
@@ -130,15 +120,6 @@ struct VoiceTab: View {
         """
     }
 
-    private var tseToggleBinding: Binding<Bool> {
-        Binding(
-            get: { settings.tseEnabled },
-            set: { newValue in
-                var s = settings; s.tseEnabled = newValue; settings = s; onSave(s)
-            }
-        )
-    }
-
     private var timeoutBinding: Binding<Int> {
         Binding(
             get: { settings.pipelineTimeoutSec },
@@ -156,7 +137,6 @@ struct VoiceTab: View {
         for name in ["enrollment.wav", "enrollment.emb", "speaker.json"] {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
         }
-        var s = settings; s.tseEnabled = false; settings = s; onSave(s)
         presenceTick += 1
     }
 }

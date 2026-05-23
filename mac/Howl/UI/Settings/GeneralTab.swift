@@ -69,8 +69,6 @@ struct GeneralTab: View {
             Picker("Language", selection: $settings.language) {
                 ForEach(languages, id: \.self) { Text($0).tag($0) }
             }
-            Toggle("Disable noise suppression", isOn: $settings.disableNoiseSuppression)
-
             Toggle("Open at login", isOn: Binding(
                 get: { launchAtLoginEnabled },
                 set: { newValue in
