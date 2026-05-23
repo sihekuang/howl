@@ -6,15 +6,14 @@ import HowlCore
 import AppKit
 #endif
 
-/// Debug-only TSE Lab. Lets a developer upload a 2-speaker WAV, run
-/// it through Target Speaker Extraction using their enrolled
-/// embedding, and play the input + extracted output side-by-side.
-/// Used to verify TSE works end-to-end without going through the
-/// live capture pipeline.
+/// Debug-only TSE Lab. Lets a developer either upload or record a
+/// short clip, run it through Target Speaker Extraction using their
+/// enrolled voice embedding, and play input + extracted side-by-side.
 ///
 /// Surfaced under Settings → Pipeline → TSE Lab in Developer Mode.
 struct TSELabView: View {
     let client: any TSELabClient
+    @ObservedObject var recorder: TSELabRecorder
 
     @State private var inputURL: URL? = nil
     @State private var outputURL: URL? = nil
@@ -22,17 +21,33 @@ struct TSELabView: View {
     @State private var errorMessage: String? = nil
     @State private var player = WAVPlayer()
 
-    enum Status: Equatable {
-        case idle
-        case running
-        case ready
-    }
+    // Tracks the last recorded WAV so we can clean it up if a new
+    // record/upload supersedes it. Recordings live in NSTemporaryDirectory
+    // and get cleaned on logout, but we still purge eagerly per session.
+    @State private var previousRecordedURL: URL? = nil
+
+    // Press-and-hold disambiguation.
+    @State private var pressStartedAt: Date? = nil
+    @State private var pressIntent: PressIntent = .none
+
+    enum Status: Equatable { case idle, running, ready }
+    enum PressIntent { case none, startFresh, stopToggle }
+
+    /// Hold-vs-click threshold. Matches macOS long-press default.
+    private let holdThreshold: TimeInterval = 0.25
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             inputRow
-            runButton
+            if status == .running {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Running TSE…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if let err = errorMessage {
                 Text(err)
                     .font(.callout)
@@ -45,6 +60,10 @@ struct TSELabView: View {
             transportBar
             Spacer(minLength: 0)
         }
+        .onDisappear {
+            if recorder.isRecording { recorder.cancel() }
+            cleanupPreviousRecording()
+        }
     }
 
     @ViewBuilder
@@ -52,7 +71,7 @@ struct TSELabView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("TSE Lab")
                 .font(.title3).bold()
-            Text("Upload a 2-speaker WAV (16 kHz mono) and run Target Speaker Extraction against your enrolled voice. Listen to original vs extracted side-by-side.")
+            Text("Upload a 2-speaker WAV (16 kHz mono) or record live; Target Speaker Extraction runs automatically against your enrolled voice. Listen to original vs extracted side-by-side.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -67,7 +86,15 @@ struct TSELabView: View {
             } label: {
                 Label("Choose WAV…", systemImage: "doc.badge.plus")
             }
-            if let url = inputURL {
+            .disabled(recorder.isRecording)
+
+            recordButton
+
+            if recorder.isRecording {
+                Text(formatTime(recorder.elapsed))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.red)
+            } else if let url = inputURL {
                 Text(url.lastPathComponent)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -79,24 +106,66 @@ struct TSELabView: View {
     }
 
     @ViewBuilder
-    private var runButton: some View {
-        HStack {
-            Button {
-                Task { await runTSE() }
-            } label: {
-                if status == .running {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Running…")
-                    }
+    private var recordButton: some View {
+        let dragGesture = DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard pressStartedAt == nil else { return } // first event of press only
+                pressStartedAt = Date()
+                if recorder.isRecording {
+                    // Recording is running in toggle mode; this press will stop it on release.
+                    pressIntent = .stopToggle
                 } else {
-                    Label("Run TSE", systemImage: "play.circle")
+                    // Starting a fresh recording. Whether it becomes hold or toggle is decided on release.
+                    pressIntent = .startFresh
+                    Task { await startRecording() }
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(inputURL == nil || status == .running)
-            Spacer()
+            .onEnded { _ in
+                let held = pressStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+                pressStartedAt = nil
+                let intent = pressIntent
+                pressIntent = .none
+                switch intent {
+                case .none:
+                    break
+                case .startFresh:
+                    // Press-and-hold ≥ threshold → stop on release. Otherwise leave running
+                    // in toggle mode; the next press will be .stopToggle.
+                    if held >= holdThreshold {
+                        Task { await stopRecording() }
+                    }
+                case .stopToggle:
+                    Task { await stopRecording() }
+                }
+            }
+
+        // Hand-styled to mimic .buttonStyle(.bordered) while allowing
+        // a DragGesture to see pointer events that a real Button would swallow.
+        HStack(spacing: 4) {
+            if recorder.isRecording {
+                Image(systemName: "stop.circle.fill")
+                    .symbolRenderingMode(.multicolor)
+                    .symbolEffect(.pulse, options: .repeating)
+                Text("Stop")
+            } else {
+                Image(systemName: "mic.circle")
+                Text("Record")
+            }
         }
+        .font(.body)
+        .foregroundStyle(recorder.isRecording ? Color.red : Color.accentColor)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 0.5)
+        )
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
     }
 
     @ViewBuilder
@@ -188,19 +257,50 @@ struct TSELabView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if panel.runModal() == .OK, let url = panel.url {
-            // New input invalidates any prior result + playback.
-            player.stop()
-            inputURL = url
-            outputURL = nil
-            errorMessage = nil
-            status = .idle
+            cleanupPreviousRecording()
+            invalidateForNewInput(url: url)
         }
         #endif
     }
 
+    private func startRecording() async {
+        do {
+            errorMessage = nil
+            try await recorder.start()
+        } catch {
+            errorMessage = "Recording failed to start: \(error.localizedDescription)"
+        }
+    }
+
+    private func stopRecording() async {
+        do {
+            let url = try await recorder.stop()
+            cleanupPreviousRecording()
+            previousRecordedURL = url
+            invalidateForNewInput(url: url)
+        } catch {
+            errorMessage = "Recording failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func invalidateForNewInput(url: URL) {
+        player.stop()
+        inputURL = url
+        outputURL = nil
+        errorMessage = nil
+        status = .idle
+        Task { await runTSE() }
+    }
+
+    private func cleanupPreviousRecording() {
+        if let prev = previousRecordedURL {
+            try? FileManager.default.removeItem(at: prev)
+            previousRecordedURL = nil
+        }
+    }
+
     private func runTSE() async {
         guard let input = inputURL else { return }
-        // Clear prior state.
         player.stop()
         outputURL = nil
         errorMessage = nil

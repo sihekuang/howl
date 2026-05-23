@@ -13,10 +13,31 @@ struct PipelineTab: View {
     let sessions: any SessionsClient
     let presets: any PresetsClient
     let replay: any ReplayClient
+    let audioCapture: any AudioCapture
     @Binding var settings: UserSettings
     let navigateTo: (SettingsPage) -> Void
 
     @State private var selectedView: SubView = .editor
+    @StateObject private var tseLabRecorder: TSELabRecorder
+
+    init(
+        engine: any CoreEngine,
+        sessions: any SessionsClient,
+        presets: any PresetsClient,
+        replay: any ReplayClient,
+        audioCapture: any AudioCapture,
+        settings: Binding<UserSettings>,
+        navigateTo: @escaping (SettingsPage) -> Void
+    ) {
+        self.engine = engine
+        self.sessions = sessions
+        self.presets = presets
+        self.replay = replay
+        self.audioCapture = audioCapture
+        self._settings = settings
+        self.navigateTo = navigateTo
+        self._tseLabRecorder = StateObject(wrappedValue: TSELabRecorder(audioCapture: audioCapture))
+    }
 
     enum SubView: String, CaseIterable, Identifiable {
         case editor = "Editor"
@@ -49,7 +70,10 @@ struct PipelineTab: View {
             case .compare:
                 CompareView(sessions: sessions, presets: presets, replay: replay)
             case .tseLab:
-                TSELabView(client: tseLabClient)
+                TSELabView(
+                    client: tseLabClient,
+                    recorder: tseLabRecorder
+                )
             }
         }
     }
