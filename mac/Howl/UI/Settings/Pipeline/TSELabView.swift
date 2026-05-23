@@ -132,20 +132,32 @@ struct TSELabView: View {
                 }
             }
 
-        Button {
-            // Empty action — gesture handles all behavior. Required so
-            // the control reads as a button for accessibility / styling.
-        } label: {
+        // Hand-styled to mimic .buttonStyle(.bordered) while allowing
+        // a DragGesture to see pointer events that a real Button would swallow.
+        HStack(spacing: 4) {
             if recorder.isRecording {
-                Label("Stop", systemImage: "stop.circle.fill")
+                Image(systemName: "stop.circle.fill")
                     .symbolRenderingMode(.multicolor)
                     .symbolEffect(.pulse, options: .repeating)
+                Text("Stop")
             } else {
-                Label("Record", systemImage: "mic.circle")
+                Image(systemName: "mic.circle")
+                Text("Record")
             }
         }
-        .buttonStyle(.bordered)
-        .tint(recorder.isRecording ? .red : .accentColor)
+        .font(.body)
+        .foregroundStyle(recorder.isRecording ? Color.red : Color.accentColor)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 0.5)
+        )
+        .contentShape(Rectangle())
         .gesture(dragGesture)
     }
 
