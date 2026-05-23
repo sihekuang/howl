@@ -105,7 +105,7 @@ struct PresetBanner: View {
                     Text(pickerSelection).tag(pickerSelection)
                 }
                 ForEach(presetList) { p in
-                    Text(p.isBundled ? "\(p.name) (default)" : p.name).tag(p.name)
+                    Text(p.displayName).tag(p.name)
                 }
             }
             .labelsHidden()

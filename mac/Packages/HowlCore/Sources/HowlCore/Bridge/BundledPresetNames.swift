@@ -21,4 +21,10 @@ extension Preset {
 
     /// Whether this preset is one of the bundled built-ins (read-only).
     public var isBundled: Bool { Self.bundledNames.contains(name) }
+
+    /// Display name with "(built-in)" suffix for bundled presets.
+    /// Use this everywhere preset names are shown in the UI.
+    public var displayName: String {
+        isBundled ? "\(name) (built-in)" : name
+    }
 }
