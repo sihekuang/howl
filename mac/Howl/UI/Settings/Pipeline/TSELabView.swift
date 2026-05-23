@@ -28,10 +28,10 @@ struct TSELabView: View {
 
     // Press-and-hold disambiguation.
     @State private var pressStartedAt: Date? = nil
-    @State private var recordMode: RecordMode = .toggle
+    @State private var pressIntent: PressIntent = .none
 
     enum Status: Equatable { case idle, running, ready }
-    enum RecordMode { case toggle, hold }
+    enum PressIntent { case none, startFresh, stopToggle }
 
     /// Hold-vs-click threshold. Matches macOS long-press default.
     private let holdThreshold: TimeInterval = 0.25
@@ -55,6 +55,7 @@ struct TSELabView: View {
         }
         .onDisappear {
             if recorder.isRecording { recorder.cancel() }
+            cleanupPreviousRecording()
         }
     }
 
@@ -101,26 +102,32 @@ struct TSELabView: View {
     private var recordButton: some View {
         let dragGesture = DragGesture(minimumDistance: 0)
             .onChanged { _ in
-                guard pressStartedAt == nil else { return } // first event only
+                guard pressStartedAt == nil else { return } // first event of press only
                 pressStartedAt = Date()
-                if !recorder.isRecording {
-                    recordMode = .toggle // tentative until release
+                if recorder.isRecording {
+                    // Recording is running in toggle mode; this press will stop it on release.
+                    pressIntent = .stopToggle
+                } else {
+                    // Starting a fresh recording. Whether it becomes hold or toggle is decided on release.
+                    pressIntent = .startFresh
                     Task { await startRecording() }
                 }
             }
             .onEnded { _ in
                 let held = pressStartedAt.map { Date().timeIntervalSince($0) } ?? 0
                 pressStartedAt = nil
-                if recorder.isRecording {
+                let intent = pressIntent
+                pressIntent = .none
+                switch intent {
+                case .none:
+                    break
+                case .startFresh:
+                    // Press-and-hold ≥ threshold → stop on release. Otherwise leave running
+                    // in toggle mode; the next press will be .stopToggle.
                     if held >= holdThreshold {
-                        recordMode = .hold
                         Task { await stopRecording() }
-                    } else {
-                        // Treat as click; wait for next click to stop.
-                        recordMode = .toggle
                     }
-                } else {
-                    // Second click of a toggle pair (started on previous click).
+                case .stopToggle:
                     Task { await stopRecording() }
                 }
             }
@@ -263,7 +270,6 @@ struct TSELabView: View {
             try await recorder.start()
         } catch {
             errorMessage = "Recording failed to start: \(error.localizedDescription)"
-            pressStartedAt = nil
         }
     }
 

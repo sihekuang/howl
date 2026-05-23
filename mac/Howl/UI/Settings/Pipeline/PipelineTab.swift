@@ -18,6 +18,26 @@ struct PipelineTab: View {
     let navigateTo: (SettingsPage) -> Void
 
     @State private var selectedView: SubView = .editor
+    @StateObject private var tseLabRecorder: TSELabRecorder
+
+    init(
+        engine: any CoreEngine,
+        sessions: any SessionsClient,
+        presets: any PresetsClient,
+        replay: any ReplayClient,
+        audioCapture: any AudioCapture,
+        settings: Binding<UserSettings>,
+        navigateTo: @escaping (SettingsPage) -> Void
+    ) {
+        self.engine = engine
+        self.sessions = sessions
+        self.presets = presets
+        self.replay = replay
+        self.audioCapture = audioCapture
+        self._settings = settings
+        self.navigateTo = navigateTo
+        self._tseLabRecorder = StateObject(wrappedValue: TSELabRecorder(audioCapture: audioCapture))
+    }
 
     enum SubView: String, CaseIterable, Identifiable {
         case editor = "Editor"
@@ -52,7 +72,7 @@ struct PipelineTab: View {
             case .tseLab:
                 TSELabView(
                     client: tseLabClient,
-                    recorder: TSELabRecorder(audioCapture: audioCapture)
+                    recorder: tseLabRecorder
                 )
             }
         }
