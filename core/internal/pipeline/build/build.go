@@ -4,7 +4,7 @@
 // config.Config. Lives in its own sub-package because it pulls in
 // transcribe (whispercpp build tag) which the rest of pipeline avoids.
 //
-// Used by libvkb's engine for the live pipeline + by the replay
+// Used by libhowl's engine for the live pipeline + by the replay
 // package for transient per-preset pipelines in a Compare run.
 package build
 
@@ -36,7 +36,7 @@ type Options struct {
 
 // FromOptions builds a *pipeline.Pipeline from a config plus injectable
 // dependencies. Callers without the build-tagged transcribe path
-// (currently none — vkb-cli also has whispercpp) just pass nil for
+// (currently none — howl-cli also has whispercpp) just pass nil for
 // SharedTranscriber and let FromOptions construct one.
 func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 	cfg := opts.Config
@@ -95,20 +95,20 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 	if cfg.TSEEnabled {
 		backend, beErr := speaker.BackendByName(cfg.TSEBackend)
 		if beErr != nil {
-			log.Printf("[vkb] build.FromOptions: TSE backend lookup failed, continuing without TSE: %v", beErr)
+			log.Printf("[howl] build.FromOptions: TSE backend lookup failed, continuing without TSE: %v", beErr)
 			setLastError("tse: " + beErr.Error())
 			return p, nil
 		}
 		modelsDir := filepath.Dir(cfg.TSEModelPath)
 		tse, tseErr := pipeline.LoadTSE(backend, cfg.TSEProfileDir, modelsDir, cfg.ONNXLibPath, cfg.TSEThresholdValue())
 		if tseErr != nil {
-			log.Printf("[vkb] build.FromOptions: TSE load failed, continuing without TSE: %v", tseErr)
+			log.Printf("[howl] build.FromOptions: TSE load failed, continuing without TSE: %v", tseErr)
 			setLastError("tse: " + tseErr.Error())
 		} else if tse != nil {
 			p.ChunkStages = []audio.Stage{tse}
-			log.Printf("[vkb] build.FromOptions: TSE loaded (profile=%s)", cfg.TSEProfileDir)
+			log.Printf("[howl] build.FromOptions: TSE loaded (profile=%s)", cfg.TSEProfileDir)
 		} else {
-			log.Printf("[vkb] build.FromOptions: TSE enabled but no enrollment found at %s", cfg.TSEProfileDir)
+			log.Printf("[howl] build.FromOptions: TSE enabled but no enrollment found at %s", cfg.TSEProfileDir)
 		}
 	}
 	return p, nil

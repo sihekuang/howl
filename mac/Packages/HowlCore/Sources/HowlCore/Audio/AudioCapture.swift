@@ -1,0 +1,298 @@
+import Foundation
+@preconcurrency import AVFoundation
+import CoreAudio
+import AppKit
+import os
+
+private let log = Logger(subsystem: "com.howl.app", category: "AudioCapture")
+
+/// Captures Float32 mono 48 kHz audio from the default system input
+/// device and pushes frames to a callback. Lifetime: one start/stop
+/// cycle per capture session.
+public struct AudioInputDevice: Identifiable, Hashable, Sendable {
+    public let id: String      // AVCaptureDevice.uniqueID == CoreAudio UID
+    public let name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+public protocol AudioCapture: Sendable {
+    /// Begin capturing from the device whose UID is `deviceUID`, or
+    /// the system default if nil. The callback is invoked with each
+    /// frame of Float32 mono 48 kHz samples until `stop()` is called.
+    /// The callback may run on the audio thread — must NOT block.
+    /// Throws if the user denied microphone access.
+    func start(deviceUID: String?, onFrame: @escaping @Sendable ([Float]) -> Void) async throws
+
+    /// End capturing. Idempotent; safe to call when not started.
+    func stop()
+
+    /// Whether the user has granted microphone access.
+    func isAuthorized() -> Bool
+
+    /// Open the System Settings → Privacy → Microphone pane.
+    func openSystemSettings()
+
+    /// Available input devices (in addition to the system default,
+    /// which the caller can represent with a nil UID).
+    func availableInputDevices() -> [AudioInputDevice]
+}
+
+public enum AudioCaptureError: Error, Equatable {
+    case engineStartFailed(String)
+    case formatUnavailable
+    case permissionDenied
+}
+
+/// AVAudioEngine-backed capture. Installs a tap on the input node and
+/// converts whatever the device delivers to Float32 mono 48 kHz before
+/// invoking the callback.
+public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
+    private let engine = AVAudioEngine()
+    private var isRunning = false
+
+    // Optional converter for the rare case the input device isn't
+    // 48 kHz (most macOS mics are). For 48 kHz we do channel mix
+    // manually — way simpler than wrestling with AVAudioConverter's
+    // input-block contract, which we previously got wrong (single-shot
+    // Once flag caused all buffers after the first to convert to 0
+    // samples and silently drop).
+    private var converter: AVAudioConverter?
+
+    // Throttled tap-callback diagnostics: every ~30 callbacks, log
+    // frame count + peak amplitude.
+    private var diagCounter: Int = 0
+    private var diagPeak: Float = 0
+
+    // No lock: start/stop are driven serially from the
+    // MainActor-isolated EngineCoordinator, so concurrent calls don't
+    // happen. The audio-thread callback only reads `converter` and
+    // `targetFormat` after start has completed; they're set once and
+    // never reassigned during a session.
+
+    public init() {}
+
+    public func isAuthorized() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    public func openSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    public func availableInputDevices() -> [AudioInputDevice] {
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone, .external],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        return session.devices.map { AudioInputDevice(id: $0.uniqueID, name: $0.localizedName) }
+    }
+
+    public func start(deviceUID: String?, onFrame: @escaping @Sendable ([Float]) -> Void) async throws {
+        // 1. Resolve mic authorization. AVAudioEngine on macOS does NOT
+        //    reliably trigger the system prompt — we must call
+        //    requestAccess explicitly the first time.
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        log.info("AVAudioInputCapture.start: auth status=\(status.rawValue, privacy: .public)")
+        switch status {
+        case .authorized:
+            break
+        case .notDetermined:
+            let granted = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    cont.resume(returning: granted)
+                }
+            }
+            log.info("AVAudioInputCapture.start: requestAccess granted=\(granted, privacy: .public)")
+            if !granted {
+                throw AudioCaptureError.permissionDenied
+            }
+        case .denied, .restricted:
+            log.error("AVAudioInputCapture.start: mic permission denied or restricted")
+            throw AudioCaptureError.permissionDenied
+        @unknown default:
+            throw AudioCaptureError.permissionDenied
+        }
+
+        if isRunning { return }
+
+        let inputNode = engine.inputNode
+
+        // Optional explicit device. Resolve the AVCaptureDevice UID
+        // to a CoreAudio AudioDeviceID and tell the input AU to use
+        // it. With `nil` we don't touch deviceID — the AU follows
+        // whatever the system default is.
+        if let uid = deviceUID, !uid.isEmpty {
+            if let devID = audioDeviceID(forUID: uid) {
+                do {
+                    try inputNode.auAudioUnit.setDeviceID(devID)
+                    log.info("AVAudioInputCapture.start: using device uid=\(uid, privacy: .public) id=\(devID, privacy: .public)")
+                } catch {
+                    log.error("AVAudioInputCapture.start: setDeviceID failed: \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                log.error("AVAudioInputCapture.start: no AudioDeviceID for UID=\(uid, privacy: .public); falling back to default")
+            }
+        } else {
+            log.info("AVAudioInputCapture.start: using system default input device")
+        }
+
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        log.info("AVAudioInputCapture.start: input format sr=\(inputFormat.sampleRate, privacy: .public) ch=\(inputFormat.channelCount, privacy: .public)")
+
+        // Build a converter only if we need rate conversion. For pure
+        // channel mixing at 48 kHz we mix manually in deliver().
+        if inputFormat.sampleRate != 48000 {
+            guard let target = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48000,
+                channels: 1,
+                interleaved: false
+            ), let conv = AVAudioConverter(from: inputFormat, to: target) else {
+                throw AudioCaptureError.formatUnavailable
+            }
+            converter = conv
+            log.info("AVAudioInputCapture.start: using AVAudioConverter for non-48k input")
+        } else {
+            converter = nil
+        }
+
+        log.info("AVAudioInputCapture.start: installing tap")
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+            self.diagnose(buffer: buffer)
+            self.deliver(buffer: buffer, onFrame: onFrame)
+        }
+
+        do {
+            try engine.start()
+            isRunning = true
+            log.info("AVAudioInputCapture.start: engine started")
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            throw AudioCaptureError.engineStartFailed(String(describing: error))
+        }
+    }
+
+    public func stop() {
+        guard isRunning else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        isRunning = false
+        log.info("AVAudioInputCapture.stop: engine stopped")
+    }
+
+    /// Throttled diagnostic: log every ~30 tap callbacks (~1s at typical
+    /// macOS hardware buffer sizes) with frame count + peak amplitude.
+    /// Lets us tell at a glance whether the tap is firing and whether
+    /// the audio actually has energy or is all zeros.
+    private func diagnose(buffer: AVAudioPCMBuffer) {
+        guard let ch = buffer.floatChannelData?[0] else {
+            log.error("diagnose: no floatChannelData")
+            return
+        }
+        let n = Int(buffer.frameLength)
+        var peak: Float = 0
+        for i in 0..<n {
+            let v = abs(ch[i])
+            if v > peak { peak = v }
+        }
+        if peak > diagPeak { diagPeak = peak }
+        diagCounter += 1
+        if diagCounter % 30 == 0 {
+            log.info("tap callback: frames=\(n, privacy: .public) sr=\(buffer.format.sampleRate, privacy: .public) ch=\(buffer.format.channelCount, privacy: .public) peak=\(self.diagPeak, privacy: .public)")
+            diagPeak = 0
+        }
+    }
+
+    private func deliver(buffer: AVAudioPCMBuffer, onFrame: @Sendable ([Float]) -> Void) {
+        let n = Int(buffer.frameLength)
+        if n == 0 { return }
+
+        // Fast path: 48 kHz input — mix channels to mono manually.
+        if buffer.format.sampleRate == 48000, let channels = buffer.floatChannelData {
+            let chCount = Int(buffer.format.channelCount)
+            var mono = [Float](repeating: 0, count: n)
+            if chCount == 1 {
+                let src = channels[0]
+                for i in 0..<n { mono[i] = src[i] }
+            } else {
+                let scale = 1.0 / Float(chCount)
+                for c in 0..<chCount {
+                    let src = channels[c]
+                    for i in 0..<n { mono[i] += src[i] * scale }
+                }
+            }
+            onFrame(mono)
+            return
+        }
+
+        // Fallback path: non-48 kHz input — use AVAudioConverter.
+        // Recreate the converter's expected output format each call;
+        // AVAudioConverter is stateful around rate conversion.
+        guard let converter else { return }
+        guard let target = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48000,
+            channels: 1,
+            interleaved: false
+        ) else { return }
+        let ratio = target.sampleRate / buffer.format.sampleRate
+        let outCapacity = AVAudioFrameCount(Double(n) * ratio + 64)
+        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outCapacity) else {
+            return
+        }
+        final class Once: @unchecked Sendable { var done = false }
+        let once = Once()
+        var error: NSError?
+        let status = converter.convert(to: outBuffer, error: &error) { _, outStatus in
+            if once.done {
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            once.done = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+        if status == .error {
+            log.error("AVAudioInputCapture: convert FAILED: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard let cd = outBuffer.floatChannelData?[0] else { return }
+        let count = Int(outBuffer.frameLength)
+        if count == 0 { return }
+        let samples = Array(UnsafeBufferPointer(start: cd, count: count))
+        onFrame(samples)
+    }
+
+    /// Resolve an AVCaptureDevice / CoreAudio UID string to its
+    /// AudioDeviceID. Returns nil if no device with that UID exists.
+    private func audioDeviceID(forUID uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var devID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let cf = uid as CFString
+        let status = withUnsafePointer(to: cf) { uidPtr -> OSStatus in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                uidPtr,
+                &size,
+                &devID
+            )
+        }
+        guard status == noErr, devID != 0 else { return nil }
+        return devID
+    }
+}

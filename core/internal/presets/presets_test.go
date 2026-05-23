@@ -139,3 +139,15 @@ func TestPreset_JSONRoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", out)
 	}
 }
+
+func TestBundledPresetsHaveLLMModel(t *testing.T) {
+	got, err := loadBundled()
+	if err != nil {
+		t.Fatalf("loadBundled: %v", err)
+	}
+	for _, p := range got {
+		if p.LLM.Model == "" {
+			t.Errorf("bundled preset %q has empty LLM.Model — bundled presets must pin a model", p.Name)
+		}
+	}
+}

@@ -41,9 +41,9 @@ jobs:
           cache-dependency-path: core/go.sum
 
       - name: Install Homebrew deps
-        # whisper-cpp + ggml: libvkb cgo link.
+        # whisper-cpp + ggml: libhowl cgo link.
         # onnxruntime: TSE pipeline at runtime (and bundled into .app).
-        # xcodegen: regenerates VoiceKeyboard.xcodeproj from project.yml.
+        # xcodegen: regenerates Howl.xcodeproj from project.yml.
         # python@3.12: pinned by scripts/export_tse_model.py (asteroid req).
         run: brew install whisper-cpp ggml onnxruntime xcodegen python@3.12
 
@@ -144,8 +144,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project VoiceKeyboard.xcodeproj \
-            -scheme VoiceKeyboard \
+            -project Howl.xcodeproj \
+            -scheme Howl \
             -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath build/derived \
@@ -160,7 +160,7 @@ jobs:
         working-directory: mac
         run: |
           set -euo pipefail
-          APP="build/derived/Build/Products/Release/VoiceKeyboard.app"
+          APP="build/derived/Build/Products/Release/Howl.app"
           test -d "$APP"
           # Smoke check: every @rpath dep must resolve to a real file or
           # symlink in Frameworks. Catches a class of bundling regressions
@@ -184,9 +184,9 @@ jobs:
           codesign --verify --deep --strict "$APP"
           # Ditto produces a zip Finder will unpack cleanly (preserves
           # symlinks, xattrs, ACLs — plain `zip -r` corrupts the bundle).
-          ditto -c -k --keepParent "$APP" VoiceKeyboard.app.zip
-          ls -lh VoiceKeyboard.app.zip
-          echo "zip=mac/VoiceKeyboard.app.zip" >> "$GITHUB_OUTPUT"
+          ditto -c -k --keepParent "$APP" Howl.app.zip
+          ls -lh Howl.app.zip
+          echo "zip=mac/Howl.app.zip" >> "$GITHUB_OUTPUT"
           echo "app=mac/$APP" >> "$GITHUB_OUTPUT"
           # Artifact names can't contain '/', so flatten branch refs like
           # 'feat/x' to 'feat-x'. Tag refs (e.g. 'mac-v0.1.0') pass through.
@@ -211,7 +211,7 @@ jobs:
 
           # Submit the zip we already built. Apple stores the notarization
           # ticket server-side; stapler pulls it down in the next step.
-          xcrun notarytool submit VoiceKeyboard.app.zip \
+          xcrun notarytool submit Howl.app.zip \
             --key "$P8" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
@@ -222,7 +222,7 @@ jobs:
 
           # Staple the ticket onto the .app (not the zip — stapling a zip
           # is not a thing). After this the .app verifies offline.
-          APP="build/derived/Build/Products/Release/VoiceKeyboard.app"
+          APP="build/derived/Build/Products/Release/Howl.app"
           xcrun stapler staple "$APP"
           xcrun stapler validate "$APP"
 
@@ -233,14 +233,14 @@ jobs:
 
           # Re-zip the now-stapled .app so the artifact + Release upload
           # picks up the version with the embedded ticket.
-          rm -f VoiceKeyboard.app.zip
-          ditto -c -k --keepParent "$APP" VoiceKeyboard.app.zip
-          ls -lh VoiceKeyboard.app.zip
+          rm -f Howl.app.zip
+          ditto -c -k --keepParent "$APP" Howl.app.zip
+          ls -lh Howl.app.zip
 
       - name: Upload .app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VoiceKeyboard-${{ steps.pack.outputs.ref_slug }}-app
+          name: Howl-${{ steps.pack.outputs.ref_slug }}-app
           path: ${{ steps.pack.outputs.zip }}
           retention-days: 30
 

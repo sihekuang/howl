@@ -44,7 +44,7 @@ var OllamaProvider = &Provider{
 				return nil, errors.New("ollama: model not specified and none installed (run `ollama pull llama3.2` or similar, or pass --llm-model)")
 			}
 			opts.Model = models[0]
-			log.Printf("[vkb] ollama: auto-detected model %q (use --llm-model to override; %d installed)", opts.Model, len(models))
+			log.Printf("[howl] ollama: auto-detected model %q (use --llm-model to override; %d installed)", opts.Model, len(models))
 		}
 		return NewOllama(OllamaOptions{
 			Model:   opts.Model,
@@ -70,7 +70,7 @@ type ollamaTagsResponse struct {
 
 // ollamaListModels queries /api/tags and returns the names of installed
 // models in the order Ollama returned them. Used both by the auto-detect
-// path in factory and by Provider.LocalModels for the `vkb-cli providers
+// path in factory and by Provider.LocalModels for the `howl-cli providers
 // --models` listing.
 func ollamaListModels(baseURL string, timeout time.Duration) ([]string, error) {
 	if baseURL == "" {
@@ -190,7 +190,7 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 		KeepAlive: ollamaKeepAlive,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
+	log.Printf("[howl] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
@@ -200,7 +200,7 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		log.Printf("[vkb] ollama.Clean: FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] ollama.Clean: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("ollama: %w", err)
 	}
 	defer resp.Body.Close()
@@ -215,7 +215,7 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		return "", fmt.Errorf("ollama: decode response: %w", err)
 	}
-	log.Printf("[vkb] ollama.Clean: response in %v done=%v", time.Since(t0), cr.Done)
+	log.Printf("[howl] ollama.Clean: response in %v done=%v", time.Since(t0), cr.Done)
 	result := strings.TrimSpace(cr.Message.Content)
 	if result == "" {
 		return "", errors.New("ollama: empty response")
@@ -243,7 +243,7 @@ func (o *Ollama) CleanStream(
 		KeepAlive: ollamaKeepAlive,
 	})
 	t0 := time.Now()
-	log.Printf("[vkb] ollama.CleanStream: starting model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
+	log.Printf("[howl] ollama.CleanStream: starting model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
@@ -253,7 +253,7 @@ func (o *Ollama) CleanStream(
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		log.Printf("[vkb] ollama.CleanStream: FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] ollama.CleanStream: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("ollama: %w", err)
 	}
 	defer resp.Body.Close()
@@ -282,7 +282,7 @@ func (o *Ollama) CleanStream(
 		if chunk != "" {
 			if firstDeltaAt.IsZero() {
 				firstDeltaAt = time.Now()
-				log.Printf("[vkb] ollama.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
+				log.Printf("[howl] ollama.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
 			}
 			b.WriteString(chunk)
 			onDelta(chunk)
@@ -292,11 +292,11 @@ func (o *Ollama) CleanStream(
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Printf("[vkb] ollama.CleanStream: scan FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] ollama.CleanStream: scan FAILED after %v: %v", time.Since(t0), err)
 		return strings.TrimSpace(b.String()), fmt.Errorf("ollama: scan: %w", err)
 	}
 	final := strings.TrimSpace(b.String())
-	log.Printf("[vkb] ollama.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
+	log.Printf("[howl] ollama.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
 	if final == "" {
 		return "", errors.New("ollama: empty stream")
 	}

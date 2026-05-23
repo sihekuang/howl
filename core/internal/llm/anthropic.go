@@ -95,7 +95,7 @@ func (a *Anthropic) CleanStream(
 	prompt := renderPrompt(raw, preserveTerms)
 
 	t0 := time.Now()
-	log.Printf("[vkb] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
+	log.Printf("[howl] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
 
 	stream := a.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
@@ -113,7 +113,7 @@ func (a *Anthropic) CleanStream(
 			chunk := ev.Delta.Text
 			if firstDeltaAt.IsZero() {
 				firstDeltaAt = time.Now()
-				log.Printf("[vkb] anthropic.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
+				log.Printf("[howl] anthropic.CleanStream: first delta after %v", firstDeltaAt.Sub(t0))
 			}
 			if chunk != "" {
 				b.WriteString(chunk)
@@ -122,11 +122,11 @@ func (a *Anthropic) CleanStream(
 		}
 	}
 	if err := stream.Err(); err != nil {
-		log.Printf("[vkb] anthropic.CleanStream: stream FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] anthropic.CleanStream: stream FAILED after %v: %v", time.Since(t0), err)
 		return strings.TrimSpace(b.String()), fmt.Errorf("anthropic: %w", err)
 	}
 	final := strings.TrimSpace(b.String())
-	log.Printf("[vkb] anthropic.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
+	log.Printf("[howl] anthropic.CleanStream: done in %v cleanedLen=%d", time.Since(t0), len(final))
 	if final == "" {
 		return "", errors.New("anthropic: empty stream")
 	}
@@ -143,7 +143,7 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	prompt := renderPrompt(raw, preserveTerms)
 
 	t0 := time.Now()
-	log.Printf("[vkb] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
+	log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
 	msg, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: 1024,
@@ -152,10 +152,10 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 		},
 	})
 	if err != nil {
-		log.Printf("[vkb] anthropic.Clean: FAILED after %v: %v", time.Since(t0), err)
+		log.Printf("[howl] anthropic.Clean: FAILED after %v: %v", time.Since(t0), err)
 		return "", fmt.Errorf("anthropic: %w", err)
 	}
-	log.Printf("[vkb] anthropic.Clean: response in %v, blocks=%d", time.Since(t0), len(msg.Content))
+	log.Printf("[howl] anthropic.Clean: response in %v, blocks=%d", time.Since(t0), len(msg.Content))
 	if len(msg.Content) == 0 {
 		return "", errors.New("anthropic: empty response")
 	}

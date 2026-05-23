@@ -43,16 +43,16 @@ if [[ ! -f "$MODELS_DIR/tse_model.onnx" ]] || [[ ! -f "$MODELS_DIR/speaker_encod
   "$VENV/bin/python" "$SCRIPT_DIR/scripts/export_tse_model.py" --out "$MODELS_DIR/tse_model.onnx"
 fi
 
-# Build vkb-enroll
-echo "Building vkb-enroll..."
-(cd "$SCRIPT_DIR/core" && go build -o build/vkb-enroll ./cmd/enroll/)
+# Build enroll
+echo "Building enroll..."
+(cd "$SCRIPT_DIR/core" && go build -o build/enroll ./cmd/enroll/)
 
 echo ""
 echo "🎙  Speak naturally for 10 seconds — press Ctrl+C to stop early."
 echo ""
 
 ONNXRUNTIME_LIB_PATH="$ONNX_LIB" \
-  "$SCRIPT_DIR/core/build/vkb-enroll" \
+  "$SCRIPT_DIR/core/build/enroll" \
   --duration=10s \
   --out="$PROFILE_DIR"
 

@@ -18,7 +18,7 @@ import (
 // regressions where chunked streaming diverges significantly from the
 // single-batch baseline.
 func TestWhisperCpp_ChunkedMatchesFull(t *testing.T) {
-	modelPath := os.ExpandEnv("$HOME/Library/Application Support/VoiceKeyboard/models/ggml-tiny.en.bin")
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	if _, err := os.Stat(modelPath); err != nil {
 		t.Skipf("model not available at %s", modelPath)
 	}

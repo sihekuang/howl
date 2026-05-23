@@ -19,7 +19,7 @@ fi
 
 # --- Build tools ------------------------------------------------------
 # xcodegen materialises the .xcodeproj from project.yml; go is the Go
-# compiler used by the cgo build of libvkb.dylib.
+# compiler used by the cgo build of libhowl.dylib.
 brew_install_if_missing() {
   local pkg="$1"
   if brew list --formula "$pkg" >/dev/null 2>&1; then
@@ -35,7 +35,7 @@ brew_install_if_missing xcodegen
 brew_install_if_missing go
 
 # --- Go cgo runtime deps ----------------------------------------------
-# libvkb.dylib links against whisper-cpp + ggml (transcription) and
+# libhowl.dylib links against whisper-cpp + ggml (transcription) and
 # onnxruntime (TSE pipeline). Without these the cgo build fails with
 # linker errors that don't make the actual missing dep obvious.
 echo "Checking Go cgo deps..."
@@ -58,14 +58,14 @@ if [ -d mac ] && [ -f mac/project.yml ]; then
     || echo "warning: 'make project' failed - run 'cd mac && make project' to debug." >&2
 fi
 
-# --- Bootstrap libvkb.dylib -------------------------------------------
+# --- Bootstrap libhowl.dylib -------------------------------------------
 # Xcode's preBuild phase rebuilds this on every build, but doing it once
 # up front means: (a) the user finds out NOW if their cgo toolchain is
 # broken, with a clear error, instead of seeing it in an Xcode log; and
 # (b) the first Xcode build is fast because the dylib's already warm.
-echo "Bootstrapping libvkb.dylib..."
+echo "Bootstrapping libhowl.dylib..."
 if ( cd core && make build-dylib >/dev/null 2>&1 ); then
-  echo "  [ok] core/build/libvkb.dylib"
+  echo "  [ok] core/build/libhowl.dylib"
 else
   echo "warning: 'make build-dylib' failed in core/ - run 'cd core && make build-dylib' to see the full error." >&2
   echo "         Common causes: missing brew deps (re-run setup-dev.sh),"  >&2

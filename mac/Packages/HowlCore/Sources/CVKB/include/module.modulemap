@@ -1,0 +1,4 @@
+module CVKB {
+    header "libhowl_shim.h"
+    export *
+}

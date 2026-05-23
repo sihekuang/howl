@@ -164,7 +164,7 @@ func (g *SpeakerGate) Extract(_ context.Context, mixed []float32) ([]float32, er
 		emb, err := g.encodeExtracted(out)
 		if err != nil {
 			// Encoder failed; log + bypass gate so we don't eat user audio.
-			log.Printf("[vkb] speakergate: encode for similarity failed (bypassing gate): %v", err)
+			log.Printf("[howl] speakergate: encode for similarity failed (bypassing gate): %v", err)
 			g.lastSimilarity = 1.0
 			return out, nil
 		}

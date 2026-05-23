@@ -1,0 +1,255 @@
+import SwiftUI
+import HowlCore
+
+/// Settings → Playground tab. Two regions stacked vertically:
+///
+/// - Top banner: preset picker, status / mic level, scratch editor,
+///   record button, hotkey hint. The preset picker is a session-local
+///   override (set in General → Active preset to change globally;
+///   picking here just routes Playground dictation through a different
+///   preset and reverts on tab leave).
+/// - Bottom split view: captured-sessions list (left) + selected
+///   session detail (right). Every dictation produces a session, so
+///   the list always has data to browse.
+struct PlaygroundTab: View {
+    let appState: AppState
+    let hotkey: HowlCore.KeyboardShortcut
+    let coordinator: EngineCoordinator
+    let sessions: any SessionsClient
+    let presets: any PresetsClient
+    @Binding var settings: UserSettings
+    /// Persists settings + reapplies the engine config (parent's save handler).
+    let onSave: (UserSettings) -> Void
+    /// Generic page navigation. PresetBanner uses `.general` to deep-link
+    /// the user to the canonical "Active preset" picker.
+    let navigateTo: (SettingsPage) -> Void
+
+    @State private var scratch: String = ""
+    @State private var selectedID: String? = nil
+    @State private var player = WAVPlayer()
+    @State private var sessionList: [SessionManifest] = []
+    /// Session-local preset override. nil ≡ "use the active preset"
+    /// (whatever's persisted in UserSettings). Set by the preset banner
+    /// picker; cleared on tab leave so the engine returns to the active
+    /// preset when the user moves on.
+    @State private var overridePresetName: String? = nil
+
+    var body: some View {
+        SettingsPane {
+            VStack(spacing: 0) {
+                playgroundBanner
+                Divider()
+                HSplitView {
+                    SessionList(sessions: sessions, selectedID: $selectedID)
+                        .frame(minWidth: 200, idealWidth: 240)
+                    detailColumn
+                        .frame(minWidth: 320)
+                }
+            }
+        }
+        .onChange(of: selectedID) { _, _ in
+            // Switching sessions invalidates the currently-loaded source.
+            player.stop()
+            Task { await refreshSelectedManifest() }
+        }
+        .task {
+            await refreshSelectedManifest()
+        }
+        .onDisappear {
+            // Leaving the Playground tab reverts the engine to whatever
+            // the user's active preset is, so any test override stops
+            // affecting future dictations elsewhere.
+            if overridePresetName != nil {
+                overridePresetName = nil
+                Task { @MainActor in await coordinator.reapplyConfig() }
+            }
+        }
+    }
+
+    /// Right-side detail pane — just the SessionDetail (no playground
+    /// here; that lives in the top banner). Padded so the content
+    /// doesn't butt against the HSplitView divider.
+    @ViewBuilder
+    private var detailColumn: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let m = selectedManifest {
+                SessionDetail(manifest: m, player: player)
+            } else {
+                Text("Select a session on the left.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    /// Full-width recording-controls banner. Sits at the top of the
+    /// developer-mode layout so it's visually a tab-level tool — not a
+    /// child of whichever session is selected below.
+    @ViewBuilder
+    private var playgroundBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            presetBanner
+
+            HStack(spacing: 8) {
+                Image(systemName: "mic.circle.fill")
+                    .foregroundStyle(.tint)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("PLAYGROUND").font(.caption2).bold().foregroundStyle(.secondary)
+                    statusBanner.font(.caption)
+                }
+                Spacer()
+            }
+
+            scratchEditor
+                .frame(minHeight: 160)
+
+            HStack {
+                Button {
+                    Task { @MainActor in
+                        switch appState.engineState {
+                        case .idle:
+                            await coordinator.manualPress()
+                        case .recording:
+                            await coordinator.manualRelease()
+                        case .processing:
+                            break
+                        }
+                    }
+                } label: {
+                    Label(recordButtonTitle, systemImage: recordButtonIcon)
+                        .frame(minWidth: 140)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(appState.engineState == .recording ? .red : .accentColor)
+                .disabled(appState.engineState == .processing)
+
+                if appState.engineState == .recording {
+                    rmsMeter
+                }
+                if appState.engineState != .idle {
+                    Button("Reset") {
+                        Task { @MainActor in await coordinator.manualReset() }
+                    }
+                }
+                Spacer()
+                Text("Hold \(Text(hotkey.displayString).font(.system(.body, design: .monospaced).bold())) anywhere to dictate")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Clear") { scratch = "" }
+                    .disabled(scratch.isEmpty)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.secondary.opacity(0.05))
+    }
+
+    /// Playground preset row. The active preset is set in General; this
+    /// banner only lets the user pick a different preset for testing in
+    /// the Playground session, applied via the coordinator's override
+    /// path so the persisted active preset stays untouched.
+    @ViewBuilder
+    private var presetBanner: some View {
+        PresetBanner(
+            presets: presets,
+            activePresetName: settings.selectedPresetName,
+            overrideName: $overridePresetName,
+            onApplyOverride: { p in applyPlaygroundOverride(p) },
+            onRevertToActive: { revertPlaygroundOverride() },
+            onChangeActive: { navigateTo(.general) }
+        )
+    }
+
+    /// Apply a playground override by reconfiguring the engine with a
+    /// `UserSettings.applying(preset)` derivative. Does not call onSave
+    /// — the persisted active preset stays as it was.
+    private func applyPlaygroundOverride(_ p: Preset) {
+        let overrideSettings = settings.applying(p)
+        Task { @MainActor in await coordinator.applyOverride(overrideSettings) }
+    }
+
+    /// Drop the override and reconfigure the engine from the persisted
+    /// settings store so dictation goes back to the user's active preset.
+    private func revertPlaygroundOverride() {
+        Task { @MainActor in await coordinator.reapplyConfig() }
+    }
+
+    /// Multiline scratch editor — TextEditor expands vertically with
+    /// content, anchored to the minHeight set by the caller.
+    @ViewBuilder
+    private var scratchEditor: some View {
+        TextEditor(text: $scratch)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .textBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.secondary.opacity(0.3))
+            )
+    }
+
+    @ViewBuilder
+    private var statusBanner: some View {
+        switch appState.engineState {
+        case .idle:
+            Label("Ready — hold \(hotkey.displayString) to dictate", systemImage: "mic")
+                .foregroundStyle(.secondary)
+        case .recording:
+            Label("Listening…", systemImage: "waveform.circle.fill")
+                .foregroundStyle(.red)
+        case .processing:
+            Label("Processing…", systemImage: "ellipsis.circle.fill")
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private var recordButtonTitle: String {
+        switch appState.engineState {
+        case .idle: return "Record"
+        case .recording: return "Stop"
+        case .processing: return "Processing…"
+        }
+    }
+
+    private var recordButtonIcon: String {
+        switch appState.engineState {
+        case .idle: return "mic.fill"
+        case .recording: return "stop.fill"
+        case .processing: return "ellipsis"
+        }
+    }
+
+    private var rmsMeter: some View {
+        let level = CGFloat(min(max(appState.liveRMS * 6, 0), 1))
+        return HStack(spacing: 4) {
+            ForEach(0..<10) { i in
+                let threshold = CGFloat(i) / 10.0
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(level > threshold ? Color.red : Color.secondary.opacity(0.25))
+                    .frame(width: 6, height: 14)
+            }
+        }
+    }
+
+    /// Manifest for the currently-selected session. Re-fetched on every
+    /// selection change so the detail pane always sees fresh data.
+    private var selectedManifest: SessionManifest? {
+        guard let id = selectedID else { return nil }
+        return sessionList.first(where: { $0.id == id })
+    }
+
+    private func refreshSelectedManifest() async {
+        do {
+            let list = try await sessions.list()
+            await MainActor.run { self.sessionList = list }
+        } catch {
+            // Swallow — SessionList shows the error in its own header.
+        }
+    }
+}

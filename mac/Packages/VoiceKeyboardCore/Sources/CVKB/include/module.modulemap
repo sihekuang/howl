@@ -1,4 +1,0 @@
-module CVKB {
-    header "libvkb_shim.h"
-    export *
-}

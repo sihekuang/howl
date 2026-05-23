@@ -4,7 +4,6 @@ package speaker
 
 import (
 	"context"
-	"math"
 	"testing"
 )
 
@@ -54,11 +53,7 @@ func TestTSE_NoiseRobustness_MultiVoice(t *testing.T) {
 	t.Logf("%s", "---------+-----------+-----------+---------+---------")
 
 	for _, snrDB := range []float64{12, 6, 0, -6, -12, -18} {
-		gain := float32(math.Pow(10, -snrDB/20.0))
-		mixed := make([]float32, n)
-		for i := range mixed {
-			mixed[i] = target[i]*0.5 + noise[i]*gain*0.5
-		}
+		mixed := mixAtSNR(target, noise, snrDB)
 
 		tse, err := NewSpeakerGate(SpeakerGateOptions{ModelPath: tseModel, Reference: embedTarget})
 		if err != nil {
@@ -121,11 +116,7 @@ func TestTSE_NoiseRobustness_SNRSweep(t *testing.T) {
 	for _, snrDB := range []float64{12, 6, 0, -6, -12, -18} {
 		// scale interferer relative to target so target_rms / interferer_rms ≈ 10^(snr/20).
 		// equivalently, multiply interferer by 10^(-snr/20).
-		gain := float32(math.Pow(10, -snrDB/20.0))
-		mixed := make([]float32, n)
-		for i := range mixed {
-			mixed[i] = target[i]*0.5 + interferer[i]*gain*0.5
-		}
+		mixed := mixAtSNR(target, interferer, snrDB)
 
 		tse, err := NewSpeakerGate(SpeakerGateOptions{ModelPath: tseModel, Reference: embedTarget})
 		if err != nil {

@@ -28,7 +28,7 @@ type Options struct {
 //
 // Adding a provider is: (1) write the Cleaner impl; (2) instantiate a
 // Provider value with the constructor wired into factory; (3) register it
-// in providers below. Call sites (libvkb, vkb-cli) don't change.
+// in providers below. Call sites (libhowl, howl) don't change.
 type Provider struct {
 	// Name is the identifier surfaced in flags, logs, and config
 	// (config.LLMProvider value).

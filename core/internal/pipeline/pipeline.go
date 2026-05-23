@@ -80,10 +80,10 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	if p == nil {
 		return Result{}, errors.New("pipeline: nil receiver")
 	}
-	log.Printf("[vkb] pipeline.Run: starting; awaiting frames")
+	log.Printf("[howl] pipeline.Run: starting; awaiting frames")
 	tStart := time.Now()
 	defer func() {
-		log.Printf("[vkb] pipeline.Run: total elapsed %v", time.Since(tStart))
+		log.Printf("[howl] pipeline.Run: total elapsed %v", time.Since(tStart))
 	}()
 
 	frameRate, chunkRate := p.registerRecorderStages()
@@ -99,7 +99,7 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	chunker := NewChunker(opts, func(e ChunkEmission) {
 		chunkIdx++
 		dur := len(e.Samples) * 1000 / chunkerSampleRate
-		log.Printf("[vkb] chunk emitted #%d: %dms (%s)", chunkIdx, dur, e.Reason)
+		log.Printf("[howl] chunk emitted #%d: %dms (%s)", chunkIdx, dur, e.Reason)
 		p.emit(Event{
 			Kind:       EventChunkEmitted,
 			ChunkIdx:   chunkIdx,
@@ -177,7 +177,7 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 				}
 				transcribed++
 				ms := int(time.Since(t0).Milliseconds())
-				log.Printf("[vkb] chunk #%d transcribe: %dms → %q", transcribed, ms, text)
+				log.Printf("[howl] chunk #%d transcribe: %dms → %q", transcribed, ms, text)
 				p.emit(Event{
 					Kind:      EventChunkTranscribed,
 					ChunkIdx:  transcribed,
@@ -260,20 +260,20 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	<-workerDone
 
 	if workerErr != nil {
-		log.Printf("[vkb] pipeline.Run: worker error: %v", workerErr)
+		log.Printf("[howl] pipeline.Run: worker error: %v", workerErr)
 		return Result{}, workerErr
 	}
 
 	mu.Lock()
 	raw := strings.TrimSpace(strings.Join(chunkTexts, " "))
 	mu.Unlock()
-	log.Printf("[vkb] pipeline.Run: joined raw len=%d raw=%q", len(raw), raw)
+	log.Printf("[howl] pipeline.Run: joined raw len=%d raw=%q", len(raw), raw)
 	_ = p.Recorder.WriteTranscript("raw.txt", raw)
 	if raw == "" {
 		return Result{}, nil
 	}
 	corrected, terms := p.Dict.Match(raw)
-	log.Printf("[vkb] pipeline.Run: dict matched %d terms", len(terms))
+	log.Printf("[howl] pipeline.Run: dict matched %d terms", len(terms))
 	_ = p.Recorder.WriteTranscript("dict.txt", corrected)
 
 	tLLM := time.Now()
@@ -284,24 +284,24 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 		if !firstTokenSeen {
 			firstTokenSeen = true
 			elapsed := int(time.Since(tLLM).Milliseconds())
-			log.Printf("[vkb] LLM stream first token: %dms after stop", elapsed)
+			log.Printf("[howl] LLM stream first token: %dms after stop", elapsed)
 			p.emit(Event{Kind: EventLLMFirstToken, ElapsedMs: elapsed})
 		}
 		p.emit(Event{Kind: EventLLMDelta, Text: s})
 	}
 	if streamer, ok := p.Cleaner.(llm.StreamingCleaner); ok && p.Listener != nil {
-		log.Printf("[vkb] pipeline.Run: cleaning via LLM (streaming)…")
+		log.Printf("[howl] pipeline.Run: cleaning via LLM (streaming)…")
 		cleaned, llmErr = streamer.CleanStream(ctx, corrected, terms, wrappedDelta)
 	} else {
-		log.Printf("[vkb] pipeline.Run: cleaning via LLM…")
+		log.Printf("[howl] pipeline.Run: cleaning via LLM…")
 		cleaned, llmErr = p.Cleaner.Clean(ctx, corrected, terms)
 	}
 	if llmErr != nil {
-		log.Printf("[vkb] pipeline.Run: LLM FAILED after %v: %v (using dict-corrected fallback)", time.Since(tLLM), llmErr)
+		log.Printf("[howl] pipeline.Run: LLM FAILED after %v: %v (using dict-corrected fallback)", time.Since(tLLM), llmErr)
 		_ = p.Recorder.WriteTranscript("cleaned.txt", corrected)
 		return Result{Raw: raw, Cleaned: corrected, Terms: terms, LLMError: llmErr}, nil
 	}
-	log.Printf("[vkb] pipeline.Run: LLM done in %v cleanedLen=%d", time.Since(tLLM), len(cleaned))
+	log.Printf("[howl] pipeline.Run: LLM done in %v cleanedLen=%d", time.Since(tLLM), len(cleaned))
 	_ = p.Recorder.WriteTranscript("cleaned.txt", cleaned)
 	return Result{Raw: raw, Cleaned: cleaned, Terms: terms}, nil
 }

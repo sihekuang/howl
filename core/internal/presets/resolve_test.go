@@ -25,8 +25,8 @@ func TestResolve_DefaultPresetMatchesEngineConfig(t *testing.T) {
 	if got.DisableNoiseSuppression {
 		t.Errorf("default should have noise suppression on")
 	}
-	if !got.TSEEnabled {
-		t.Errorf("default should have TSE on")
+	if got.TSEEnabled {
+		t.Errorf("default should have TSE off")
 	}
 }
 
@@ -121,5 +121,29 @@ func TestMatch_DivergedConfigReturnsCustom(t *testing.T) {
 func TestMatch_EmptyPresetListReturnsCustom(t *testing.T) {
 	if got := Match(config.Config{}, nil); got != "custom" {
 		t.Errorf("Match(empty list) = %q, want \"custom\"", got)
+	}
+}
+
+func TestResolveStampsLLMModelFromPreset(t *testing.T) {
+	p := Preset{
+		Name:        "test",
+		Transcribe:  TranscribeSpec{ModelSize: "small"},
+		LLM:         LLMSpec{Provider: "anthropic", Model: "claude-haiku-4-5"},
+	}
+	cfg := Resolve(p, EngineSecrets{LLMModel: "ignored-from-secrets"})
+	if cfg.LLMModel != "claude-haiku-4-5" {
+		t.Errorf("LLMModel = %q, want %q", cfg.LLMModel, "claude-haiku-4-5")
+	}
+}
+
+func TestResolveLeavesLLMModelWhenPresetEmpty(t *testing.T) {
+	p := Preset{
+		Name:       "test",
+		Transcribe: TranscribeSpec{ModelSize: "small"},
+		LLM:        LLMSpec{Provider: "anthropic"}, // no Model
+	}
+	cfg := Resolve(p, EngineSecrets{LLMModel: "from-secrets"})
+	if cfg.LLMModel != "from-secrets" {
+		t.Errorf("LLMModel = %q, want %q (preset-empty should preserve secrets)", cfg.LLMModel, "from-secrets")
 	}
 }
