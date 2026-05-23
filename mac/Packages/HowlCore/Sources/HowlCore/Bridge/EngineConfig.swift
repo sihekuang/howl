@@ -35,6 +35,10 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     /// timeout when this is > 0.
     public var pipelineTimeoutSec: Int
 
+    /// Name of the active preset. Stamped into session manifests so the
+    /// Compare tab can show which preset produced each recording.
+    public var presetName: String
+
     public init(
         whisperModelPath: String,
         whisperModelSize: String,
@@ -54,7 +58,8 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         onnxLibPath: String = "",
         tseThreshold: Float? = nil,
         tseBackend: String = "",
-        pipelineTimeoutSec: Int = 0
+        pipelineTimeoutSec: Int = 0,
+        presetName: String = "default"
     ) {
         self.whisperModelPath = whisperModelPath
         self.whisperModelSize = whisperModelSize
@@ -75,6 +80,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.tseThreshold = tseThreshold
         self.tseBackend = tseBackend
         self.pipelineTimeoutSec = pipelineTimeoutSec
+        self.presetName = presetName
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -103,6 +109,9 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         if pipelineTimeoutSec != 0 {
             try c.encode(pipelineTimeoutSec, forKey: .pipelineTimeoutSec)
         }
+        if !presetName.isEmpty {
+            try c.encode(presetName, forKey: .presetName)
+        }
     }
 
     public init(from decoder: any Decoder) throws {
@@ -126,6 +135,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
         self.tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
         self.pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 0
+        self.presetName = try c.decodeIfPresent(String.self, forKey: .presetName) ?? "default"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -148,6 +158,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case tseThreshold = "tse_threshold"
         case tseBackend = "tse_backend"
         case pipelineTimeoutSec = "pipeline_timeout_sec"
+        case presetName = "preset_name"
     }
 }
 
@@ -223,7 +234,8 @@ public extension EngineConfig {
             onnxLibPath: paths.onnxLibPath,
             tseThreshold: settings.tseThreshold,
             tseBackend: settings.tseBackend,
-            pipelineTimeoutSec: settings.pipelineTimeoutSec
+            pipelineTimeoutSec: settings.pipelineTimeoutSec,
+            presetName: settings.selectedPresetName ?? "default"
         )
     }
 }

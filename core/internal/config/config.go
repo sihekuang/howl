@@ -52,6 +52,11 @@ type Config struct {
 	// transitions back to idle. Future work: preserve dict-corrected
 	// text on timeout instead of dropping the transcript.
 	PipelineTimeoutSec int `json:"pipeline_timeout_sec,omitempty"`
+
+	// PresetName is the name of the active preset (e.g. "default",
+	// "meeting", a user-created name). Stamped into session manifests
+	// so the Compare tab can show which preset produced each recording.
+	PresetName string `json:"preset_name,omitempty"`
 }
 
 // TSEThresholdValue returns the configured TSE threshold or 0 if unset.
