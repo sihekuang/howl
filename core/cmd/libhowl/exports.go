@@ -278,7 +278,11 @@ func howl_start_capture() C.int {
 			// disk for ad-hoc inspection. Delegated to pipe.WriteSessionManifest
 			// so the live engine and the replay package share one writer.
 			if sessionID != "" && sessionDir != "" {
-				if err := pipe.WriteSessionManifest(sessionDir, sessionID, "default"); err != nil {
+				presetName := e.cfg.PresetName
+				if presetName == "" {
+					presetName = "default"
+				}
+				if err := pipe.WriteSessionManifest(sessionDir, sessionID, presetName); err != nil {
 					log.Printf("[howl] capture goroutine: manifest write failed: %v", err)
 				} else {
 					log.Printf("[howl] capture goroutine: wrote manifest %s/session.json", sessionDir)
