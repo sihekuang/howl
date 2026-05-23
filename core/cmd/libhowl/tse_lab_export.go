@@ -96,8 +96,11 @@ func runTSEExtractFile(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath s
 	}
 
 	tse, err := speaker.NewSpeakerGate(speaker.SpeakerGateOptions{
-		ModelPath: backend.TSEPath(modelsDir),
-		Reference: ref,
+		ModelPath:   backend.TSEPath(modelsDir),
+		Reference:   ref,
+		Threshold:   0.40,
+		EncoderPath: backend.EncoderPath(modelsDir),
+		EncoderDim:  backend.EmbeddingDim,
 	})
 	if err != nil {
 		return fmt.Errorf("new speaker gate: %w", err)
