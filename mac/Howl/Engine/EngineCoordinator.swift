@@ -303,10 +303,12 @@ public final class EngineCoordinator {
                 // paste; otherwise (non-streaming path) fall back to it.
                 if streamedSoFar.isEmpty, !text.isEmpty {
                     do {
-                        try await composition.injector.inject(text)
+                        try await composition.injector.inject(text + " ")
                     } catch {
                         setTransientWarning("paste: \(error)")
                     }
+                } else if !streamedSoFar.isEmpty {
+                    try? await composition.streamTyper.injectChunk(" ")
                 }
                 streamedSoFar = ""
                 composition.appState.engineState = .idle
