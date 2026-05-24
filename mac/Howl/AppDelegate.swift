@@ -50,6 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettingsWindow()
+        return false
+    }
+
     @objc private func settingsWindowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
               window.identifier?.rawValue == "settings" else { return }
