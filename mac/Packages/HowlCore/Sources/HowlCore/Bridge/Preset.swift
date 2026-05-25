@@ -6,6 +6,7 @@ import Foundation
 public struct Preset: Codable, Equatable, Sendable, Identifiable {
     public let name: String
     public let description: String
+    public let prompt: String
     public let frameStages: [StageSpec]
     public let chunkStages: [StageSpec]
     public let transcribe: TranscribeSpec
@@ -17,6 +18,7 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
     public init(
         name: String,
         description: String,
+        prompt: String = "",
         frameStages: [StageSpec],
         chunkStages: [StageSpec],
         transcribe: TranscribeSpec,
@@ -25,11 +27,24 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
     ) {
         self.name = name
         self.description = description
+        self.prompt = prompt
         self.frameStages = frameStages
         self.chunkStages = chunkStages
         self.transcribe = transcribe
         self.llm = llm
         self.timeoutSec = timeoutSec
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.description = try c.decode(String.self, forKey: .description)
+        self.prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        self.frameStages = try c.decode([StageSpec].self, forKey: .frameStages)
+        self.chunkStages = try c.decode([StageSpec].self, forKey: .chunkStages)
+        self.transcribe = try c.decode(TranscribeSpec.self, forKey: .transcribe)
+        self.llm = try c.decode(LLMSpec.self, forKey: .llm)
+        self.timeoutSec = try c.decodeIfPresent(Int.self, forKey: .timeoutSec)
     }
 
     public struct StageSpec: Codable, Equatable, Sendable {
@@ -82,7 +97,7 @@ public struct Preset: Codable, Equatable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, description, transcribe, llm
+        case name, description, prompt, transcribe, llm
         case frameStages = "frame_stages"
         case chunkStages = "chunk_stages"
         case timeoutSec = "timeout_sec"

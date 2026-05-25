@@ -12,6 +12,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var llmModel: String
     public var llmAPIKey: String
     public var llmBaseURL: String   // empty = provider's default endpoint
+    public var llmPrompt: String
     public var developerMode: Bool
     public var customDict: [String]
 
@@ -50,6 +51,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         llmAPIKey: String,
         customDict: [String],
         llmBaseURL: String = "",
+        llmPrompt: String = "",
         developerMode: Bool = false,
         tseEnabled: Bool = false,
         tseProfileDir: String = "",
@@ -70,6 +72,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.llmModel = llmModel
         self.llmAPIKey = llmAPIKey
         self.llmBaseURL = llmBaseURL
+        self.llmPrompt = llmPrompt
         self.developerMode = developerMode
         self.customDict = customDict
         self.tseEnabled = tseEnabled
@@ -94,6 +97,9 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         try c.encode(llmModel, forKey: .llmModel)
         try c.encode(llmAPIKey, forKey: .llmAPIKey)
         try c.encode(llmBaseURL, forKey: .llmBaseURL)
+        if !llmPrompt.isEmpty {
+            try c.encode(llmPrompt, forKey: .llmPrompt)
+        }
         try c.encode(developerMode, forKey: .developerMode)
         try c.encode(customDict, forKey: .customDict)
         try c.encode(tseEnabled, forKey: .tseEnabled)
@@ -125,6 +131,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.llmModel = try c.decode(String.self, forKey: .llmModel)
         self.llmAPIKey = try c.decode(String.self, forKey: .llmAPIKey)
         self.llmBaseURL = try c.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
+        self.llmPrompt = try c.decodeIfPresent(String.self, forKey: .llmPrompt) ?? ""
         self.developerMode = try c.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
         self.customDict = try c.decode([String].self, forKey: .customDict)
         self.tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
@@ -148,6 +155,7 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case llmModel = "llm_model"
         case llmAPIKey = "llm_api_key"
         case llmBaseURL = "llm_base_url"
+        case llmPrompt = "llm_prompt"
         case developerMode = "developer_mode"
         case customDict = "custom_dict"
         case tseEnabled = "tse_enabled"
@@ -223,6 +231,7 @@ public extension EngineConfig {
             llmAPIKey: apiKey,
             customDict: settings.customDict,
             llmBaseURL: settings.llmBaseURL,
+            llmPrompt: settings.llmPrompt,
             // The Mac app no longer surfaces a "developer mode" toggle —
             // every dictation captures per-stage WAVs + transcripts so
             // the Playground sessions sidebar always has data to show.
