@@ -28,7 +28,7 @@ func TestRenderPrompt_NoTerms(t *testing.T) {
 	}
 }
 
-func TestRenderPrompt_CustomNoVerbs(t *testing.T) {
+func TestRenderPrompt_CustomNoPlaceholders(t *testing.T) {
 	got := renderPrompt("Fix grammar only.", "hello world", []string{"Go"})
 	if !strings.Contains(got, "Fix grammar only.") {
 		t.Errorf("prompt missing custom text:\n%s", got)
@@ -41,12 +41,32 @@ func TestRenderPrompt_CustomNoVerbs(t *testing.T) {
 	}
 }
 
-func TestRenderPrompt_CustomOneVerb(t *testing.T) {
-	got := renderPrompt("Keep these words: %s\nClean it up.", "hello world", []string{"API"})
-	if !strings.Contains(got, "Keep these words: API") {
+func TestRenderPrompt_CustomWithPlaceholders(t *testing.T) {
+	got := renderPrompt("Keep: {{dictionary}}\nText: {{transcription}}", "hello world", []string{"API"})
+	if !strings.Contains(got, "Keep: API") {
+		t.Errorf("prompt missing substituted terms:\n%s", got)
+	}
+	if !strings.Contains(got, "Text: hello world") {
+		t.Errorf("prompt missing substituted transcription:\n%s", got)
+	}
+}
+
+func TestRenderPrompt_DictionaryOnly(t *testing.T) {
+	got := renderPrompt("Preserve: {{dictionary}}", "hello world", []string{"Go"})
+	if !strings.Contains(got, "Preserve: Go") {
 		t.Errorf("prompt missing substituted terms:\n%s", got)
 	}
 	if !strings.Contains(got, "Raw transcription:\nhello world") {
 		t.Errorf("prompt missing appended raw text:\n%s", got)
+	}
+}
+
+func TestRenderPrompt_PlaceholdersNotInOutput(t *testing.T) {
+	got := renderPrompt(DefaultPrompt, "test input", []string{"Foo"})
+	if strings.Contains(got, "{{dictionary}}") {
+		t.Errorf("placeholder {{dictionary}} not replaced:\n%s", got)
+	}
+	if strings.Contains(got, "{{transcription}}") {
+		t.Errorf("placeholder {{transcription}} not replaced:\n%s", got)
 	}
 }

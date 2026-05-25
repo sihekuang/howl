@@ -9,7 +9,7 @@ struct PromptTab: View {
     @State private var allPresets: [Preset] = []
     @State private var editablePrompt: String = ""
     @State private var showSaveAs = false
-    @State private var draftForSaveAs: PresetDraft? = nil
+    @State private var draftForSaveAs = PresetDraft(Preset(name: "", description: "", frameStages: [], chunkStages: [], transcribe: .init(modelSize: "small"), llm: .init(provider: "anthropic")))
 
     private var activePreset: Preset? {
         allPresets.first(where: { $0.name == settings.selectedPresetName })
@@ -31,17 +31,15 @@ struct PromptTab: View {
             syncPromptFromSettings()
         }
         .sheet(isPresented: $showSaveAs) {
-            if let draft = draftForSaveAs {
-                SaveAsPresetSheet(
-                    draft: draft,
-                    presets: presets,
-                    onSaved: {
-                        showSaveAs = false
-                        Task { await loadPresets() }
-                    },
-                    onCancel: { showSaveAs = false }
-                )
-            }
+            SaveAsPresetSheet(
+                draft: draftForSaveAs,
+                presets: presets,
+                onSaved: {
+                    showSaveAs = false
+                    Task { await loadPresets() }
+                },
+                onCancel: { showSaveAs = false }
+            )
         }
     }
 
@@ -72,6 +70,13 @@ struct PromptTab: View {
                 )
                 .disabled(isBuiltIn)
                 .opacity(isBuiltIn ? 0.7 : 1.0)
+            VStack(alignment: .leading, spacing: 2) {
+                Label("{{dictionary}} is replaced with your dictionary terms", systemImage: "book")
+                Label("{{transcription}} is replaced with the raw transcription", systemImage: "waveform")
+                Label("If omitted, both are appended automatically", systemImage: "info.circle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if isBuiltIn {
                 Text("Built-in presets are read-only. Duplicate to edit.")
                     .font(.caption)
@@ -165,18 +170,22 @@ struct PromptTab: View {
     private func renderPreview(_ prompt: String) -> String {
         let terms = settings.customDict.isEmpty ? "(none)" : settings.customDict.joined(separator: ", ")
         let sample = "Um, I think we should, you know, deploy to production."
-        let count = prompt.components(separatedBy: "%s").count - 1
-        switch count {
-        case 0:
-            return prompt + "\n\nPreserve these terms verbatim: " + terms + "\n\nRaw transcription:\n" + sample
-        case 1:
-            return prompt.replacingOccurrences(of: "%s", with: terms) + "\n\nRaw transcription:\n" + sample
-        default:
-            var result = prompt
-            if let r = result.range(of: "%s") { result.replaceSubrange(r, with: terms) }
-            if let r = result.range(of: "%s") { result.replaceSubrange(r, with: sample) }
-            return result
+        let hasDictionary = prompt.contains("{{dictionary}}")
+        let hasTranscription = prompt.contains("{{transcription}}")
+        var result = prompt
+        if hasDictionary {
+            result = result.replacingOccurrences(of: "{{dictionary}}", with: terms)
         }
+        if hasTranscription {
+            result = result.replacingOccurrences(of: "{{transcription}}", with: sample)
+        }
+        if !hasDictionary {
+            result += "\n\nPreserve these terms verbatim: " + terms
+        }
+        if !hasTranscription {
+            result += "\n\nRaw transcription:\n" + sample
+        }
+        return result
     }
 }
 
@@ -185,7 +194,7 @@ You are a transcription editor. Your job is to MINIMALLY edit the transcription 
 - Remove filler words: um, uh, er, ah, like, you know, basically, I mean, sort of, kind of (when used as fillers)
 - Fix obvious grammar and punctuation
 - Drop any bracketed sound/music annotations Whisper inserts: (music), (water splashing), [Applause], [Laughter], etc. — these are NOT what the speaker said
-- Preserve technical terms verbatim: %s
+- Preserve technical terms verbatim: {{dictionary}}
 
 Hard rules:
 - Do NOT paraphrase or restructure sentences. Keep the speaker's exact phrasing.
@@ -195,5 +204,5 @@ Hard rules:
 - Return ONLY the cleaned text — no preamble, no explanation, no quotes around the output.
 
 Raw transcription:
-%s
+{{transcription}}
 """

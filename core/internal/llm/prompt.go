@@ -1,8 +1,10 @@
 package llm
 
-import (
-	"fmt"
-	"strings"
+import "strings"
+
+const (
+	PlaceholderDictionary    = "{{dictionary}}"
+	PlaceholderTranscription = "{{transcription}}"
 )
 
 // DefaultPrompt is the built-in cleanup instruction. Used when no
@@ -11,7 +13,7 @@ const DefaultPrompt = `You are a transcription editor. Your job is to MINIMALLY 
 - Remove filler words: um, uh, er, ah, like, you know, basically, I mean, sort of, kind of (when used as fillers)
 - Fix obvious grammar and punctuation
 - Drop any bracketed sound/music annotations Whisper inserts: (music), (water splashing), [Applause], [Laughter], etc. — these are NOT what the speaker said
-- Preserve technical terms verbatim: %s
+- Preserve technical terms verbatim: {{dictionary}}
 
 Hard rules:
 - Do NOT paraphrase or restructure sentences. Keep the speaker's exact phrasing.
@@ -21,20 +23,28 @@ Hard rules:
 - Return ONLY the cleaned text — no preamble, no explanation, no quotes around the output.
 
 Raw transcription:
-%s`
+{{transcription}}`
 
 func renderPrompt(promptTemplate, raw string, preserveTerms []string) string {
 	terms := "(none)"
 	if len(preserveTerms) > 0 {
 		terms = strings.Join(preserveTerms, ", ")
 	}
-	nVerbs := strings.Count(promptTemplate, "%s")
-	switch nVerbs {
-	case 0:
-		return promptTemplate + "\n\nPreserve these terms verbatim: " + terms + "\n\nRaw transcription:\n" + raw
-	case 1:
-		return fmt.Sprintf(promptTemplate, terms) + "\n\nRaw transcription:\n" + raw
-	default:
-		return fmt.Sprintf(promptTemplate, terms, raw)
+	hasDictionary := strings.Contains(promptTemplate, PlaceholderDictionary)
+	hasTranscription := strings.Contains(promptTemplate, PlaceholderTranscription)
+
+	result := promptTemplate
+	if hasDictionary {
+		result = strings.Replace(result, PlaceholderDictionary, terms, 1)
 	}
+	if hasTranscription {
+		result = strings.Replace(result, PlaceholderTranscription, raw, 1)
+	}
+	if !hasDictionary {
+		result += "\n\nPreserve these terms verbatim: " + terms
+	}
+	if !hasTranscription {
+		result += "\n\nRaw transcription:\n" + raw
+	}
+	return result
 }
