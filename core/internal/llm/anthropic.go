@@ -92,7 +92,7 @@ func (a *Anthropic) CleanStream(
 	if a == nil || a.client == nil {
 		return "", errors.New("anthropic: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
@@ -140,7 +140,7 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	if a == nil || a.client == nil {
 		return "", errors.New("anthropic: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))

@@ -5,7 +5,9 @@ import (
 	"strings"
 )
 
-const cleanupPrompt = `You are a transcription editor. Your job is to MINIMALLY edit the transcription below, not to rewrite it. Apply only these changes:
+// DefaultPrompt is the built-in cleanup instruction. Used when no
+// custom prompt is configured.
+const DefaultPrompt = `You are a transcription editor. Your job is to MINIMALLY edit the transcription below, not to rewrite it. Apply only these changes:
 - Remove filler words: um, uh, er, ah, like, you know, basically, I mean, sort of, kind of (when used as fillers)
 - Fix obvious grammar and punctuation
 - Drop any bracketed sound/music annotations Whisper inserts: (music), (water splashing), [Applause], [Laughter], etc. — these are NOT what the speaker said
@@ -21,11 +23,18 @@ Hard rules:
 Raw transcription:
 %s`
 
-// renderPrompt produces the user message sent to the LLM.
-func renderPrompt(raw string, preserveTerms []string) string {
+func renderPrompt(promptTemplate, raw string, preserveTerms []string) string {
 	terms := "(none)"
 	if len(preserveTerms) > 0 {
 		terms = strings.Join(preserveTerms, ", ")
 	}
-	return fmt.Sprintf(cleanupPrompt, terms, raw)
+	nVerbs := strings.Count(promptTemplate, "%s")
+	switch nVerbs {
+	case 0:
+		return promptTemplate + "\n\nPreserve these terms verbatim: " + terms + "\n\nRaw transcription:\n" + raw
+	case 1:
+		return fmt.Sprintf(promptTemplate, terms) + "\n\nRaw transcription:\n" + raw
+	default:
+		return fmt.Sprintf(promptTemplate, terms, raw)
+	}
 }

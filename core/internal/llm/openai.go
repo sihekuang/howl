@@ -144,7 +144,7 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if o == nil || o.client == nil {
 		return "", errors.New("openai: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},
@@ -200,7 +200,7 @@ func (o *OpenAI) CleanStream(
 	if o == nil || o.client == nil {
 		return "", errors.New("openai: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},

@@ -182,7 +182,7 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if o == nil || o.client == nil {
 		return "", errors.New("ollama: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},
@@ -235,7 +235,7 @@ func (o *Ollama) CleanStream(
 	if o == nil || o.client == nil {
 		return "", errors.New("ollama: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	prompt := renderPrompt(DefaultPrompt, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},
