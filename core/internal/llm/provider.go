@@ -20,6 +20,7 @@ type Options struct {
 	APIKey  string        // required for cloud providers (Anthropic, OpenAI, ...)
 	BaseURL string        // optional override (testing; non-default Ollama host)
 	Timeout time.Duration // optional; provider's default if zero
+	Prompt  string        // optional; uses DefaultPrompt when empty
 }
 
 // Provider describes an LLM cleaner backend: identity, default model, and

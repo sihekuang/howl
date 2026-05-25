@@ -31,6 +31,10 @@ type Bundle struct {
 type Preset struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
+	// Prompt is the cleanup prompt template sent to the LLM. Two %s
+	// verbs are expected: the first receives the preserved-terms list,
+	// the second the raw transcription. Empty = llm.DefaultPrompt.
+	Prompt      string         `json:"prompt,omitempty"`
 	FrameStages []StageSpec    `json:"frame_stages"`
 	ChunkStages []StageSpec    `json:"chunk_stages"`
 	Transcribe  TranscribeSpec `json:"transcribe"`
