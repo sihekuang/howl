@@ -152,7 +152,7 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},
@@ -212,7 +212,7 @@ func (o *OpenAI) CleanStream(
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},

@@ -87,6 +87,7 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 	}
 
 	p := pipeline.New(tr, dy, cleaner)
+	p.Prompt = cfg.LLMPrompt
 	p.FrameStages = []audio.Stage{
 		denoise.NewStage(d),
 		resample.NewDecimate3(),

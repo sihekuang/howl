@@ -25,7 +25,9 @@ Hard rules:
 Raw transcription:
 {{transcription}}`
 
-func renderPrompt(promptTemplate, raw string, preserveTerms []string) string {
+// RenderPrompt produces the user message sent to the LLM by substituting
+// placeholders in the template with dictionary terms and raw transcription.
+func RenderPrompt(promptTemplate, raw string, preserveTerms []string) string {
 	terms := "(none)"
 	if len(preserveTerms) > 0 {
 		terms = strings.Join(preserveTerms, ", ")

@@ -99,7 +99,7 @@ func (a *Anthropic) CleanStream(
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
@@ -151,7 +151,7 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))

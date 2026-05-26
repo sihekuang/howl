@@ -190,7 +190,7 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},
@@ -247,7 +247,7 @@ func (o *Ollama) CleanStream(
 	if promptTpl == "" {
 		promptTpl = DefaultPrompt
 	}
-	prompt := renderPrompt(promptTpl, raw, preserveTerms)
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},

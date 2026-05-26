@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderPrompt_BasicSubstitution(t *testing.T) {
-	got := renderPrompt(DefaultPrompt, "hello world um yeah", []string{"MCP", "WebRTC"})
+	got := RenderPrompt(DefaultPrompt, "hello world um yeah", []string{"MCP", "WebRTC"})
 	if !strings.Contains(got, "hello world um yeah") {
 		t.Errorf("prompt missing raw text:\n%s", got)
 	}
@@ -19,7 +19,7 @@ func TestRenderPrompt_BasicSubstitution(t *testing.T) {
 }
 
 func TestRenderPrompt_NoTerms(t *testing.T) {
-	got := renderPrompt(DefaultPrompt, "hello", nil)
+	got := RenderPrompt(DefaultPrompt, "hello", nil)
 	if !strings.Contains(got, "Preserve technical terms verbatim:") {
 		t.Errorf("prompt missing terms section even when empty:\n%s", got)
 	}
@@ -29,7 +29,7 @@ func TestRenderPrompt_NoTerms(t *testing.T) {
 }
 
 func TestRenderPrompt_CustomNoPlaceholders(t *testing.T) {
-	got := renderPrompt("Fix grammar only.", "hello world", []string{"Go"})
+	got := RenderPrompt("Fix grammar only.", "hello world", []string{"Go"})
 	if !strings.Contains(got, "Fix grammar only.") {
 		t.Errorf("prompt missing custom text:\n%s", got)
 	}
@@ -42,7 +42,7 @@ func TestRenderPrompt_CustomNoPlaceholders(t *testing.T) {
 }
 
 func TestRenderPrompt_CustomWithPlaceholders(t *testing.T) {
-	got := renderPrompt("Keep: {{dictionary}}\nText: {{transcription}}", "hello world", []string{"API"})
+	got := RenderPrompt("Keep: {{dictionary}}\nText: {{transcription}}", "hello world", []string{"API"})
 	if !strings.Contains(got, "Keep: API") {
 		t.Errorf("prompt missing substituted terms:\n%s", got)
 	}
@@ -52,7 +52,7 @@ func TestRenderPrompt_CustomWithPlaceholders(t *testing.T) {
 }
 
 func TestRenderPrompt_DictionaryOnly(t *testing.T) {
-	got := renderPrompt("Preserve: {{dictionary}}", "hello world", []string{"Go"})
+	got := RenderPrompt("Preserve: {{dictionary}}", "hello world", []string{"Go"})
 	if !strings.Contains(got, "Preserve: Go") {
 		t.Errorf("prompt missing substituted terms:\n%s", got)
 	}
@@ -62,7 +62,7 @@ func TestRenderPrompt_DictionaryOnly(t *testing.T) {
 }
 
 func TestRenderPrompt_PlaceholdersNotInOutput(t *testing.T) {
-	got := renderPrompt(DefaultPrompt, "test input", []string{"Foo"})
+	got := RenderPrompt(DefaultPrompt, "test input", []string{"Foo"})
 	if strings.Contains(got, "{{dictionary}}") {
 		t.Errorf("placeholder {{dictionary}} not replaced:\n%s", got)
 	}
