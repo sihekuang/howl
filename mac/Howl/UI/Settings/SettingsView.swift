@@ -11,6 +11,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case voice
     case hotkey
     case provider
+    case prompt
     case dictionary
     case playground
     case pipeline   // NEW
@@ -23,6 +24,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .voice:      return "Voice"
         case .hotkey:     return "Hotkey"
         case .provider:   return "LLM Provider"
+        case .prompt:     return "Prompt"
         case .dictionary: return "Dictionary"
         case .playground: return "Playground"
         case .pipeline:   return "Pipeline"   // NEW
@@ -38,6 +40,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .voice:      return "person.wave.2"
         case .hotkey:     return "keyboard"
         case .provider:   return "key"
+        case .prompt:     return "text.bubble"
         case .dictionary: return "books.vertical"
         case .playground: return "waveform"
         case .pipeline:   return "rectangle.connected.to.line.below"   // NEW
@@ -53,6 +56,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .voice:      return .purple
         case .hotkey:     return .blue
         case .provider:   return .orange
+        case .prompt:     return .teal
         case .dictionary: return .green
         case .playground: return .pink
         case .pipeline:   return .indigo   // NEW
@@ -214,6 +218,12 @@ private struct DetailView: View {
             )
         case .provider:
             LLMProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)
+        case .prompt:
+            PromptTab(
+                settings: $settings,
+                onSave: save,
+                presets: LibVKBPresetsClient(engine: composition.engine)
+            )
         case .dictionary:
             DictionaryTab(settings: $settings, onSave: save)
         case .playground:

@@ -64,6 +64,11 @@ type Pipeline struct {
 	// stages. Optional; nil means no recording.
 	Recorder *recorder.Session
 
+	// Prompt is the LLM prompt template used for this pipeline run.
+	// Stored here so the Recorder can save the rendered prompt as
+	// a session artifact (prompt.txt).
+	Prompt string
+
 	ChunkerOpts ChunkerOpts
 }
 
@@ -275,6 +280,10 @@ func (p *Pipeline) Run(ctx context.Context, frames <-chan []float32) (Result, er
 	corrected, terms := p.Dict.Match(raw)
 	log.Printf("[howl] pipeline.Run: dict matched %d terms", len(terms))
 	_ = p.Recorder.WriteTranscript("dict.txt", corrected)
+
+	if p.Prompt != "" {
+		_ = p.Recorder.WriteTranscript("prompt.txt", llm.RenderPrompt(p.Prompt, corrected, terms))
+	}
 
 	tLLM := time.Now()
 	var cleaned string

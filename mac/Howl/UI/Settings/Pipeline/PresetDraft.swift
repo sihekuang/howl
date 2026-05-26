@@ -25,6 +25,7 @@ final class PresetDraft {
     /// then emit a non-nil model in the JSON.
     var llmModel: String
     var timeoutSec: Int
+    var prompt: String
 
     /// User's currently-selected stage in the graph, if any. Drives the
     /// detail panel. nil means no selection.
@@ -38,6 +39,7 @@ final class PresetDraft {
         self.llmProvider = source.llm.provider
         self.llmModel = Self.resolvedLLMModel(from: source)
         self.timeoutSec = source.timeoutSec ?? 10
+        self.prompt = source.prompt
     }
 
     /// Returns the model `Preset` would resolve to at this moment: the
@@ -57,6 +59,7 @@ final class PresetDraft {
         if llmProvider != source.llm.provider { return true }
         if llmModel != Self.resolvedLLMModel(from: source) { return true }
         if timeoutSec != (source.timeoutSec ?? 10) { return true }
+        if prompt != source.prompt { return true }
         return false
     }
 
@@ -69,6 +72,7 @@ final class PresetDraft {
         llmProvider = preset.llm.provider
         llmModel = Self.resolvedLLMModel(from: preset)
         timeoutSec = preset.timeoutSec ?? 10
+        prompt = preset.prompt
         selectedStage = nil
     }
 
@@ -88,6 +92,7 @@ final class PresetDraft {
         Preset(
             name: name,
             description: description,
+            prompt: prompt,
             frameStages: frameStages,
             chunkStages: chunkStages,
             transcribe: .init(modelSize: transcribeModelSize),

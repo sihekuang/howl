@@ -2,7 +2,11 @@
 // as JSON. Defaults are applied by WithDefaults, never inside JSON tags.
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/voice-keyboard/core/internal/llm"
+)
 
 type Config struct {
 	WhisperModelPath        string   `json:"whisper_model_path"`
@@ -22,6 +26,10 @@ type Config struct {
 	// configurable endpoint (Ollama on a non-default host, a test
 	// harness pointing at a fake server). Empty = provider's default.
 	LLMBaseURL              string   `json:"llm_base_url"`
+	// LLMPrompt is the cleanup prompt template sent to the LLM. Two %s
+	// verbs are expected: the first receives the preserved-terms list,
+	// the second the raw transcription. Empty = llm.DefaultPrompt.
+	LLMPrompt               string   `json:"llm_prompt,omitempty"`
 	CustomDict              []string `json:"custom_dict"`
 
 	// TSE (Target Speaker Extraction) fields. All optional; when
@@ -89,5 +97,8 @@ func WithDefaults(c *Config) {
 	}
 	if c.LLMModel == "" {
 		c.LLMModel = "claude-sonnet-4-6"
+	}
+	if c.LLMPrompt == "" {
+		c.LLMPrompt = llm.DefaultPrompt
 	}
 }

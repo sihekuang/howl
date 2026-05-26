@@ -26,6 +26,9 @@ struct SessionDetail: View {
             transcriptRow(label: "raw.txt",     rel: manifest.transcripts.raw)
             transcriptRow(label: "dict.txt",    rel: manifest.transcripts.dict)
             transcriptRow(label: "cleaned.txt", rel: manifest.transcripts.cleaned)
+            if !manifest.transcripts.prompt.isEmpty {
+                transcriptRow(label: "prompt.txt", rel: manifest.transcripts.prompt)
+            }
         }
     }
 

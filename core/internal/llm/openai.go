@@ -36,6 +36,7 @@ var OpenAIProvider = &Provider{
 			Model:   opts.Model,
 			BaseURL: opts.BaseURL,
 			Timeout: opts.Timeout,
+			Prompt:  opts.Prompt,
 		})
 	},
 }
@@ -50,6 +51,7 @@ type OpenAIOptions struct {
 	Model   string
 	BaseURL string        // optional; for testing or proxy
 	Timeout time.Duration // optional; defaults to 30s
+	Prompt  string        // optional; uses DefaultPrompt when empty
 }
 
 // OpenAI is the OpenAI-backed Cleaner. Talks to /chat/completions over HTTP.
@@ -58,6 +60,7 @@ type OpenAI struct {
 	apiKey  string
 	model   string
 	baseURL string
+	prompt  string
 }
 
 // NewOpenAI constructs an OpenAI Cleaner. Validates APIKey explicitly so
@@ -89,6 +92,7 @@ func newOpenAICompatible(opts OpenAIOptions, requireKey bool) (*OpenAI, error) {
 		apiKey:  opts.APIKey,
 		model:   opts.Model,
 		baseURL: strings.TrimRight(baseURL, "/"),
+		prompt:  opts.Prompt,
 	}, nil
 }
 
@@ -144,7 +148,11 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if o == nil || o.client == nil {
 		return "", errors.New("openai: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := o.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},
@@ -200,7 +208,11 @@ func (o *OpenAI) CleanStream(
 	if o == nil || o.client == nil {
 		return "", errors.New("openai: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := o.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(openaiChatRequest{
 		Model:     o.model,
 		Messages:  []openaiChatMessage{{Role: "user", Content: prompt}},

@@ -1,15 +1,19 @@
 package llm
 
-import (
-	"fmt"
-	"strings"
+import "strings"
+
+const (
+	PlaceholderDictionary    = "{{dictionary}}"
+	PlaceholderTranscription = "{{transcription}}"
 )
 
-const cleanupPrompt = `You are a transcription editor. Your job is to MINIMALLY edit the transcription below, not to rewrite it. Apply only these changes:
+// DefaultPrompt is the built-in cleanup instruction. Used when no
+// custom prompt is configured.
+const DefaultPrompt = `You are a transcription editor. Your job is to MINIMALLY edit the transcription below, not to rewrite it. Apply only these changes:
 - Remove filler words: um, uh, er, ah, like, you know, basically, I mean, sort of, kind of (when used as fillers)
 - Fix obvious grammar and punctuation
 - Drop any bracketed sound/music annotations Whisper inserts: (music), (water splashing), [Applause], [Laughter], etc. — these are NOT what the speaker said
-- Preserve technical terms verbatim: %s
+- Preserve technical terms verbatim: {{dictionary}}
 
 Hard rules:
 - Do NOT paraphrase or restructure sentences. Keep the speaker's exact phrasing.
@@ -19,13 +23,30 @@ Hard rules:
 - Return ONLY the cleaned text — no preamble, no explanation, no quotes around the output.
 
 Raw transcription:
-%s`
+{{transcription}}`
 
-// renderPrompt produces the user message sent to the LLM.
-func renderPrompt(raw string, preserveTerms []string) string {
+// RenderPrompt produces the user message sent to the LLM by substituting
+// placeholders in the template with dictionary terms and raw transcription.
+func RenderPrompt(promptTemplate, raw string, preserveTerms []string) string {
 	terms := "(none)"
 	if len(preserveTerms) > 0 {
 		terms = strings.Join(preserveTerms, ", ")
 	}
-	return fmt.Sprintf(cleanupPrompt, terms, raw)
+	hasDictionary := strings.Contains(promptTemplate, PlaceholderDictionary)
+	hasTranscription := strings.Contains(promptTemplate, PlaceholderTranscription)
+
+	result := promptTemplate
+	if hasDictionary {
+		result = strings.Replace(result, PlaceholderDictionary, terms, 1)
+	}
+	if hasTranscription {
+		result = strings.Replace(result, PlaceholderTranscription, raw, 1)
+	}
+	if !hasDictionary {
+		result += "\n\nPreserve these terms verbatim: " + terms
+	}
+	if !hasTranscription {
+		result += "\n\nRaw transcription:\n" + raw
+	}
+	return result
 }

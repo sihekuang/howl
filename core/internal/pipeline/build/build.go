@@ -68,7 +68,7 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 		_ = tr.Close()
 		return nil, err
 	}
-	llmOpts := llm.Options{Model: cfg.LLMModel, BaseURL: cfg.LLMBaseURL}
+	llmOpts := llm.Options{Model: cfg.LLMModel, BaseURL: cfg.LLMBaseURL, Prompt: cfg.LLMPrompt}
 	if provider.NeedsAPIKey {
 		llmOpts.APIKey = cfg.LLMAPIKey
 	}
@@ -87,6 +87,7 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 	}
 
 	p := pipeline.New(tr, dy, cleaner)
+	p.Prompt = cfg.LLMPrompt
 	p.FrameStages = []audio.Stage{
 		denoise.NewStage(d),
 		resample.NewDecimate3(),

@@ -60,6 +60,7 @@ var LMStudioProvider = &Provider{
 			Model:   opts.Model,
 			BaseURL: baseURL,
 			Timeout: timeout,
+			Prompt:  opts.Prompt,
 		}, false)
 	},
 	listLocalModels: func(opts Options) ([]string, error) {

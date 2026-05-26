@@ -28,6 +28,7 @@ var AnthropicProvider = &Provider{
 			Model:   opts.Model,
 			BaseURL: opts.BaseURL,
 			Timeout: opts.Timeout,
+			Prompt:  opts.Prompt,
 		})
 	},
 }
@@ -43,12 +44,14 @@ type AnthropicOptions struct {
 	Model   string
 	BaseURL string        // optional; for testing
 	Timeout time.Duration // optional; defaults to 30s
+	Prompt  string        // optional; uses DefaultPrompt when empty
 }
 
 // Anthropic is the Anthropic-backed Cleaner implementation.
 type Anthropic struct {
 	client *anthropic.Client
 	model  string
+	prompt string
 }
 
 // NewAnthropic constructs an Anthropic Cleaner. The returned value is safe
@@ -74,7 +77,7 @@ func NewAnthropic(opts AnthropicOptions) (*Anthropic, error) {
 		clientOpts = append(clientOpts, option.WithBaseURL(opts.BaseURL))
 	}
 	c := anthropic.NewClient(clientOpts...)
-	return &Anthropic{client: &c, model: opts.Model}, nil
+	return &Anthropic{client: &c, model: opts.Model, prompt: opts.Prompt}, nil
 }
 
 // CleanStream is the streaming counterpart of Clean. As the Anthropic
@@ -92,7 +95,11 @@ func (a *Anthropic) CleanStream(
 	if a == nil || a.client == nil {
 		return "", errors.New("anthropic: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := a.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.CleanStream: starting model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
@@ -140,7 +147,11 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	if a == nil || a.client == nil {
 		return "", errors.New("anthropic: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := a.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 
 	t0 := time.Now()
 	log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))

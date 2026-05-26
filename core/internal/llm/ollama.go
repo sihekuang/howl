@@ -50,6 +50,7 @@ var OllamaProvider = &Provider{
 			Model:   opts.Model,
 			BaseURL: opts.BaseURL,
 			Timeout: opts.Timeout,
+			Prompt:  opts.Prompt,
 		})
 	},
 	listLocalModels: func(opts Options) ([]string, error) {
@@ -115,6 +116,7 @@ type OllamaOptions struct {
 	Model   string        // required — must be a model the local Ollama has pulled
 	BaseURL string        // optional; defaults to http://localhost:11434
 	Timeout time.Duration // optional; defaults to 60s
+	Prompt  string        // optional; uses DefaultPrompt when empty
 }
 
 // Ollama is the Ollama-backed Cleaner. Talks to /api/chat over HTTP.
@@ -122,6 +124,7 @@ type Ollama struct {
 	client  *http.Client
 	model   string
 	baseURL string
+	prompt  string
 }
 
 // NewOllama constructs an Ollama Cleaner. Returns an error if Model is
@@ -142,6 +145,7 @@ func NewOllama(opts OllamaOptions) (*Ollama, error) {
 		client:  &http.Client{Timeout: timeout},
 		model:   opts.Model,
 		baseURL: strings.TrimRight(baseURL, "/"),
+		prompt:  opts.Prompt,
 	}, nil
 }
 
@@ -182,7 +186,11 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 	if o == nil || o.client == nil {
 		return "", errors.New("ollama: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := o.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},
@@ -235,7 +243,11 @@ func (o *Ollama) CleanStream(
 	if o == nil || o.client == nil {
 		return "", errors.New("ollama: not initialized")
 	}
-	prompt := renderPrompt(raw, preserveTerms)
+	promptTpl := o.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 	body, _ := json.Marshal(chatRequest{
 		Model:     o.model,
 		Messages:  []chatMessage{{Role: "user", Content: prompt}},

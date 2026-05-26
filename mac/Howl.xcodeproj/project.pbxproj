@@ -11,6 +11,7 @@
 		070776F7E1EE5D3BFCA8F592 /* StageDetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D757AC5076042E1A6195982 /* StageDetailPane.swift */; };
 		0891C980C213CE4A197827B3 /* GeneralTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E35898D73B38023311D0886 /* GeneralTab.swift */; };
 		0B306B954E6F7D3FDAD70E72 /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1337783191E81418EA95D543 /* RecordingOverlayView.swift */; };
+		0CB044D90A81FCC115272141 /* PromptTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C4ED33724163E314CF5D88 /* PromptTab.swift */; };
 		0FD95748B0BC75C4E76BB590 /* DictionaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = E571244CFA085DB97F2401E5 /* DictionaryTab.swift */; };
 		10036F10C2BC644FA61A731F /* PresetBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BCBC4C5752A8C10E5EC6C0 /* PresetBanner.swift */; };
 		135736D014088DD5A291ECA1 /* APIKeyPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73A1F8DB6683A17BA69FC54C /* APIKeyPanel.swift */; };
@@ -109,6 +110,7 @@
 		BCE98EAAA5709B9C7B1BD065 /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
 		BE3F105A091D26FD47438BB8 /* SessionPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPaths.swift; sourceTree = "<group>"; };
 		C3991CD26BDF9CBD92225C5E /* Howl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Howl.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8C4ED33724163E314CF5D88 /* PromptTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptTab.swift; sourceTree = "<group>"; };
 		C96DAE47622718B513B8B584 /* PipelineTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineTab.swift; sourceTree = "<group>"; };
 		CEF5C65AF9893251E66B0AC8 /* VoiceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTab.swift; sourceTree = "<group>"; };
 		D377BD221FA9CF5731D7D2F5 /* CueSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueSound.swift; sourceTree = "<group>"; };
@@ -295,6 +297,7 @@
 				6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */,
 				E5CA7CC77217D20E3DB636FA /* PlaygroundTab.swift */,
 				18BCBC4C5752A8C10E5EC6C0 /* PresetBanner.swift */,
+				C8C4ED33724163E314CF5D88 /* PromptTab.swift */,
 				4645AD4550A9165E3D88094E /* SettingsComponents.swift */,
 				5D6FA7659981634693F0DBA7 /* SettingsView.swift */,
 				CEF5C65AF9893251E66B0AC8 /* VoiceTab.swift */,
@@ -520,6 +523,7 @@
 				1F6CF0B3DE2095E51E83BED2 /* PlaygroundTab.swift in Sources */,
 				10036F10C2BC644FA61A731F /* PresetBanner.swift in Sources */,
 				63DD3FAC24B973737175F166 /* PresetDraft.swift in Sources */,
+				0CB044D90A81FCC115272141 /* PromptTab.swift in Sources */,
 				604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */,
 				0B306B954E6F7D3FDAD70E72 /* RecordingOverlayView.swift in Sources */,
 				50A43871D999741C65AB727C /* SaveAsPresetSheet.swift in Sources */,
