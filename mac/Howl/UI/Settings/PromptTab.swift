@@ -19,12 +19,26 @@ struct PromptTab: View {
         activePreset?.isBundled ?? true
     }
 
+    private var presetPickerBinding: Binding<String> {
+        Binding(
+            get: { settings.selectedPresetName ?? "" },
+            set: { name in
+                guard !name.isEmpty,
+                      let preset = allPresets.first(where: { $0.name == name })
+                else { return }
+                settings = settings.applying(preset)
+                if !preset.prompt.isEmpty { settings.llmPrompt = preset.prompt }
+                onSave(settings)
+                syncPromptFromSettings()
+            }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             presetLabel
             editorSection
             previewSection
-            actionButtons
         }
         .task { await loadPresets() }
         .onChange(of: settings.selectedPresetName) {
@@ -49,8 +63,30 @@ struct PromptTab: View {
         HStack {
             Text("Prompt for:")
                 .foregroundStyle(.secondary)
-            Text(activePreset?.displayName ?? settings.selectedPresetName ?? "default")
-                .fontWeight(.medium)
+            Picker("", selection: presetPickerBinding) {
+                ForEach(allPresets) { preset in
+                    Text(preset.displayName).tag(preset.name)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 200)
+            if isBuiltIn {
+                Button("Duplicate to Edit") {
+                    guard let source = activePreset ?? allPresets.first else { return }
+                    let draft = PresetDraft(source)
+                    draft.prompt = editablePrompt
+                    draftForSaveAs = draft
+                    showSaveAs = true
+                }
+                .controlSize(.small)
+            } else {
+                Button("Save") { savePromptInPlace() }
+                    .controlSize(.small)
+                    .disabled(editablePrompt == (activePreset?.prompt ?? ""))
+                Button("Revert") { syncPromptFromSettings() }
+                    .controlSize(.small)
+                    .disabled(editablePrompt == (activePreset?.prompt ?? ""))
+            }
         }
     }
 
@@ -102,30 +138,6 @@ struct PromptTab: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color(.controlBackgroundColor))
             )
-        }
-    }
-
-    @ViewBuilder
-    private var actionButtons: some View {
-        HStack {
-            if isBuiltIn {
-                Button("Duplicate to Edit") {
-                    guard let source = activePreset ?? allPresets.first else { return }
-                    let draft = PresetDraft(source)
-                    draft.prompt = editablePrompt
-                    draftForSaveAs = draft
-                    showSaveAs = true
-                }
-            } else {
-                Button("Save") {
-                    savePromptInPlace()
-                }
-                .disabled(editablePrompt == (activePreset?.prompt ?? ""))
-                Button("Revert") {
-                    syncPromptFromSettings()
-                }
-                .disabled(editablePrompt == (activePreset?.prompt ?? ""))
-            }
         }
     }
 
