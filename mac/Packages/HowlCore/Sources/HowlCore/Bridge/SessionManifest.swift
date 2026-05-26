@@ -28,6 +28,7 @@ public struct SessionManifest: Codable, Equatable, Sendable, Identifiable {
         public let raw: String
         public let dict: String
         public let cleaned: String
+        public let prompt: String?
     }
 
     enum CodingKeys: String, CodingKey {

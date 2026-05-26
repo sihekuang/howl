@@ -57,11 +57,12 @@ type StageEntry struct {
 	TSESimilarity *float32 `json:"tse_similarity,omitempty"`
 }
 
-// TranscriptEntries records the relative paths of the three text outputs.
+// TranscriptEntries records the relative paths of the text outputs.
 type TranscriptEntries struct {
 	Raw     string `json:"raw"`
 	Dict    string `json:"dict"`
 	Cleaned string `json:"cleaned"`
+	Prompt  string `json:"prompt,omitempty"`
 }
 
 // Write serializes m to <dir>/session.json (overwriting if present).

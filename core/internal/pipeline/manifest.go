@@ -67,7 +67,7 @@ func (p *Pipeline) WriteSessionManifest(dir, id, preset string) error {
 		Preset:  preset,
 		Stages:  stages,
 		Transcripts: sessions.TranscriptEntries{
-			Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt",
+			Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt", Prompt: "prompt.txt",
 		},
 	}
 	return m.Write(dir)
