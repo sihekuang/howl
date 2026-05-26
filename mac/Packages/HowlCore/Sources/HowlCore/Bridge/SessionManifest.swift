@@ -28,7 +28,19 @@ public struct SessionManifest: Codable, Equatable, Sendable, Identifiable {
         public let raw: String
         public let dict: String
         public let cleaned: String
-        public let prompt: String?
+        public let prompt: String
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.raw = try c.decode(String.self, forKey: .raw)
+            self.dict = try c.decode(String.self, forKey: .dict)
+            self.cleaned = try c.decode(String.self, forKey: .cleaned)
+            self.prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case raw, dict, cleaned, prompt
+        }
     }
 
     enum CodingKeys: String, CodingKey {
