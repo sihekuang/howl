@@ -43,6 +43,12 @@ targets:
       - package: HowlCore
     preBuildScripts:
       - name: Build Go core
+        # Always run: Go's build cache (and `make build-dylib`'s own
+        # incremental logic) decide whether there's actual work to do.
+        # Without this, Xcode skips the script when outputFiles exist and
+        # no inputFiles are declared, leaving the dylib stale whenever
+        # anything under core/ changes (including embedded JSON).
+        basedOnDependencyAnalysis: false
         script: |
           set -e
           # Xcode's GUI build doesn't inherit the user shell PATH, so make/go
