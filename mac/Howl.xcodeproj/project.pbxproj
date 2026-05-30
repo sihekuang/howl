@@ -461,6 +461,7 @@
 		};
 		F90F20254533295B71743D65 /* Build Go core */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

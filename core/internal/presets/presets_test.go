@@ -46,7 +46,7 @@ func TestLoad_RejectsMalformedJSON(t *testing.T) {
 }
 
 func TestPreset_BuiltInPresetTSEThreshold025(t *testing.T) {
-	all, _ := loadBundled()
+	all := loadTestBundle(t)
 	for _, p := range all {
 		if p.Name != "default" {
 			continue
@@ -54,18 +54,18 @@ func TestPreset_BuiltInPresetTSEThreshold025(t *testing.T) {
 		for _, s := range p.ChunkStages {
 			if s.Name == "tse" {
 				if s.Threshold == nil || *s.Threshold != 0.25 {
-					t.Errorf("built-in preset's tse threshold = %v, want 0.25", s.Threshold)
+					t.Errorf("test-fixture default's tse threshold = %v, want 0.25", s.Threshold)
 				}
 				return
 			}
 		}
-		t.Error("built-in preset has no tse chunk stage")
+		t.Error("test-fixture default has no tse chunk stage")
 	}
-	t.Error("built-in preset missing")
+	t.Error("test-fixture default missing")
 }
 
 func TestPreset_ParanoidPresetTSEThreshold045(t *testing.T) {
-	all, _ := loadBundled()
+	all := loadTestBundle(t)
 	for _, p := range all {
 		if p.Name == "paranoid" {
 			for _, s := range p.ChunkStages {
@@ -81,7 +81,7 @@ func TestPreset_ParanoidPresetTSEThreshold045(t *testing.T) {
 }
 
 func TestPreset_DefaultPresetHasTimeoutSec10(t *testing.T) {
-	all, _ := loadBundled()
+	all := loadTestBundle(t)
 	for _, p := range all {
 		if p.Name != "default" {
 			continue
