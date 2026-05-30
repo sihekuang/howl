@@ -45,25 +45,6 @@ func TestLoad_RejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestPreset_BuiltInPresetTSEThreshold025(t *testing.T) {
-	all, _ := loadBundled()
-	for _, p := range all {
-		if p.Name != "default" {
-			continue
-		}
-		for _, s := range p.ChunkStages {
-			if s.Name == "tse" {
-				if s.Threshold == nil || *s.Threshold != 0.25 {
-					t.Errorf("built-in preset's tse threshold = %v, want 0.25", s.Threshold)
-				}
-				return
-			}
-		}
-		t.Error("built-in preset has no tse chunk stage")
-	}
-	t.Error("built-in preset missing")
-}
-
 func TestPreset_ParanoidPresetTSEThreshold045(t *testing.T) {
 	all, _ := loadBundled()
 	for _, p := range all {

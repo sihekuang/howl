@@ -3,14 +3,14 @@
   "presets": [
     {
       "name": "default",
-      "description": "Standard pipeline: denoise → TSE (soft gate) → decimate → Whisper → dict → LLM cleanup.",
+      "description": "Standard pipeline: denoise → decimate → Whisper → dict → LLM cleanup.",
       "prompt": "You are a transcription editor. Your job is to MINIMALLY edit the transcription below, not to rewrite it. Apply only these changes:\n- Remove filler words: um, uh, er, ah, like, you know, basically, I mean, sort of, kind of (when used as fillers)\n- Fix obvious grammar and punctuation\n- Drop any bracketed sound/music annotations Whisper inserts: (music), (water splashing), [Applause], [Laughter], etc. — these are NOT what the speaker said\n- Preserve technical terms verbatim: {{dictionary}}\n\nHard rules:\n- Do NOT paraphrase or restructure sentences. Keep the speaker’s exact phrasing.\n- Do NOT add words, ideas, or context the speaker did not say.\n- Do NOT turn fragments into complete sentences if the speaker spoke fragments.\n- If the input is empty, dropped to nothing after cleanup, or only sound annotations, return an empty string.\n- Return ONLY the cleaned text — no preamble, no explanation, no quotes around the output.\n\nRaw transcription:\n{{transcription}}",
       "frame_stages": [
         {"name": "denoise",   "enabled": true},
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.25}
+        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
