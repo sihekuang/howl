@@ -6,12 +6,12 @@
 
 ## Status
 
-Full POC **implemented, builds, and unit-tested** — both phase 1 (discovery)
-and phase 2 (learn-the-next-button), plus the keyboard+HID fan-in and UI.
-**Not yet validated against real hardware** (IOKit runtime + the Input
-Monitoring TCC prompt can only be confirmed by running the app with a device).
+Full POC **implemented, builds, unit-tested, and hardware-validated** — both
+phase 1 (discovery) and phase 2 (learn-the-next-button), plus the keyboard+HID
+fan-in and UI. Validated end-to-end on a **PS5 DualSense** (2026-06-08): learn
+captures a real button, hold-to-record works, and clear works.
 
-- HowlCore: `swift test` → **185 tests pass** (+21 for this feature).
+- HowlCore: `swift test` → **187 tests pass** (+23 for this feature).
 - App: `make build` → **BUILD SUCCEEDED**.
 
 ## What's built
@@ -45,26 +45,51 @@ Tests (`HowlCore/Tests/HowlCoreTests/`): `HIDBindingTests` (2), `TriggerArbiterT
 - **No self-stop race**: learn clears `mode` then the coordinator does the single
   ordered stop()+start(bound) to release/rebind.
 
-## Next step — manual device validation
+## Hardware validation — DONE (2026-06-08, PS5 DualSense)
 
-1. `make run`. Menu bar → **HID Trigger → Start discovery (log mode)**; grant Input
-   Monitoring when prompted. Press buttons; watch Console (`category: hid`) for
-   `HID discovery BUTTON vid=… pid=… button=…`.
-2. **Learn trigger…** (menu or Settings → Hotkey): press the button → it captures,
-   persists `settings.hidBinding`, and goes live in bound mode.
-3. Hold the bound button → recording starts; release → stops. Confirm the keyboard
-   hotkey still works simultaneously (both active).
-4. Try the three target devices: foot pedal, multi-button mouse, gamepad (digital
-   button, not analog trigger).
+Validated learn → hold-to-record → clear end-to-end. Confirmed: learn waits for
+and captures a real Button-page element (`usagePage=0x9`), press/release are
+clean discrete edges, and the keyboard hotkey stays active alongside. Two bugs
+were found and fixed during validation:
+
+1. **Learn captured vendor-stream noise.** The DualSense streams continuous
+   vendor reports on HID page `0xFF00`; the original `HIDLearnFilter` accepted
+   non-button pages, so learn "captured" garbage within ~100ms before any button
+   press, then bound to a continuously-changing value → recording jammed on.
+   **Fix:** `HIDLearnFilter` accepts only the Button page (`0x09`);
+   `EngineCoordinator.startHIDTrigger` guards the same way (`acceptsUsagePage`),
+   so a stale non-button binding self-heals (skipped at startup) instead of
+   re-jamming. Regression test (`vendorDefinedStreamIsIgnored`) reproduces the
+   exact `054C:0CE6 / 0xFF00` capture.
+
+2. **Clear (and freshly-learned binding) didn't show in the UI.** Learn/clear
+   update the settings store via the coordinator, but the Settings view binds to
+   its own stale `@State` copy, so the row never refreshed. **Fix:** the binding
+   flows through observable `appState.hidBinding`; the Hotkey tab mirrors it via
+   `.onChange` so the row updates live and a later save of another field can't
+   clobber it.
+
+Still untried: foot pedal and multi-button mouse (only the DualSense was on
+hand). The D-pad (hat switch) and analog triggers are intentionally **not**
+learnable — use a face/shoulder button.
 
 ## Open items / caveats
 
-- **Entitlement/sandbox not verified** for Input Monitoring — confirm the prompt
-  actually appears and `IOHIDManagerOpen` succeeds for this (non-sandboxed) app.
-- **Gamepad brand quirks**: PlayStation/Switch Pro = clean HID; Xbox may be quirky
-  over USB / via GameController framework.
-- **Keyboard-emulating foot pedals** won't work via HID (they're on the keyboard
-  page, deliberately ignored) — those would use the keyboard hotkey path.
+- **Input Monitoring confirmed working** (non-sandboxed app): the TCC prompt
+  appears and `IOHIDManagerOpen` succeeds once the built-in retry rides out the
+  trust-cache lag (first attempt returns `rc=-536870201`, attempt 2/3 succeeds).
+  No special entitlement needed.
+- **Pre-existing, unrelated: ggml-metal aborts on app *quit*.** Quitting Howl
+  triggers `SIGABRT` in `libggml-metal` during static-destructor teardown
+  (`ggml_metal_device_free` → `ggml_abort`), so a crash report is written on
+  every quit. It's in the Go/Whisper-Metal core, not the HID code — surfaced
+  here only because it generated a confusing crash report mid-validation.
+  Should be tracked/fixed separately.
+- **Only the Button page (0x09) is learnable** — hat switches/D-pad and analog
+  triggers are excluded by design; keyboard-emulating foot pedals won't work via
+  HID (they're on the keyboard page) and would use the keyboard hotkey path.
+- **Gamepad brand quirks** still apply for non-DualSense controllers (Xbox over
+  USB / via GameController framework).
 
 ## Future work (post-validation, per spec)
 

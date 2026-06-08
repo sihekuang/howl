@@ -6,16 +6,23 @@ import Foundation
 ///
 /// Kept separate from `IOHIDTriggerMonitor` so the (non-obvious) rules about
 /// what counts as a "learnable" trigger are fully unit-tested without IOKit.
+///
+/// **Only the HID Button usage page (0x09) is accepted.** Gamepads stream
+/// continuous data on other pages — analog axes (Generic Desktop) and, on the
+/// PS5 DualSense, a vendor-defined report on page 0xFF00 — which would
+/// otherwise be "learned" instantly before the user presses anything, and then
+/// fire the trigger continuously. Real digital buttons (gamepad face/shoulder,
+/// extra mouse buttons, HID-button pedals) all live on the Button page.
 public enum HIDLearnFilter {
-    /// HID usage pages / usages we never learn.
-    private static let keyboardPage = 0x07
-    private static let genericDesktopPage = 0x01
-    /// Continuous Generic Desktop axes (pointer X/Y/Z, stick rotations,
-    /// slider, dial, wheel) — these move continuously and aren't discrete
-    /// triggers, so a moving mouse/stick must not "learn" a binding.
-    private static let continuousAxes: Set<Int> = [
-        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
-    ]
+    /// The one HID usage page we treat as a discrete, bindable trigger.
+    public static let buttonUsagePage = 0x09
+
+    /// Whether an element on this usage page is an acceptable trigger. Shared by
+    /// learn (capture) and bind (honor a saved binding), so a stale non-button
+    /// binding can't be re-armed.
+    public static func acceptsUsagePage(_ usagePage: Int) -> Bool {
+        usagePage == buttonUsagePage
+    }
 
     public static func binding(
         vendorID: Int,
@@ -26,11 +33,9 @@ public enum HIDLearnFilter {
     ) -> HIDBinding? {
         // Only a down edge (press), never a release.
         guard value != 0 else { return nil }
-        // Never the keyboard — that path is owned by the keyboard hotkey, and
-        // the built-in keyboard is restricted anyway.
-        guard usagePage != keyboardPage else { return nil }
-        // Never a continuous pointer/stick axis.
-        if usagePage == genericDesktopPage, continuousAxes.contains(usage) { return nil }
+        // Only real buttons — never keyboard keys, analog/stick axes, or
+        // vendor-defined report streams.
+        guard acceptsUsagePage(usagePage) else { return nil }
         return HIDBinding(vendorID: vendorID, productID: productID, usagePage: usagePage, usage: usage)
     }
 }

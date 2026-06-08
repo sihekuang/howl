@@ -71,8 +71,17 @@ public final class EngineCoordinator {
     /// HID permission/availability, so failures surface a transient warning
     /// only — never the persistent hotkey error.
     private func startHIDTrigger(_ settings: UserSettings) async {
+        composition.appState.hidBinding = settings.hidBinding
         composition.hidTrigger.stop()
         guard let binding = settings.hidBinding else { return }
+        // Defense-in-depth: never arm a non-button binding (e.g. a stale
+        // vendor-page binding from before the learn filter was tightened) —
+        // those stream continuously and would jam recording on.
+        guard HIDLearnFilter.acceptsUsagePage(binding.usagePage) else {
+            log.error("HID trigger: saved binding is not a button (usagePage 0x\(UInt(binding.usagePage), format: .hex, privacy: .public)); ignoring — re-learn a button")
+            setTransientWarning("Saved HID trigger is invalid — re-learn a button in Settings → Hotkey.")
+            return
+        }
         guard composition.hidPermission.isGranted() else {
             log.error("HID trigger: Input Monitoring not granted — skipping (keyboard unaffected)")
             setTransientWarning("HID trigger needs Input Monitoring — grant it in System Settings.")
@@ -159,6 +168,7 @@ public final class EngineCoordinator {
             settings.hidBinding = nil
             try composition.settings.set(settings)
             composition.hidTrigger.stop()
+            composition.appState.hidBinding = nil
             log.notice("HID binding cleared")
         } catch {
             setTransientWarning("Clearing HID binding failed: \(error)")

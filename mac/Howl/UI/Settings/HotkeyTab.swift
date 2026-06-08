@@ -164,6 +164,12 @@ struct HotkeyTab: View {
             micGranted = audioCapture.isAuthorized()
             hidInputGranted = hidPermission.isGranted()
         }
+        // Mirror learn/clear (which update the store via the coordinator) into
+        // our local settings copy so the row updates live, and a later save of
+        // another field can't clobber the binding.
+        .onChange(of: appState.hidBinding) { _, newValue in
+            settings.hidBinding = newValue
+        }
     }
 
     /// Compact human-readable label for a bound HID element.

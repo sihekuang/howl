@@ -34,12 +34,28 @@ struct HIDLearnFilterTests {
         }
     }
 
-    @Test func gamepadHatAndVendorButtonsAreLearnable() {
-        // A hat switch (GD 0x39) and a consumer/vendor control page are valid
-        // discrete triggers.
-        let hat = HIDLearnFilter.binding(vendorID: vid, productID: pid, usagePage: 0x01, usage: 0x39, value: 1)
-        #expect(hat == HIDBinding(vendorID: vid, productID: pid, usagePage: 0x01, usage: 0x39))
-        let consumer = HIDLearnFilter.binding(vendorID: vid, productID: pid, usagePage: 0x0C, usage: 0xB0, value: 1)
-        #expect(consumer == HIDBinding(vendorID: vid, productID: pid, usagePage: 0x0C, usage: 0xB0))
+    @Test func nonButtonPagesAreIgnored() {
+        // Only the Button usage page (0x09) is a reliable discrete trigger.
+        // Hat switches (GD 0x39) and consumer controls (0x0C) are excluded —
+        // gamepads stream continuous data on non-button pages.
+        #expect(HIDLearnFilter.binding(vendorID: vid, productID: pid, usagePage: 0x01, usage: 0x39, value: 1) == nil)
+        #expect(HIDLearnFilter.binding(vendorID: vid, productID: pid, usagePage: 0x0C, usage: 0xB0, value: 1) == nil)
+    }
+
+    @Test func acceptsOnlyButtonPage() {
+        // Shared policy used by both learn (capture) and bind (honor a saved
+        // binding) — keep them in lock-step.
+        #expect(HIDLearnFilter.acceptsUsagePage(0x09))
+        #expect(!HIDLearnFilter.acceptsUsagePage(0xFF00))
+        #expect(!HIDLearnFilter.acceptsUsagePage(0x01))
+        #expect(!HIDLearnFilter.acceptsUsagePage(0x07))
+    }
+
+    @Test func vendorDefinedStreamIsIgnored() {
+        // Regression: a PS5 DualSense (054C:0CE6) streams continuous vendor
+        // reports on page 0xFF00 the instant it connects. Learn must wait for a
+        // real button press, never capture this noise.
+        let b = HIDLearnFilter.binding(vendorID: 0x054C, productID: 0x0CE6, usagePage: 0xFF00, usage: 0x22, value: 5)
+        #expect(b == nil)
     }
 }

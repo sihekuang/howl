@@ -39,6 +39,11 @@ public final class AppState {
     /// True while waiting for the user to press a HID element in learn mode
     /// (Settings → Hotkey / menu bar). Drives the "press a button…" hint.
     public var hidLearning: Bool = false
+    /// The currently-configured HID trigger binding, mirrored from the settings
+    /// store so the UI reflects learn/clear immediately (the Settings view's
+    /// own `settings` copy is otherwise stale to async learn/clear). The
+    /// coordinator keeps this in sync.
+    public var hidBinding: HIDBinding?
 
     public init() {}
 }
