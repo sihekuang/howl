@@ -214,7 +214,10 @@ private struct DetailView: View {
                 },
                 conflictChecker: composition.conflictChecker,
                 permissions: composition.permissions,
-                audioCapture: composition.audioCapture
+                audioCapture: composition.audioCapture,
+                hidPermission: composition.hidPermission,
+                appState: composition.appState,
+                coordinator: composition.coordinator
             )
         case .provider:
             LLMProviderTab(settings: $settings, onSave: save, secrets: composition.secrets)

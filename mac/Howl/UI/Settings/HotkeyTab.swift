@@ -14,12 +14,16 @@ struct HotkeyTab: View {
     let conflictChecker: any SymbolicHotkeyChecker
     let permissions: any AccessibilityPermissions
     let audioCapture: any AudioCapture
+    let hidPermission: any HIDInputMonitoringPermission
+    let appState: AppState
+    let coordinator: EngineCoordinator
 
     @State private var isRecording = false
     @State private var conflicts: [SymbolicHotkeyConflict] = []
     @State private var lastSeen: String? = nil
     @State private var isTrusted = false
     @State private var micGranted = false
+    @State private var hidInputGranted = false
 
     var body: some View {
         SettingsPane {
@@ -110,16 +114,69 @@ struct HotkeyTab: View {
                         .foregroundStyle(.orange)
                 }
             }
+
+            Divider()
+
+            permissionRow(
+                label: "Input Monitoring",
+                granted: hidInputGranted,
+                grantedText: "Granted",
+                missingText: "Required for HID triggers",
+                onOpen: { hidPermission.openSystemSettings() }
+            )
+
+            HStack {
+                Text("HID trigger")
+                Spacer()
+                if appState.hidLearning {
+                    Text("Press a button…")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                    Button("Cancel") {
+                        Task { @MainActor in await coordinator.cancelHIDLearn() }
+                    }
+                } else {
+                    Text(settings.hidBinding.map(hidBindingLabel) ?? "None")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(settings.hidBinding == nil ? .secondary : .primary)
+                    if settings.hidBinding != nil {
+                        Button("Clear") {
+                            Task { @MainActor in await coordinator.clearHIDBinding() }
+                        }
+                    }
+                    Button("Learn…") {
+                        Task { @MainActor in await coordinator.learnHIDBinding() }
+                    }
+                }
+            }
+            Text("Bind a **non-keyboard** HID element — a foot pedal, an extra mouse button, or a gamepad button — to start dictation alongside your keyboard shortcut. Listen-only, so the device keeps its normal function. Use a digital button (not an analog trigger or stick).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .task {
             refreshConflicts()
             isTrusted = permissions.isTrusted()
             micGranted = audioCapture.isAuthorized()
+            hidInputGranted = hidPermission.isGranted()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isTrusted = permissions.isTrusted()
             micGranted = audioCapture.isAuthorized()
+            hidInputGranted = hidPermission.isGranted()
         }
+        // Mirror learn/clear (which update the store via the coordinator) into
+        // our local settings copy so the row updates live, and a later save of
+        // another field can't clobber the binding.
+        .onChange(of: appState.hidBinding) { _, newValue in
+            settings.hidBinding = newValue
+        }
+    }
+
+    /// Compact human-readable label for a bound HID element.
+    private func hidBindingLabel(_ b: HIDBinding) -> String {
+        let dev = String(format: "%04X:%04X", b.vendorID, b.productID)
+        if b.usagePage == 0x09 { return "Button \(b.usage) · \(dev)" }
+        return String(format: "u%02X/%02X · %@", b.usagePage, b.usage, dev)
     }
 
     private func refreshConflicts() {
