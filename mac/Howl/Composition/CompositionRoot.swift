@@ -7,6 +7,8 @@ public final class CompositionRoot {
     public let engine: any CoreEngine
     public let audioCapture: any AudioCapture
     public let hotkey: any HotkeyMonitor
+    public let hidTrigger: any HIDTriggerMonitor
+    public let hidPermission: any HIDInputMonitoringPermission
     public let injector: any TextInjector
     public let streamTyper: any StreamingTextInjector
     public let settings: any SettingsStore
@@ -19,6 +21,8 @@ public final class CompositionRoot {
         self.engine = LibhowlEngine()
         self.audioCapture = AVAudioInputCapture()
         self.hotkey = CarbonHotkeyMonitor()
+        self.hidTrigger = IOHIDTriggerMonitor()
+        self.hidPermission = DefaultHIDInputMonitoringPermission()
         self.injector = ClipboardPasteInjector(
             pasteboard: SystemPasteboard(),
             keystroke: CGEventKeystrokeSender()

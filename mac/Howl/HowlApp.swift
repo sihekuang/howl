@@ -20,6 +20,12 @@ struct HowlApp: App {
                 appState: appDelegate.composition.appState,
                 hotkey: shortcut,
                 openSettings: { appDelegate.showSettingsWindow() },
+                learnHID: {
+                    Task { @MainActor in await appDelegate.composition.coordinator.learnHIDBinding() }
+                },
+                discoverHID: {
+                    Task { @MainActor in await appDelegate.composition.coordinator.startHIDDiscovery() }
+                },
                 quit: { NSApp.terminate(nil) }
             )
         } label: {

@@ -12,6 +12,8 @@ struct MenuBarMenu: View {
     let appState: AppState
     let hotkey: String
     let openSettings: () -> Void
+    let learnHID: () -> Void
+    let discoverHID: () -> Void
     let quit: () -> Void
 
     var body: some View {
@@ -37,6 +39,15 @@ struct MenuBarMenu: View {
         }
 
         Divider()
+
+        Menu("HID Trigger") {
+            Button(appState.hidLearning ? "Listening — press a button…" : "Learn trigger…") {
+                learnHID()
+            }
+            Button("Start discovery (log mode)") {
+                discoverHID()
+            }
+        }
 
         Button("Settings…") {
             openSettings()

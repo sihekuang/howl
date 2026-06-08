@@ -10,6 +10,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
     public var llmPrompt: String
     public var customDict: [String]
     public var hotkey: KeyboardShortcut
+    /// Optional HID device element bound as a second recording trigger,
+    /// active alongside `hotkey`. `nil` (the default) means no HID trigger.
+    public var hidBinding: HIDBinding?
     /// CoreAudio/AVCaptureDevice unique ID for the input device.
     /// `nil` (the default) means "follow the system default".
     public var inputDeviceUID: String?
@@ -46,6 +49,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         llmPrompt: String = "",
         customDict: [String] = [],
         hotkey: KeyboardShortcut = .defaultPTT,
+        hidBinding: HIDBinding? = nil,
         inputDeviceUID: String? = nil,
         tseEnabled: Bool = false,
         tseThreshold: Float? = nil,
@@ -62,6 +66,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.llmPrompt = llmPrompt
         self.customDict = customDict
         self.hotkey = hotkey
+        self.hidBinding = hidBinding
         self.inputDeviceUID = inputDeviceUID
         self.tseEnabled = tseEnabled
         self.tseThreshold = tseThreshold
@@ -81,6 +86,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         llmPrompt = try c.decodeIfPresent(String.self, forKey: .llmPrompt) ?? ""
         customDict = try c.decodeIfPresent([String].self, forKey: .customDict) ?? []
         hotkey = try c.decodeIfPresent(KeyboardShortcut.self, forKey: .hotkey) ?? .defaultPTT
+        hidBinding = try c.decodeIfPresent(HIDBinding.self, forKey: .hidBinding)
         inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
         tseEnabled = try c.decodeIfPresent(Bool.self, forKey: .tseEnabled) ?? false
         tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
@@ -91,7 +97,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case whisperModelSize, language, disableNoiseSuppression
-        case llmProvider, llmModel, llmBaseURL, llmPrompt, customDict, hotkey, inputDeviceUID, tseEnabled
+        case llmProvider, llmModel, llmBaseURL, llmPrompt, customDict, hotkey, hidBinding, inputDeviceUID, tseEnabled
         case tseThreshold, tseBackend, pipelineTimeoutSec
         case selectedPresetName
     }

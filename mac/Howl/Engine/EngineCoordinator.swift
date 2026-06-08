@@ -50,6 +50,121 @@ public final class EngineCoordinator {
         }
     }
 
+    /// One arbiter fans the keyboard and HID sources into onPress/onRelease
+    /// using first-source-owns-stop semantics. Stateful (owner token), so it's
+    /// created once and persists across monitor restarts. The engine only ever
+    /// sees real start/stop transitions — no re-entrancy guards needed here.
+    private lazy var triggerArbiter = TriggerArbiter(
+        onStart: { [weak self] in Task { @MainActor in await self?.onPress() } },
+        onStop: { [weak self] in Task { @MainActor in await self?.onRelease() } }
+    )
+
+    /// (Re)bind the keyboard hotkey through the arbiter. Throws on registration
+    /// failure; the caller maps that to the persistent hotkey error.
+    private func startKeyboard(_ settings: UserSettings) async throws {
+        let kb = triggerArbiter.source(.keyboard)
+        try await composition.hotkey.start(settings.hotkey, onPress: kb.onPress, onRelease: kb.onRelease)
+    }
+
+    /// (Re)bind the HID trigger through the arbiter, if a binding is configured.
+    /// Non-fatal by design: keyboard dictation must keep working regardless of
+    /// HID permission/availability, so failures surface a transient warning
+    /// only — never the persistent hotkey error.
+    private func startHIDTrigger(_ settings: UserSettings) async {
+        composition.hidTrigger.stop()
+        guard let binding = settings.hidBinding else { return }
+        guard composition.hidPermission.isGranted() else {
+            log.error("HID trigger: Input Monitoring not granted — skipping (keyboard unaffected)")
+            setTransientWarning("HID trigger needs Input Monitoring — grant it in System Settings.")
+            return
+        }
+        do {
+            let hid = triggerArbiter.source(.hid)
+            try await composition.hidTrigger.start(binding, onPress: hid.onPress, onRelease: hid.onRelease)
+            log.notice("HID trigger bound")
+        } catch {
+            log.error("HID trigger start FAILED: \(String(describing: error), privacy: .public)")
+            setTransientWarning("HID trigger failed to start: \(error)")
+        }
+    }
+
+    /// Phase-1 discovery: start the HID monitor in log mode so every device
+    /// element edge is logged (read these from Console under category `hid` to
+    /// find the vendor/product/usage to bind). Does not trigger recording.
+    public func startHIDDiscovery() async {
+        guard composition.hidPermission.isGranted() else {
+            _ = composition.hidPermission.request()
+            setTransientWarning("Grant Input Monitoring, then start HID discovery again.")
+            return
+        }
+        composition.hidTrigger.stop()
+        do {
+            try await composition.hidTrigger.start(nil, onPress: {}, onRelease: {})
+            log.notice("HID discovery started — press device buttons; watch Console (category: hid)")
+        } catch {
+            setTransientWarning("HID discovery failed: \(error)")
+        }
+    }
+
+    /// Phase-2 learn: capture the next learnable HID element, persist it as the
+    /// trigger binding, and rebind in bound mode so it's immediately live.
+    /// Surfaced from Settings → Hotkey and a menu-bar item.
+    public func learnHIDBinding() async {
+        guard composition.hidPermission.isGranted() else {
+            _ = composition.hidPermission.request()
+            setTransientWarning("Grant Input Monitoring, then try learning again.")
+            return
+        }
+        composition.appState.hidLearning = true
+        do {
+            try await composition.hidTrigger.learnNextBinding { [weak self] binding in
+                Task { @MainActor in await self?.persistLearnedHIDBinding(binding) }
+            }
+            log.notice("HID learn: press the element you want to bind…")
+        } catch {
+            composition.appState.hidLearning = false
+            log.error("HID learn start FAILED: \(String(describing: error), privacy: .public)")
+            setTransientWarning("HID learn failed: \(error)")
+        }
+    }
+
+    private func persistLearnedHIDBinding(_ binding: HIDBinding) async {
+        composition.appState.hidLearning = false
+        do {
+            var settings = try composition.settings.get()
+            settings.hidBinding = binding
+            try composition.settings.set(settings)
+            log.notice("HID binding learned and saved")
+            // Release the learn-mode device and rebind in bound mode (one
+            // ordered stop+start), so the new trigger is live immediately.
+            await startHIDTrigger(settings)
+        } catch {
+            log.error("HID learn persist FAILED: \(String(describing: error), privacy: .public)")
+            setTransientWarning("Saving HID binding failed: \(error)")
+        }
+    }
+
+    /// Back out of learn mode without capturing. Restores the bound monitor
+    /// (or leaves it stopped if no binding is configured).
+    public func cancelHIDLearn() async {
+        composition.appState.hidLearning = false
+        let settings = (try? composition.settings.get()) ?? UserSettings()
+        await startHIDTrigger(settings)
+    }
+
+    /// Clear the HID trigger binding and stop the monitor.
+    public func clearHIDBinding() async {
+        do {
+            var settings = try composition.settings.get()
+            settings.hidBinding = nil
+            try composition.settings.set(settings)
+            composition.hidTrigger.stop()
+            log.notice("HID binding cleared")
+        } catch {
+            setTransientWarning("Clearing HID binding failed: \(error)")
+        }
+    }
+
     public func start() async {
         log.notice("coordinator.start: binding hotkey then applying config")
         // Bind the hotkey FIRST. applyConfig blocks for several seconds on
@@ -60,18 +175,12 @@ public final class EngineCoordinator {
         // returns.
         do {
             let settings = try composition.settings.get()
-            try await composition.hotkey.start(
-                settings.hotkey,
-                onPress: { [weak self] in
-                    Task { @MainActor in await self?.onPress() }
-                },
-                onRelease: { [weak self] in
-                    Task { @MainActor in await self?.onRelease() }
-                }
-            )
+            try await startKeyboard(settings)
             // Clear any prior registration error from a previous launch
             // or a failed reapply — we're good now.
             composition.appState.hotkeyRegistrationError = nil
+            // Peer HID trigger, active alongside the keyboard. Non-fatal.
+            await startHIDTrigger(settings)
         } catch {
             // Persistent indicator (not the 5-second toast). Hotkey
             // registration failure is the rare class of error where
@@ -107,6 +216,7 @@ public final class EngineCoordinator {
     public func stop() {
         composition.cancelKeyMonitor.stop()
         composition.hotkey.stop()
+        composition.hidTrigger.stop()
         pollTask?.cancel()
         pollTask = nil
     }
@@ -129,16 +239,10 @@ public final class EngineCoordinator {
         do {
             let settings = try composition.settings.get()
             composition.hotkey.stop()
-            try await composition.hotkey.start(
-                settings.hotkey,
-                onPress: { [weak self] in
-                    Task { @MainActor in await self?.onPress() }
-                },
-                onRelease: { [weak self] in
-                    Task { @MainActor in await self?.onRelease() }
-                }
-            )
+            try await startKeyboard(settings)
             composition.appState.hotkeyRegistrationError = nil
+            // Rebind HID too — the binding may have changed in Settings.
+            await startHIDTrigger(settings)
         } catch {
             log.error("reapplyConfig: hotkey registration FAILED: \(String(describing: error), privacy: .public)")
             composition.appState.hotkeyRegistrationError = "Open System Settings → Privacy & Security → Accessibility and confirm Howl is granted, then reopen the app."
@@ -151,6 +255,9 @@ public final class EngineCoordinator {
     public func pauseHotkeyForRecording() {
         hotkeyPaused = true
         composition.hotkey.stop()
+        // Pause HID too, so holding a bound element while the user records a
+        // new keyboard shortcut doesn't fire a recording.
+        composition.hidTrigger.stop()
         log.info("hotkey paused for recording")
     }
 
@@ -165,16 +272,9 @@ public final class EngineCoordinator {
         hotkeyPaused = false
         do {
             let settings = try composition.settings.get()
-            try await composition.hotkey.start(
-                settings.hotkey,
-                onPress: { [weak self] in
-                    Task { @MainActor in await self?.onPress() }
-                },
-                onRelease: { [weak self] in
-                    Task { @MainActor in await self?.onRelease() }
-                }
-            )
+            try await startKeyboard(settings)
             composition.appState.hotkeyRegistrationError = nil
+            await startHIDTrigger(settings)
             log.notice("hotkey resumed after recording cancel")
         } catch {
             log.error("resumeHotkeyAfterRecording: hotkey registration FAILED: \(String(describing: error), privacy: .public)")

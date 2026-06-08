@@ -36,6 +36,9 @@ public final class AppState {
     /// warning can tell the user "still loading" instead of pretending
     /// everything's ready and silently dropping presses.
     public var engineLoading: Bool = true
+    /// True while waiting for the user to press a HID element in learn mode
+    /// (Settings → Hotkey / menu bar). Drives the "press a button…" hint.
+    public var hidLearning: Bool = false
 
     public init() {}
 }
