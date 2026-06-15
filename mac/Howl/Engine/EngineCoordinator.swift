@@ -378,6 +378,17 @@ public final class EngineCoordinator {
     }
 
     private func onRelease() async {
+        // A cancel (or other terminal event) may have already ended this
+        // cycle — e.g. the user pressed a key to cancel while still holding
+        // the trigger, then released it. In that case we're no longer
+        // recording, so releasing the trigger must be a no-op. Without this
+        // guard, onRelease would re-enter .processing and await a terminal
+        // event that never arrives (howl_stop_capture is a no-op after a
+        // cancel), leaving the UI stuck showing "Processing…".
+        guard composition.appState.engineState == .recording else {
+            log.info("onRelease: not recording (cycle already ended) — ignoring release")
+            return
+        }
         log.info("onRelease: setting state=processing, stopping Swift capture, signaling engine EOI")
         composition.appState.engineState = .processing
         // NOTE: do NOT stop the cancel-key monitor here. It must stay armed
@@ -433,6 +444,12 @@ public final class EngineCoordinator {
         case .cancelled:
             streamedSoFar = ""
             composition.cancelKeyMonitor.stop()
+            // Stop the mic too: a recording-phase cancel fires before
+            // onRelease, so the capture is still live here. Without this the
+            // mic (and the macOS in-use indicator) would linger until the
+            // next cycle. Idempotent when already stopped (processing-phase
+            // cancel, where onRelease already stopped it).
+            composition.audioCapture.stop()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         case .warning(let msg):
