@@ -52,6 +52,11 @@ public final class CancelKeyMonitor: @unchecked Sendable {
         }
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        // `.listenOnly`: we observe but do NOT swallow the key, so the cancel
+        // keypress also falls through to the focused app (it gets typed). That's
+        // an intentional tradeoff — swallowing would need an active tap that
+        // risks eating legitimate keystrokes; the cycle is being torn down
+        // anyway, so a stray character is acceptable.
         guard let tap = CGEvent.tapCreate(
             tap: .cghidEventTap,
             place: .headInsertEventTap,
@@ -60,6 +65,11 @@ public final class CancelKeyMonitor: @unchecked Sendable {
             callback: cancelKeyEventTapCallback,
             userInfo: selfPtr
         ) else {
+            // Not retried (unlike CarbonHotkeyMonitor's PTT tap): `start()` runs
+            // fresh on every PTT press, and the PTT tap itself already succeeded
+            // to get here, so Accessibility is held — the next recording re-runs
+            // this. The narrow miss window is the first dictation right after a
+            // cold launch that just got granted permission.
             log.error("CancelKeyMonitor.start: tapCreate returned nil — Accessibility may not be ready")
             return
         }
