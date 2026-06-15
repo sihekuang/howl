@@ -315,6 +315,9 @@ public final class EngineCoordinator {
     /// Go core already finished and just dropped its result event,
     /// this lets the user keep going.
     public func manualReset() async {
+        cancelledThisCycle = false
+        cancelFeedbackTask?.cancel()
+        composition.appState.cancelFeedback = false
         composition.cancelKeyMonitor.stop()
         composition.audioCapture.stop()
         try? await composition.engine.stopCapture()
@@ -492,6 +495,10 @@ public final class EngineCoordinator {
                 composition.overlay.hide()
             }
         case .cancelled:
+            // Key-press cancels are handled synchronously by cancelFromKey and
+            // gated out at the top of handle(); this arm still runs for
+            // engine-originated cancels (e.g. the post-stop pipeline-timeout
+            // watchdog), so it is not dead code.
             streamedSoFar = ""
             composition.cancelKeyMonitor.stop()
             // Stop the mic too: a recording-phase cancel fires before

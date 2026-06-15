@@ -39,6 +39,11 @@ public final class CompositionRoot {
     // the "Cancelled" pill — happens the instant a key is pressed, rather
     // than waiting for the Go `cancelled` event to come back.
     private lazy var _cancelKeyMonitor: CancelKeyMonitor = CancelKeyMonitor { [weak self] in
+        // assumeIsolated asserts we're already on the MainActor. Global
+        // key-down monitors are delivered on the main run loop, so this holds;
+        // if that contract were ever violated it traps (a deterministic crash),
+        // not silent corruption. We accept that over a Task hop, which would
+        // defeat the "instant synchronous cancel" goal.
         MainActor.assumeIsolated {
             guard let self else { return }
             self.coordinator.cancelFromKey()
