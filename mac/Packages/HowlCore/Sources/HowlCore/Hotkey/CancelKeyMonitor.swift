@@ -1,16 +1,21 @@
 import AppKit
+import CoreGraphics
 
-/// Watches for the Escape key (keyCode 53) globally while recording is
-/// active. Start it on PTT press; stop it on PTT release, result, or
-/// error so normal Esc use outside of recording is unaffected.
+/// Watches for ANY key globally while a dictation cycle is active — both
+/// recording and processing — and fires `onCancel`, which aborts the whole
+/// pipeline. Howl's own injected keystrokes (streaming text + final ⌘V paste)
+/// carry the `HowlSyntheticEvent.marker` in `eventSourceUserData` and are
+/// ignored, so typing text into the document never self-cancels.
 ///
-/// THREAD SAFETY: `start()` and `stop()` must only be called from the
-/// main actor. `@unchecked Sendable` is required because `NSEvent`
-/// monitor tokens (`Any?`) are not `Sendable`; all mutations are
-/// serialized on the main thread by the caller (`EngineCoordinator`).
+/// Start it on PTT press; stop it on a terminal event (result / cancelled /
+/// error) or manual reset, so normal typing outside a dictation is
+/// unaffected.
+///
+/// THREAD SAFETY: `start()` and `stop()` must only be called from the main
+/// actor. `@unchecked Sendable` is required because `NSEvent` monitor tokens
+/// (`Any?`) are not `Sendable`; all mutations are serialized on the main
+/// thread by the caller (`EngineCoordinator`).
 public final class CancelKeyMonitor: @unchecked Sendable {
-    private static let escKeyCode: UInt16 = 53
-
     private let onCancel: @Sendable () -> Void
     private var monitor: Any?
 
@@ -18,10 +23,19 @@ public final class CancelKeyMonitor: @unchecked Sendable {
         self.onCancel = onCancel
     }
 
+    /// Pure cancel decision: any observed key cancels unless it carries
+    /// Howl's synthetic-event marker (i.e. it's our own injection).
+    /// `userData` is the event's `eventSourceUserData` field value
+    /// (0 for real hardware keypresses).
+    static func shouldCancel(userData: Int64) -> Bool {
+        userData != HowlSyntheticEvent.marker
+    }
+
     public func start() {
         guard monitor == nil else { return }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [onCancel] event in
-            if event.keyCode == Self.escKeyCode {
+            let userData = event.cgEvent?.getIntegerValueField(.eventSourceUserData) ?? 0
+            if CancelKeyMonitor.shouldCancel(userData: userData) {
                 onCancel()
             }
         }
@@ -37,12 +51,18 @@ public final class CancelKeyMonitor: @unchecked Sendable {
 
     // MARK: - Test surface
 
-    /// Simulates an Esc keypress without going through NSEvent.
-    public func simulateEscForTest() {
-        onCancel()
+    /// Simulates a real (non-synthetic) keypress — should cancel.
+    public func simulateKeyForTest(keyCode _: UInt16 = 0) {
+        if Self.shouldCancel(userData: 0) { onCancel() }
     }
 
-    /// Simulates a non-Esc keypress (no-op — the real monitor's keyCode
-    /// filter would discard it).
-    public func simulateKeyForTest(keyCode _: UInt16) {}
+    /// Simulates a Howl-injected keystroke — should NOT cancel.
+    public func simulateSyntheticKeyForTest() {
+        if Self.shouldCancel(userData: HowlSyntheticEvent.marker) { onCancel() }
+    }
+
+    /// Simulates Esc — now just one of "any key".
+    public func simulateEscForTest() {
+        simulateKeyForTest(keyCode: 53)
+    }
 }
