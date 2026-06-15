@@ -10,6 +10,13 @@ public final class EngineCoordinator {
     private var pollTask: Task<Void, Never>?
     private var lastWarningTask: Task<Void, Never>?
     private var hotkeyPaused = false
+    /// Set when a key-press cancel (`cancelFromKey`) tears down the current
+    /// cycle. While true, in-flight pipeline events are ignored in `handle`
+    /// so a cancel truly stops everything. Reset at the start of the next
+    /// capture (`onPress`).
+    private var cancelledThisCycle = false
+    /// Drives the brief "Cancelled" overlay confirmation, then hides it.
+    private var cancelFeedbackTask: Task<Void, Never>?
 
     public init(composition: CompositionRoot) {
         self.composition = composition
@@ -308,12 +315,47 @@ public final class EngineCoordinator {
     /// Go core already finished and just dropped its result event,
     /// this lets the user keep going.
     public func manualReset() async {
+        cancelledThisCycle = false
+        cancelFeedbackTask?.cancel()
+        composition.appState.cancelFeedback = false
         composition.cancelKeyMonitor.stop()
         composition.audioCapture.stop()
         try? await composition.engine.stopCapture()
         composition.appState.engineState = .idle
         composition.overlay.hide()
         composition.appState.transientWarning = nil
+    }
+
+    /// Immediate, synchronous cancel from a key press. Tears down the UI and
+    /// capture right away — no round-trip through the Go `cancelled` event —
+    /// then aborts the in-flight pipeline. Subsequent pipeline events for this
+    /// cycle are ignored (see `cancelledThisCycle`). Shows a brief "Cancelled"
+    /// confirmation in the overlay.
+    func cancelFromKey() {
+        // Nothing to cancel if we're already idle (e.g. the cycle just
+        // finished as the key landed).
+        guard composition.appState.engineState != .idle else { return }
+        log.info("cancelFromKey: immediate cancel")
+        cancelledThisCycle = true
+        composition.cancelKeyMonitor.stop()
+        composition.audioCapture.stop()
+        composition.engine.cancelCapture()
+        streamedSoFar = ""
+        composition.appState.engineState = .idle
+        showCancelFeedback()
+    }
+
+    /// Show the "Cancelled" pill briefly, then hide the overlay.
+    private func showCancelFeedback() {
+        composition.appState.cancelFeedback = true
+        composition.overlay.show()
+        cancelFeedbackTask?.cancel()
+        cancelFeedbackTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.composition.appState.cancelFeedback = false
+            self.composition.overlay.hide()
+        }
     }
 
     /// Tiny audible cue played at the start of each capture cycle so
@@ -350,6 +392,11 @@ public final class EngineCoordinator {
         // Whisper hands the transcript to the LLM.
         await prewarmOllamaIfActive()
         cueSound.playListening()
+        // New cycle: clear any prior key-cancel state (and a lingering
+        // "Cancelled" pill) so this recording starts clean.
+        cancelledThisCycle = false
+        cancelFeedbackTask?.cancel()
+        composition.appState.cancelFeedback = false
         composition.appState.engineState = .recording
         composition.overlay.show()
         do {
@@ -378,9 +425,23 @@ public final class EngineCoordinator {
     }
 
     private func onRelease() async {
+        // A cancel (or other terminal event) may have already ended this
+        // cycle — e.g. the user pressed a key to cancel while still holding
+        // the trigger, then released it. In that case we're no longer
+        // recording, so releasing the trigger must be a no-op. Without this
+        // guard, onRelease would re-enter .processing and await a terminal
+        // event that never arrives (howl_stop_capture is a no-op after a
+        // cancel), leaving the UI stuck showing "Processing…".
+        guard composition.appState.engineState == .recording else {
+            log.info("onRelease: not recording (cycle already ended) — ignoring release")
+            return
+        }
         log.info("onRelease: setting state=processing, stopping Swift capture, signaling engine EOI")
         composition.appState.engineState = .processing
-        composition.cancelKeyMonitor.stop()
+        // NOTE: do NOT stop the cancel-key monitor here. It must stay armed
+        // through processing so any key still aborts the in-flight pipeline
+        // (transcription / LLM / injection). It is disarmed on the terminal
+        // events (.result / .cancelled / .error) and in manualReset.
         // Stop the mic FIRST so no more frames push into the engine.
         composition.audioCapture.stop()
         do {
@@ -389,12 +450,21 @@ public final class EngineCoordinator {
         } catch {
             log.error("onRelease: engine.stopCapture() FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("stop: \(error)")
+            // stopCapture failed → no terminal event will arrive to disarm the
+            // monitor, so disarm it here before returning to idle.
+            composition.cancelKeyMonitor.stop()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
     }
 
     private func handle(event: EngineEvent) {
+        // A key-press cancel (cancelFromKey) tears the cycle down
+        // synchronously and aborts the pipeline. Ignore any in-flight
+        // pipeline output that still arrives afterward — trailing stream
+        // chunks, a late result/warning from the LLM-fallback path, or the
+        // eventual cancelled — until the next capture resets the flag.
+        if cancelledThisCycle { return }
         switch event {
         case .level(let rms):
             composition.appState.liveRMS = rms
@@ -425,8 +495,18 @@ public final class EngineCoordinator {
                 composition.overlay.hide()
             }
         case .cancelled:
+            // Key-press cancels are handled synchronously by cancelFromKey and
+            // gated out at the top of handle(); this arm still runs for
+            // engine-originated cancels (e.g. the post-stop pipeline-timeout
+            // watchdog), so it is not dead code.
             streamedSoFar = ""
             composition.cancelKeyMonitor.stop()
+            // Stop the mic too: a recording-phase cancel fires before
+            // onRelease, so the capture is still live here. Without this the
+            // mic (and the macOS in-use indicator) would linger until the
+            // next cycle. Idempotent when already stopped (processing-phase
+            // cancel, where onRelease already stopped it).
+            composition.audioCapture.stop()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         case .warning(let msg):

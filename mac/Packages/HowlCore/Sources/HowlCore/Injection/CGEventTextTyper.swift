@@ -33,6 +33,11 @@ public final class CGEventTextTyper: StreamingTextInjector, @unchecked Sendable 
             down.keyboardSetUnicodeString(stringLength: buf.count, unicodeString: base)
             up.keyboardSetUnicodeString(stringLength: buf.count, unicodeString: base)
         }
+        // Mark as Howl-originated so the any-key cancel monitor (armed during
+        // processing) ignores our own streamed keystrokes instead of treating
+        // them as a user cancel.
+        down.markAsHowlSynthetic()
+        up.markAsHowlSynthetic()
         // cgAnnotatedSessionEventTap routes the event through the
         // current login session; the focused app sees it like any
         // other key press.

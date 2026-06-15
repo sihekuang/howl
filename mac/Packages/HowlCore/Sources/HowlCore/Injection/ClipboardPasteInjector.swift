@@ -53,6 +53,12 @@ public final class CGEventKeystrokeSender: KeystrokeSenderProtocol, @unchecked S
            let up = CGEvent(keyboardEventSource: nil, virtualKey: kVK_ANSI_V, keyDown: false) {
             down.flags = .maskCommand
             up.flags = .maskCommand
+            // Mark as Howl-originated so the any-key cancel monitor ignores
+            // our own paste keystrokes (defense in depth: the monitor is
+            // stopped before this fires on the .result path, but the marker
+            // keeps it correct regardless of ordering).
+            down.markAsHowlSynthetic()
+            up.markAsHowlSynthetic()
             down.post(tap: .cgAnnotatedSessionEventTap)
             up.post(tap: .cgAnnotatedSessionEventTap)
         }

@@ -7,19 +7,32 @@ struct RecordingOverlayView: View {
     private let capacity = 32
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: appState.engineState == .processing ? "circle.dotted" : "mic.fill")
-                .foregroundStyle(.white)
-                .font(.system(size: 14, weight: .medium))
-                .symbolEffect(
-                    .pulse, options: .repeating,
-                    isActive: appState.engineState == .processing
-                )
-            if appState.engineState == .processing {
-                ProgressView().controlSize(.small).tint(.white)
+        Group {
+            if appState.cancelFeedback {
+                HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 14, weight: .medium))
+                    Text("Cancelled")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 13, weight: .medium))
+                }
             } else {
-                WaveformView(samples: samples)
-                    .frame(width: 160, height: 22)
+                HStack(spacing: 12) {
+                    Image(systemName: appState.engineState == .processing ? "circle.dotted" : "mic.fill")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 14, weight: .medium))
+                        .symbolEffect(
+                            .pulse, options: .repeating,
+                            isActive: appState.engineState == .processing
+                        )
+                    if appState.engineState == .processing {
+                        ProgressView().controlSize(.small).tint(.white)
+                    } else {
+                        WaveformView(samples: samples)
+                            .frame(width: 160, height: 22)
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
