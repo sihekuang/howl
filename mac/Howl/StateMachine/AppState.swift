@@ -21,6 +21,10 @@ public final class AppState {
     public var engineState: EngineState = .idle
     public var setupGate: SetupGate = .ready
     public var liveRMS: Float = 0
+    /// True for a brief moment after a key-press cancel, so the recording
+    /// overlay can show a "Cancelled" confirmation. Set synchronously by
+    /// `EngineCoordinator.cancelFromKey` and cleared by its timer.
+    public var cancelFeedback: Bool = false
     public var transientWarning: String?
     /// Non-nil when global hotkey registration failed and didn't recover
     /// after retries. Distinct from `transientWarning` because it must

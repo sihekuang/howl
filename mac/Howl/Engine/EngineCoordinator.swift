@@ -10,6 +10,13 @@ public final class EngineCoordinator {
     private var pollTask: Task<Void, Never>?
     private var lastWarningTask: Task<Void, Never>?
     private var hotkeyPaused = false
+    /// Set when a key-press cancel (`cancelFromKey`) tears down the current
+    /// cycle. While true, in-flight pipeline events are ignored in `handle`
+    /// so a cancel truly stops everything. Reset at the start of the next
+    /// capture (`onPress`).
+    private var cancelledThisCycle = false
+    /// Drives the brief "Cancelled" overlay confirmation, then hides it.
+    private var cancelFeedbackTask: Task<Void, Never>?
 
     public init(composition: CompositionRoot) {
         self.composition = composition
@@ -316,6 +323,38 @@ public final class EngineCoordinator {
         composition.appState.transientWarning = nil
     }
 
+    /// Immediate, synchronous cancel from a key press. Tears down the UI and
+    /// capture right away — no round-trip through the Go `cancelled` event —
+    /// then aborts the in-flight pipeline. Subsequent pipeline events for this
+    /// cycle are ignored (see `cancelledThisCycle`). Shows a brief "Cancelled"
+    /// confirmation in the overlay.
+    func cancelFromKey() {
+        // Nothing to cancel if we're already idle (e.g. the cycle just
+        // finished as the key landed).
+        guard composition.appState.engineState != .idle else { return }
+        log.info("cancelFromKey: immediate cancel")
+        cancelledThisCycle = true
+        composition.cancelKeyMonitor.stop()
+        composition.audioCapture.stop()
+        composition.engine.cancelCapture()
+        streamedSoFar = ""
+        composition.appState.engineState = .idle
+        showCancelFeedback()
+    }
+
+    /// Show the "Cancelled" pill briefly, then hide the overlay.
+    private func showCancelFeedback() {
+        composition.appState.cancelFeedback = true
+        composition.overlay.show()
+        cancelFeedbackTask?.cancel()
+        cancelFeedbackTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.composition.appState.cancelFeedback = false
+            self.composition.overlay.hide()
+        }
+    }
+
     /// Tiny audible cue played at the start of each capture cycle so
     /// the user knows the engine is listening without staring at the
     /// menu bar. Held as an instance property so the AVAudioPlayer
@@ -350,6 +389,11 @@ public final class EngineCoordinator {
         // Whisper hands the transcript to the LLM.
         await prewarmOllamaIfActive()
         cueSound.playListening()
+        // New cycle: clear any prior key-cancel state (and a lingering
+        // "Cancelled" pill) so this recording starts clean.
+        cancelledThisCycle = false
+        cancelFeedbackTask?.cancel()
+        composition.appState.cancelFeedback = false
         composition.appState.engineState = .recording
         composition.overlay.show()
         do {
@@ -412,6 +456,12 @@ public final class EngineCoordinator {
     }
 
     private func handle(event: EngineEvent) {
+        // A key-press cancel (cancelFromKey) tears the cycle down
+        // synchronously and aborts the pipeline. Ignore any in-flight
+        // pipeline output that still arrives afterward — trailing stream
+        // chunks, a late result/warning from the LLM-fallback path, or the
+        // eventual cancelled — until the next capture resets the flag.
+        if cancelledThisCycle { return }
         switch event {
         case .level(let rms):
             composition.appState.liveRMS = rms
