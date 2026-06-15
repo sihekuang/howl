@@ -392,6 +392,9 @@ public final class EngineCoordinator {
         } catch {
             log.error("onRelease: engine.stopCapture() FAILED: \(String(describing: error), privacy: .public)")
             setTransientWarning("stop: \(error)")
+            // stopCapture failed → no terminal event will arrive to disarm the
+            // monitor, so disarm it here before returning to idle.
+            composition.cancelKeyMonitor.stop()
             composition.appState.engineState = .idle
             composition.overlay.hide()
         }
