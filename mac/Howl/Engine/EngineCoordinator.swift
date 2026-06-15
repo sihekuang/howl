@@ -380,7 +380,10 @@ public final class EngineCoordinator {
     private func onRelease() async {
         log.info("onRelease: setting state=processing, stopping Swift capture, signaling engine EOI")
         composition.appState.engineState = .processing
-        composition.cancelKeyMonitor.stop()
+        // NOTE: do NOT stop the cancel-key monitor here. It must stay armed
+        // through processing so any key still aborts the in-flight pipeline
+        // (transcription / LLM / injection). It is disarmed on the terminal
+        // events (.result / .cancelled / .error) and in manualReset.
         // Stop the mic FIRST so no more frames push into the engine.
         composition.audioCapture.stop()
         do {
