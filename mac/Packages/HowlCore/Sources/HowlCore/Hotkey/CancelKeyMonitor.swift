@@ -52,11 +52,15 @@ public final class CancelKeyMonitor: @unchecked Sendable {
     // MARK: - Test surface
 
     /// Simulates a real (non-synthetic) keypress — should cancel.
+    /// Routes through `shouldCancel` deliberately so the seam exercises the live decision
+    /// logic (field extraction / nil-coalescing in the NSEvent closure is not covered here).
     public func simulateKeyForTest(keyCode _: UInt16 = 0) {
         if Self.shouldCancel(userData: 0) { onCancel() }
     }
 
     /// Simulates a Howl-injected keystroke — should NOT cancel.
+    /// Routes through `shouldCancel` deliberately so `ignoresHowlSyntheticKey` is a real
+    /// assertion, not a tautology (field extraction in the NSEvent closure is not covered here).
     public func simulateSyntheticKeyForTest() {
         if Self.shouldCancel(userData: HowlSyntheticEvent.marker) { onCancel() }
     }
