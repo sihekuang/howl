@@ -165,8 +165,37 @@ enum ModelPaths {
         ).first!
         return appSupport.appendingPathComponent("Howl/models")
     }
+    /// The ggml weight filename for a UI model-size token, matching the
+    /// names published at huggingface.co/ggerganov/whisper.cpp. The
+    /// English-only `.en` builds only exist for tiny/base/small/medium;
+    /// `large` ships multilingual and is version-suffixed (there is no
+    /// `ggml-large.en.bin`, nor even a bare `ggml-large.bin`), so it
+    /// maps to a concrete release. Used for both the download URL and
+    /// the on-disk path so the two always agree.
+    static func whisperModelFilename(size: String) -> String {
+        switch size {
+        case "large": return "ggml-large-v3.bin"
+        default:      return "ggml-\(size).en.bin"
+        }
+    }
     static func whisperModel(size: String) -> URL {
-        modelsDir.appendingPathComponent("ggml-\(size).en.bin")
+        modelsDir.appendingPathComponent(whisperModelFilename(size: size))
+    }
+    /// The model size the engine will actually load for a preferred size:
+    /// the preferred one if its file is present, otherwise the first
+    /// downloaded size in a fixed order, otherwise the preferred size (the
+    /// engine then surfaces a missing-model error). Shared by the engine and
+    /// the Settings UI so the "using X for now" notice always matches what
+    /// actually loads.
+    static func availableSize(preferred: String) -> String {
+        if FileManager.default.fileExists(atPath: whisperModel(size: preferred).path) {
+            return preferred
+        }
+        for size in ["tiny", "base", "small", "medium", "large"]
+        where FileManager.default.fileExists(atPath: whisperModel(size: size).path) {
+            return size
+        }
+        return preferred
     }
     /// TSE separation model. Bundled with the .app at build time (see the
     /// "Copy TSE models into Resources" build phase). Falls back to

@@ -24,7 +24,7 @@ struct WhisperStageBody: View {
         ("base",   "Base",   "142 MB"),
         ("small",  "Small",  "466 MB"),
         ("medium", "Medium", "1.5 GB"),
-        ("large",  "Large",  "2.9 GB"),
+        ("large",  "Large",  "3.1 GB"),
     ]
 
     var body: some View {

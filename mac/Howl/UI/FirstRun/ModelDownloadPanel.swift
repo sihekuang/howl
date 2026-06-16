@@ -15,7 +15,7 @@ struct ModelDownloadPanel: View {
                 Text("Base (142MB)").tag("base")
                 Text("Small (466MB) — recommended").tag("small")
                 Text("Medium (1.5GB)").tag("medium")
-                Text("Large (2.9GB)").tag("large")
+                Text("Large (3.1GB)").tag("large")
             }
             .pickerStyle(.menu)
             switch downloader.state {

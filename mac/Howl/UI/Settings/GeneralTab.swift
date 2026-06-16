@@ -33,7 +33,7 @@ struct GeneralTab: View {
         ("base", "Base", "142 MB"),
         ("small", "Small", "466 MB"),
         ("medium", "Medium", "1.5 GB"),
-        ("large", "Large", "2.9 GB"),
+        ("large", "Large", "3.1 GB"),
     ]
     private let languages = ["auto", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
 
@@ -211,36 +211,58 @@ struct GeneralTab: View {
         let _ = modelStatusTick
         let downloaded = FileManager.default.fileExists(atPath: path)
 
-        switch downloader.state {
-        case .downloading(let p):
-            HStack {
-                ProgressView(value: p)
-                Text("\(Int(p * 100))%").font(.caption.monospaced()).foregroundStyle(.secondary)
-            }
-        case .failed(let msg):
-            HStack {
-                Label("Download failed: \(msg)", systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(.red).font(.caption)
-                Spacer()
-                Button("Retry") { Task { await runDownload(size: size) } }
-            }
-        default:
-            HStack {
-                if downloaded {
-                    Label("Model downloaded", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green).font(.caption)
-                } else {
-                    Label("Not downloaded", systemImage: "arrow.down.circle")
-                        .foregroundStyle(.orange).font(.caption)
+        VStack(alignment: .leading, spacing: 4) {
+            switch downloader.state {
+            case .downloading(let p):
+                HStack {
+                    ProgressView(value: p)
+                    Text("\(Int(p * 100))%").font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
-                Spacer()
-                if !downloaded {
-                    Button("Download \(size.capitalized)") {
-                        Task { await runDownload(size: size) }
+            case .failed(let msg):
+                HStack {
+                    Label("Download failed: \(msg)", systemImage: "xmark.octagon.fill")
+                        .foregroundStyle(.red).font(.caption)
+                    Spacer()
+                    Button("Retry") { Task { await runDownload(size: size) } }
+                }
+            default:
+                HStack {
+                    if downloaded {
+                        Label("Model downloaded", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green).font(.caption)
+                    } else {
+                        Label("Not downloaded", systemImage: "arrow.down.circle")
+                            .foregroundStyle(.orange).font(.caption)
+                    }
+                    Spacer()
+                    if !downloaded {
+                        Button("Download \(size.capitalized)") {
+                            Task { await runDownload(size: size) }
+                        }
                     }
                 }
             }
+            // While the selected model is missing the engine runs another
+            // downloaded size; say so instead of silently swapping it.
+            if !downloaded, let fallback = activeFallbackSize {
+                Label("Using \(fallback.capitalized) until \(size.capitalized) finishes downloading",
+                      systemImage: "info.circle")
+                    .foregroundStyle(.secondary).font(.caption)
+            }
         }
+    }
+
+    /// The model the engine actually loads while the selected one is missing,
+    /// or `nil` if the selected model is present or nothing else is
+    /// downloaded. Mirrors `ModelPaths.availableSize` so the notice matches
+    /// real engine behavior.
+    private var activeFallbackSize: String? {
+        let _ = modelStatusTick
+        let preferred = settings.whisperModelSize
+        guard !FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: preferred).path)
+        else { return nil }
+        let resolved = ModelPaths.availableSize(preferred: preferred)
+        return resolved == preferred ? nil : resolved
     }
 
     private func runDownload(size: String) async {
@@ -249,9 +271,12 @@ struct GeneralTab: View {
     }
 
     private func modelLabel(for m: (size: String, label: String, mb: String)) -> String {
-        let path = ModelPaths.whisperModel(size: m.size).path
-        let mark = FileManager.default.fileExists(atPath: path) ? "✓" : " "
-        return "\(mark) \(m.label) (\(m.mb))"
+        // No leading checkmark: the Picker already draws its own checkmark on
+        // the selected row, and a second "✓" for "downloaded" collided with
+        // it in the same column. Show downloaded state as trailing text; the
+        // status row below covers the selected model in more detail.
+        let downloaded = FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: m.size).path)
+        return downloaded ? "\(m.label) (\(m.mb)) · downloaded" : "\(m.label) (\(m.mb))"
     }
 
     private var micBinding: Binding<String> {

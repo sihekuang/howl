@@ -562,17 +562,20 @@ public final class EngineCoordinator {
     /// any other downloaded size if the configured one is missing —
     /// better than failing configure entirely.
     private func resolveEnginePaths(for settings: UserSettings) -> EnginePaths {
-        var resolvedSize = settings.whisperModelSize
-        var modelPath = ModelPaths.whisperModel(size: resolvedSize).path
-        if !FileManager.default.fileExists(atPath: modelPath) {
-            for fallback in ["tiny", "base", "small", "medium", "large"]
-            where FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: fallback).path) {
-                resolvedSize = fallback
-                modelPath = ModelPaths.whisperModel(size: fallback).path
-                log.info("applyConfig: configured model '\(settings.whisperModelSize, privacy: .public)' missing; falling back to '\(fallback, privacy: .public)'")
-                break
-            }
+        let resolvedSize = ModelPaths.availableSize(preferred: settings.whisperModelSize)
+        let modelPath = ModelPaths.whisperModel(size: resolvedSize).path
+        if resolvedSize != settings.whisperModelSize {
+            log.info("applyConfig: configured model '\(settings.whisperModelSize, privacy: .public)' missing; falling back to '\(resolvedSize, privacy: .public)'")
         }
+        let whisperBytes = (try? FileManager.default.attributesOfItem(atPath: modelPath))
+            .flatMap { ($0[.size] as? NSNumber)?.int64Value } ?? -1
+        log.notice("""
+            resolveEnginePaths whisper requested=\(settings.whisperModelSize, privacy: .public) \
+            resolved=\(resolvedSize, privacy: .public) \
+            path=\(modelPath, privacy: .public) \
+            exists=\(FileManager.default.fileExists(atPath: modelPath), privacy: .public) \
+            bytes=\(whisperBytes, privacy: .public)
+            """)
         return EnginePaths(
             whisperModelPath: modelPath,
             resolvedWhisperSize: resolvedSize,
