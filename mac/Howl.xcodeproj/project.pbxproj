@@ -49,6 +49,7 @@
 		930A7FD1BECD70FBF84F63A0 /* AccessibilityPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9C61491EA888B42D6D4941 /* AccessibilityPanel.swift */; };
 		97108ECEA76D6E2D56CD8680 /* TSELabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604BD0A68D3D7E74369F9935 /* TSELabView.swift */; };
 		B1604986F93A96D00C7510DB /* DeletePresetConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F908767741F0ECA202FA2FF7 /* DeletePresetConfirmSheet.swift */; };
+		B8F89823AE7B26AA286B9602 /* AboutTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B15CA05B53A88BBF54B03CB /* AboutTab.swift */; };
 		BA105098CC24DA97CD967B7E /* AnthropicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3D2C5CC15082888D4E30AF /* AnthropicSection.swift */; };
 		BD9267D03031E7F705558907 /* TerminalStageBodies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2BB970189EEA653E0F283F3 /* TerminalStageBodies.swift */; };
 		C4B9B9FD9D6431B41FB6A14D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D6FA7659981634693F0DBA7 /* SettingsView.swift */; };
@@ -89,6 +90,7 @@
 		5D6FA7659981634693F0DBA7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5E9C61491EA888B42D6D4941 /* AccessibilityPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPanel.swift; sourceTree = "<group>"; };
 		604BD0A68D3D7E74369F9935 /* TSELabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TSELabView.swift; sourceTree = "<group>"; };
+		6B15CA05B53A88BBF54B03CB /* AboutTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutTab.swift; sourceTree = "<group>"; };
 		6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		6D794B258F72EFD8EF74C73B /* LLMProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTab.swift; sourceTree = "<group>"; };
 		724D229C9524B15ABED3630B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -285,6 +287,7 @@
 		C53D93555BFCC2F78496F4CA /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				6B15CA05B53A88BBF54B03CB /* AboutTab.swift */,
 				FD3D2C5CC15082888D4E30AF /* AnthropicSection.swift */,
 				E571244CFA085DB97F2401E5 /* DictionaryTab.swift */,
 				ED59C5EE6991EEFD0A414C63 /* EnrollmentSheet.swift */,
@@ -488,6 +491,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				135736D014088DD5A291ECA1 /* APIKeyPanel.swift in Sources */,
+				B8F89823AE7B26AA286B9602 /* AboutTab.swift in Sources */,
 				930A7FD1BECD70FBF84F63A0 /* AccessibilityPanel.swift in Sources */,
 				BA105098CC24DA97CD967B7E /* AnthropicSection.swift in Sources */,
 				3B8D794E9C0B2DCB17BAAC32 /* AppDelegate.swift in Sources */,
