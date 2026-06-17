@@ -15,6 +15,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case dictionary
     case playground
     case pipeline   // NEW
+    case about
 
     var id: Self { self }
 
@@ -28,6 +29,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .dictionary: return "Dictionary"
         case .playground: return "Playground"
         case .pipeline:   return "Pipeline"   // NEW
+        case .about:      return "About"
         }
     }
 
@@ -44,6 +46,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .dictionary: return "books.vertical"
         case .playground: return "waveform"
         case .pipeline:   return "rectangle.connected.to.line.below"   // NEW
+        case .about:      return "info.circle"
         }
     }
 
@@ -60,6 +63,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .dictionary: return .green
         case .playground: return .pink
         case .pipeline:   return .indigo   // NEW
+        case .about:      return .cyan
         }
     }
 }
@@ -250,6 +254,8 @@ private struct DetailView: View {
                 settings: $settings,
                 navigateTo: navigateTo
             )
+        case .about:
+            AboutTab()
         }
     }
 }
