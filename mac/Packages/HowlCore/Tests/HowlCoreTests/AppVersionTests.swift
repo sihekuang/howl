@@ -16,6 +16,7 @@ struct AppVersionTests {
     @Test func unknownFallback() {
         let v = AppVersion(short: nil, build: "")
         #expect(v.displayString == "Version unknown")
+        #expect(v.copyString.hasPrefix("Howl unknown (build unknown) · macOS"))
         #expect(v.releaseNotesURL.absoluteString
             == "https://github.com/sihekuang/howl/releases")
     }

@@ -7,12 +7,12 @@ import HowlCore
 /// the bundle so it never needs manual updates. The page header (icon + "About"
 /// title) is drawn by `DetailView`; this is just the centered card below it.
 struct AboutTab: View {
-    private var version: AppVersion {
-        AppVersion(
-            short: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-            build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        )
-    }
+    // Info.plist never changes at runtime, so read it once rather than on
+    // every `body` evaluation.
+    private let version = AppVersion(
+        short: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+        build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    )
 
     var body: some View {
         VStack(spacing: 12) {
