@@ -63,15 +63,23 @@ func loadBackends() {
 // WhisperCpp wraps a whisper.cpp context. NOT safe for concurrent calls
 // to Transcribe on the same instance.
 type WhisperCpp struct {
-	ctx     *C.struct_whisper_context
-	lang    string
-	threads int
+	ctx           *C.struct_whisper_context
+	lang          string
+	threads       int
+	initialPrompt string
 }
 
 type WhisperOptions struct {
 	ModelPath string
 	Language  string // "en", "auto", etc.
 	Threads   int    // 0 = default 4
+	// InitialPrompt is an optional custom-vocabulary prompt passed to
+	// whisper.cpp's whisper_full_params.initial_prompt. It biases the
+	// decoder toward the spellings of domain terms (names, jargon,
+	// acronyms). Empty means no prompt. The value is trimmed and
+	// truncated to MaxInitialPromptLen on a UTF-8 boundary; build one
+	// from a term list with DictionaryPrompt.
+	InitialPrompt string
 }
 
 // Compile-time interface assertion
@@ -98,7 +106,12 @@ func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	if lang == "" {
 		lang = "auto"
 	}
-	return &WhisperCpp{ctx: ctx, lang: lang, threads: threads}, nil
+	return &WhisperCpp{
+		ctx:           ctx,
+		lang:          lang,
+		threads:       threads,
+		initialPrompt: boundInitialPrompt(opts.InitialPrompt),
+	}, nil
 }
 
 // Transcribe runs whisper.cpp inference synchronously. NOTE: ctx is
@@ -124,6 +137,14 @@ func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, 
 	cLang := C.CString(w.lang)
 	defer C.free(unsafe.Pointer(cLang))
 	params.language = cLang
+
+	// Optional custom-vocabulary prompt. Left nil (whisper's default)
+	// when no prompt was configured.
+	if w.initialPrompt != "" {
+		cPrompt := C.CString(w.initialPrompt)
+		defer C.free(unsafe.Pointer(cPrompt))
+		params.initial_prompt = cPrompt
+	}
 
 	nSegs := C.run_whisper_full(
 		w.ctx, params,

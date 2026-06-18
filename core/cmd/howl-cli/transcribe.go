@@ -51,6 +51,8 @@ func runTranscribe(args []string) int {
 	w, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 		ModelPath: modelPath,
 		Language:  lang,
+		// Optional custom-vocabulary prompt; empty when the env var is unset.
+		InitialPrompt: os.Getenv("HOWL_INITIAL_PROMPT"),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load model: %v\n", err)
