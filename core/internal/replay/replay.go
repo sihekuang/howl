@@ -114,6 +114,9 @@ func Run(ctx context.Context, opts Options) ([]Result, error) {
 			t, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 				ModelPath: cfg.WhisperModelPath,
 				Language:  cfg.Language,
+				// Match the live pipeline (build.go) so Compare reflects the
+				// dictionary's recognition bias, not just post-correction.
+				InitialPrompt: transcribe.DictionaryPrompt(cfg.CustomDict),
 			})
 			if err != nil {
 				out = append(out, Result{PresetName: name, Error: "whisper load: " + err.Error()})
