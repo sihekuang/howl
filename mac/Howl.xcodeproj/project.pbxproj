@@ -35,7 +35,6 @@
 		5CA59F85C70FDBB57CF1F856 /* HowlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E09796499424206A294D0B /* HowlApp.swift */; };
 		604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB6EBA0ED5CC4C29BAF817 /* RecordingOverlayController.swift */; };
 		63DD3FAC24B973737175F166 /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */; };
-		6427AEDBA68D7345EB8681C4 /* OccupationPacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD4426DD4DB46C0CF5A374C /* OccupationPacks.swift */; };
 		64C0340D22E613E4CB3B17C3 /* StageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A45AC87C505D3B6294C4C943 /* StageList.swift */; };
 		6928BEA3572D113FB7E9B774 /* FirstRunWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB1AA565F9661A9F06F6C9B /* FirstRunWindow.swift */; };
 		6B88411839BAFD3B9EB16DB8 /* SessionPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BD54519ED2E278EB40092A3 /* SessionPreview.swift */; };
@@ -106,7 +105,6 @@
 		A2F4EBC60CE0C3FF26ADC3E0 /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
 		A2F52C68CF045C2C2C20E383 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A45AC87C505D3B6294C4C943 /* StageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageList.swift; sourceTree = "<group>"; };
-		ABD4426DD4DB46C0CF5A374C /* OccupationPacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OccupationPacks.swift; sourceTree = "<group>"; };
 		ACAD0057BEC75F5BE88EE1F8 /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
 		BBC19532D707859E704394DA /* OverwriteConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverwriteConfirmSheet.swift; sourceTree = "<group>"; };
 		BCE98EAAA5709B9C7B1BD065 /* LMStudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LMStudioSection.swift; sourceTree = "<group>"; };
@@ -295,7 +293,6 @@
 				EA7F55A2C984A93AAF14FB13 /* HotkeyTab.swift */,
 				6D794B258F72EFD8EF74C73B /* LLMProviderTab.swift */,
 				BCE98EAAA5709B9C7B1BD065 /* LMStudioSection.swift */,
-				ABD4426DD4DB46C0CF5A374C /* OccupationPacks.swift */,
 				4E17A99080A23B794802A97F /* OllamaSection.swift */,
 				6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */,
 				E5CA7CC77217D20E3DB636FA /* PlaygroundTab.swift */,
@@ -520,7 +517,6 @@
 				EA367CE838A372E5777C22F4 /* MenuBarMenu.swift in Sources */,
 				F3C60668F1CD1F297EBEE66C /* ModelDownloadPanel.swift in Sources */,
 				4B73D3157CE2D3BA906994C2 /* ModelDownloader.swift in Sources */,
-				6427AEDBA68D7345EB8681C4 /* OccupationPacks.swift in Sources */,
 				1BE4771330BA143A79499717 /* OllamaSection.swift in Sources */,
 				CAB12963F431745F636EBF4B /* OpenAISection.swift in Sources */,
 				18B5EB46A73D73E48811C23C /* OverwriteConfirmSheet.swift in Sources */,

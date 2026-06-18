@@ -9,32 +9,34 @@ import Foundation
 /// Common English words are deliberately omitted; the LLM cleanup pass
 /// handles grammar and prose. Pack entries are the kind of thing where
 /// the spelling matters and Whisper guesses wrong.
-enum OccupationPacks {
+public enum OccupationPacks {
     /// Pack metadata for the picker UI. `name` is the display label;
     /// `terms` is the word list applied on selection.
-    struct Pack: Identifiable, Hashable {
-        let id: String       // stable key, also used as the picker tag
-        let name: String     // user-visible label
-        let terms: [String]
+    public struct Pack: Identifiable, Hashable, Sendable {
+        public let id: String       // stable key, also used as the picker tag
+        public let name: String     // user-visible label
+        public let terms: [String]
     }
 
     /// Ordered for a sensible picker presentation. The "General Tech"
     /// pack is broad enough to be useful for most engineering roles;
     /// the others narrow to specific domains.
-    static let all: [Pack] = [
+    public static let all: [Pack] = [
         Pack(
             id: "software-engineer",
             name: "Software Engineer",
             terms: [
-                "API", "OAuth", "JWT", "GraphQL", "REST", "gRPC", "WebSocket", "WebRTC",
-                "TypeScript", "JavaScript", "Python", "Golang", "Rust", "Kotlin", "Swift",
-                "Kubernetes", "Docker", "Terraform", "Ansible", "Helm",
-                "PostgreSQL", "MongoDB", "Redis", "Cassandra", "DynamoDB",
-                "AWS", "GCP", "Azure", "Lambda", "EC2", "S3",
+                // Proper nouns / products first (highest mis-transcribe risk)
+                "Kubernetes", "Terraform", "Ansible", "Helm", "Docker",
+                "PostgreSQL", "MongoDB", "Cassandra", "DynamoDB", "Redis",
                 "GitHub", "GitLab", "Bitbucket", "Jenkins", "CircleCI",
+                "GraphQL", "WebSocket", "WebRTC", "gRPC", "OAuth", "OAuth2", "OIDC",
+                "TypeScript", "JavaScript", "Golang", "Kotlin", "Python", "Rust", "Swift",
                 "Jira", "Linear", "Notion",
-                "MCP", "LLM", "RAG", "SDK", "CLI", "IDE",
-                "TLS", "DNS", "CDN", "VPN", "OAuth2", "OIDC",
+                "AWS", "GCP", "Azure", "Lambda", "EC2", "S3",
+                // Short acronyms last (whisper usually gets these)
+                "API", "JWT", "REST", "MCP", "LLM", "RAG", "SDK", "CLI", "IDE",
+                "TLS", "DNS", "CDN", "VPN",
             ]
         ),
         Pack(
