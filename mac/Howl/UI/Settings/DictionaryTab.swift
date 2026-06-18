@@ -61,7 +61,7 @@ struct DictionaryTab: View {
                 Button("Add") { addManualTerm() }
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Text("Your dictionary also primes speech recognition. Whisper's prompt is small (~224 tokens); past that, extra terms only affect cleanup, not recognition.")
+            Text("Your dictionary also primes speech recognition. Whisper's prompt is small (~\(DictStats.whisperPromptBudgetBytes / 4) tokens); past that, extra terms only affect cleanup, not recognition.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

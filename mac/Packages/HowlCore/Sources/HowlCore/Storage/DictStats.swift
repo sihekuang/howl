@@ -43,10 +43,14 @@ public enum DictStats {
         public let overBudget: Bool
     }
 
-    /// Mirror of the Go `DictionaryPrompt` bound: join terms with ", ",
+    /// Approximates the Go `DictionaryPrompt` bound: join terms with ", ",
     /// measure UTF-8 bytes, and count how many leading terms fit within
     /// `whisperPromptBudgetBytes`. Go truncates the joined string from the
     /// back, so the leading terms are the ones that reach whisper.
+    /// `usedBytes`/`overBudget` are byte-exact with Go; `termsThatFit`
+    /// counts only WHOLE leading terms, so it can be one fewer than Go
+    /// keeps when the byte cutoff lands inside a term (a fragment isn't a
+    /// usable biasing term — and "first N terms" reads cleaner in the UI).
     public static func whisperPromptFit(from terms: [String]) -> WhisperPromptFit {
         let budget = whisperPromptBudgetBytes
         let used = terms.joined(separator: ", ").utf8.count
