@@ -56,6 +56,9 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 		t, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
 			ModelPath: cfg.WhisperModelPath,
 			Language:  cfg.Language,
+			// Bias whisper toward the user's custom vocabulary so the
+			// dictionary helps recognition, not just post-correction.
+			InitialPrompt: transcribe.DictionaryPrompt(cfg.CustomDict),
 		})
 		if err != nil {
 			return nil, err
