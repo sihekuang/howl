@@ -61,6 +61,10 @@ struct DictionaryTab: View {
                 Button("Add") { addManualTerm() }
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            Text("Your dictionary also primes speech recognition. Whisper's prompt is small (~\(DictStats.whisperPromptBudgetBytes / 4) tokens); past that, extra terms only affect cleanup, not recognition.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             termsCard
         }
         .confirmationDialog(
@@ -177,6 +181,8 @@ struct DictionaryTab: View {
     private var manageSection: some View {
         HStack(spacing: 12) {
             statsView
+            Divider().frame(height: 28)
+            sttBudgetStat
             Spacer()
             Button("Export…") { exportToFile() }
                 .disabled(settings.customDict.isEmpty)
@@ -206,6 +212,26 @@ struct DictionaryTab: View {
                 .foregroundStyle(.secondary)
         }
         .help("Approximate token count of the joined dictionary as it ships to the LLM. The prompt template adds another ~60 tokens regardless. Token estimate is char-count / 4; actual cost will vary slightly with the model's tokenizer.")
+    }
+
+    /// Whisper initial-prompt budget — distinct from the LLM-cleanup token
+    /// count in `statsView`. The dictionary doubles as whisper's STT prompt,
+    /// which has a tiny (~224-token) budget; over it, trailing terms stop
+    /// biasing recognition (but still apply during cleanup).
+    @ViewBuilder
+    private var sttBudgetStat: some View {
+        let f = DictStats.whisperPromptFit(from: settings.customDict)
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Speech-to-text: ~\(f.usedTokens) / \(f.budgetTokens) tokens")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(f.overBudget ? Color.orange : Color.primary)
+            Text(f.overBudget
+                 ? "Over budget — biases only the first \(f.termsThatFit) terms"
+                 : "Primes whisper speech recognition")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .help("Whisper's initial prompt is tiny (~\(f.budgetTokens) tokens). Terms past the budget still apply during LLM cleanup, but stop biasing recognition.")
     }
 
     private func dictStats() -> DictStats.Snapshot {
