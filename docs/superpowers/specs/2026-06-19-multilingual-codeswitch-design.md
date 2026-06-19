@@ -30,6 +30,22 @@ So this design is intentionally small: it rides the existing language and
 initial-prompt plumbing, adds one new setting, fixes a latent model-selection
 bug, and adds a synthesized end-to-end correctness test.
 
+### Validation spike (2026-06-19)
+
+Confirmed empirically with `whisper-cli` + `ggml-large-v3` on a `say`-synthesized
+EN+ZH clip ("Let's schedule the 会议 for tomorrow afternoon"):
+
+| Decode | Result |
+|---|---|
+| `-l en` + prompt `会议, schedule` (**production config**) | `Let's schedule the 会议 for tomorrow afternoon.` ✅ Han retained |
+| `-l en`, **no prompt** | `Let's schedule the "Hui Yi" for tomorrow afternoon.` — romanized, Han lost |
+| `-l auto` + prompt | `…会议…` ✅ (equivalent to anchored here) |
+
+Takeaways the design relies on: (1) anchor-on-primary **does** retain the second
+script; (2) the **initial prompt is the decisive lever** (prompt vs no-prompt is
+the difference between `会议` and `"Hui Yi"`) — which is why the dictionary tie-in
+is the mechanism, not an add-on.
+
 ## Scope
 
 **In scope**
@@ -151,8 +167,10 @@ needsMultilingual = (primary != "en") || (secondaryLanguage != "none")
 ### 4. UI (`mac/Howl/UI/Settings/GeneralTab.swift`)
 
 - Rename the existing "Language" picker to **"Primary language"** (bound to
-  `settings.language`; drop `"auto"` from this list — primary is an explicit
-  anchor, default `en`).
+  `settings.language`, default `en`). Keep `"auto"` in the list — it remains a
+  valid anchor (whisper auto-detects a single language) and dropping it would
+  orphan stored settings. `needsMultilingual` already treats a non-`en` primary
+  (including `auto`) as needing the multilingual model.
 - Add a **"Secondary language"** picker bound to `settings.secondaryLanguage`,
   options `["none", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]`
   (full set minus `auto`, since secondary is never an anchor), default `none`,
