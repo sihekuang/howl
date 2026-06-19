@@ -102,6 +102,7 @@ func secretsFromEngineCfg(e *engine) presets.EngineSecrets {
 		ONNXLibPath:         e.cfg.ONNXLibPath,
 		CustomDict:          append([]string{}, e.cfg.CustomDict...),
 		Language:            e.cfg.Language,
+		SecondaryLanguage:   e.cfg.SecondaryLanguage,
 		// Compare keeps LLM constant across replays: audio pipeline
 		// is the variable being compared. Override the preset's
 		// llm.provider with the engine's current choice so the user's

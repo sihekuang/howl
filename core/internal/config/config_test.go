@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -218,5 +219,39 @@ func TestConfig_AcceptsMacEngineConfigJSON_OmittedTimeout(t *testing.T) {
 	}
 	if cfg.PipelineTimeoutValue() != 0 {
 		t.Errorf("PipelineTimeoutValue() = %v, want 0", cfg.PipelineTimeoutValue())
+	}
+}
+
+func TestWithDefaults_SecondaryLanguageDefaultsToNone(t *testing.T) {
+	c := &Config{}
+	WithDefaults(c)
+	if c.SecondaryLanguage != "none" {
+		t.Errorf("SecondaryLanguage = %q, want \"none\"", c.SecondaryLanguage)
+	}
+}
+
+func TestConfig_UnmarshalsSecondaryLanguage(t *testing.T) {
+	var c Config
+	if err := json.Unmarshal([]byte(`{"secondary_language":"zh"}`), &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if c.SecondaryLanguage != "zh" {
+		t.Errorf("SecondaryLanguage = %q, want \"zh\"", c.SecondaryLanguage)
+	}
+}
+
+func TestConfig_LogSummary(t *testing.T) {
+	c := &Config{Language: "en", SecondaryLanguage: "zh", CustomDict: []string{"会议"}}
+	got := c.LogSummary()
+	want := `primary=en secondary=zh, 1 dictionary term(s): ["会议"]`
+	if got != want {
+		t.Errorf("LogSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestConfig_LogSummary_EmptySecondaryReadsNone(t *testing.T) {
+	c := &Config{Language: "en"}
+	if got := c.LogSummary(); !strings.Contains(got, "secondary=none") {
+		t.Errorf("LogSummary() = %q, want it to contain secondary=none", got)
 	}
 }

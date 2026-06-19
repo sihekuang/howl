@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/voice-keyboard/core/internal/llm"
@@ -12,6 +13,13 @@ type Config struct {
 	WhisperModelPath        string   `json:"whisper_model_path"`
 	WhisperModelSize        string   `json:"whisper_model_size"`
 	Language                string   `json:"language"`
+	// SecondaryLanguage is the optional second language for code-switch
+	// dictation. "none" (the default) means single-language behavior. When
+	// set, the Mac app loads the multilingual large model and the custom
+	// dictionary (whisper initial prompt) primes both scripts. The engine
+	// itself stays anchored on Language; this field is threaded through for
+	// model selection (Swift side) and observability.
+	SecondaryLanguage       string   `json:"secondary_language"`
 	DisableNoiseSuppression bool     `json:"disable_noise_suppression"`
 	// DeveloperMode gates power-user features (always-on per-stage
 	// session capture, the Pipeline tab in the Mac app). Casual users
@@ -85,12 +93,28 @@ func (c *Config) PipelineTimeoutValue() time.Duration {
 	return time.Duration(c.PipelineTimeoutSec) * time.Second
 }
 
+// LogSummary returns a one-line, log-safe summary of the recognition-relevant
+// config — primary/secondary language and the custom dictionary — so the
+// dictionary → initial-prompt and language propagation are observable in
+// /tmp/howl.log on every howl_configure.
+func (c *Config) LogSummary() string {
+	secondary := c.SecondaryLanguage
+	if secondary == "" {
+		secondary = "none"
+	}
+	return fmt.Sprintf("primary=%s secondary=%s, %d dictionary term(s): %q",
+		c.Language, secondary, len(c.CustomDict), c.CustomDict)
+}
+
 func WithDefaults(c *Config) {
 	if c.WhisperModelSize == "" {
 		c.WhisperModelSize = "small"
 	}
 	if c.Language == "" {
 		c.Language = "auto"
+	}
+	if c.SecondaryLanguage == "" {
+		c.SecondaryLanguage = "none"
 	}
 	if c.LLMProvider == "" {
 		c.LLMProvider = "anthropic"
