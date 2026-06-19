@@ -99,7 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let permissions = composition.permissions
         let accessOK = permissions.isTrusted()
         let settings = (try? composition.settings.get()) ?? UserSettings()
-        let modelPath = ModelPaths.whisperModel(size: settings.whisperModelSize)
+        let modelPath = ModelPaths.whisperModel(size: WhisperModelSelection.effectiveSize(
+            requested: settings.whisperModelSize,
+            primary: settings.language,
+            secondary: settings.secondaryLanguage))
         let modelOK = FileManager.default.fileExists(atPath: modelPath.path)
         // Cloud providers (anthropic, openai) need a key to be useful.
         // Local providers (ollama) don't — let those users through.
