@@ -32,6 +32,7 @@
 		4C09D55BAFBFE330E92D467C /* LMStudioSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCE98EAAA5709B9C7B1BD065 /* LMStudioSection.swift */; };
 		50A43871D999741C65AB727C /* SaveAsPresetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F5C4B22DE9F69EDA5E7AA8 /* SaveAsPresetSheet.swift */; };
 		55B63CA458D56967C9AD669B /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E92B8A651A352D9AA4CF02 /* EditorView.swift */; };
+		58970FD1991F3929712228D9 /* PipelineEditorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BE9E423BFFA43B7964D59C5 /* PipelineEditorState.swift */; };
 		5CA59F85C70FDBB57CF1F856 /* HowlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E09796499424206A294D0B /* HowlApp.swift */; };
 		604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB6EBA0ED5CC4C29BAF817 /* RecordingOverlayController.swift */; };
 		63DD3FAC24B973737175F166 /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */; };
@@ -100,6 +101,7 @@
 		7FB8B9543DEE1FC812E97AFD /* CompareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareView.swift; sourceTree = "<group>"; };
 		840584EC5B4E58359E52E751 /* SharedSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SharedSettings.xcconfig; sourceTree = "<group>"; };
 		8E35898D73B38023311D0886 /* GeneralTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTab.swift; sourceTree = "<group>"; };
+		9BE9E423BFFA43B7964D59C5 /* PipelineEditorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineEditorState.swift; sourceTree = "<group>"; };
 		A1E09796499424206A294D0B /* HowlApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HowlApp.swift; sourceTree = "<group>"; };
 		A2BB970189EEA653E0F283F3 /* TerminalStageBodies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalStageBodies.swift; sourceTree = "<group>"; };
 		A2F4EBC60CE0C3FF26ADC3E0 /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 				12E92B8A651A352D9AA4CF02 /* EditorView.swift */,
 				50B9006A6B68ED094075CF61 /* ManageElsewhereButton.swift */,
 				BBC19532D707859E704394DA /* OverwriteConfirmSheet.swift */,
+				9BE9E423BFFA43B7964D59C5 /* PipelineEditorState.swift */,
 				C96DAE47622718B513B8B584 /* PipelineTab.swift */,
 				33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */,
 				53F5C4B22DE9F69EDA5E7AA8 /* SaveAsPresetSheet.swift */,
@@ -520,6 +523,7 @@
 				1BE4771330BA143A79499717 /* OllamaSection.swift in Sources */,
 				CAB12963F431745F636EBF4B /* OpenAISection.swift in Sources */,
 				18B5EB46A73D73E48811C23C /* OverwriteConfirmSheet.swift in Sources */,
+				58970FD1991F3929712228D9 /* PipelineEditorState.swift in Sources */,
 				E907E73CE0876ECFA7F387BE /* PipelineTab.swift in Sources */,
 				1F6CF0B3DE2095E51E83BED2 /* PlaygroundTab.swift in Sources */,
 				10036F10C2BC644FA61A731F /* PresetBanner.swift in Sources */,
