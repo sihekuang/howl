@@ -97,6 +97,13 @@ struct HotkeyTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            if settings.hotkey.isModifierOnly,
+               !settings.hotkey.requiredModifiers.intersection([.shift, .command]).isEmpty {
+                Text("This key is also used in normal shortcuts — dictation will trigger whenever you hold it.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             if !conflicts.isEmpty {
                 Divider()
                 Label {
