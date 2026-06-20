@@ -2,6 +2,7 @@ package speaker
 
 import (
 	"fmt"
+	"math"
 )
 
 const (
@@ -59,4 +60,63 @@ func powersetToActivity(data []float32, shape []int64, hopSamples int) (SpeakerA
 		frames[f] = active
 	}
 	return SpeakerActivity{Frames: frames, FrameHopSamples: hopSamples}, nil
+}
+
+// buildFrameMask returns per-frame keep/drop for the target track. A frame is
+// kept whenever the target is active (including overlap with other speakers).
+func buildFrameMask(act SpeakerActivity, targetIdx int) []bool {
+	m := make([]bool, len(act.Frames))
+	for f, active := range act.Frames {
+		if targetIdx >= 0 && targetIdx < len(active) {
+			m[f] = active[targetIdx]
+		}
+	}
+	return m
+}
+
+// frameMaskToSamples upsamples a frame-level boolean mask to an n-sample gain
+// curve in [0,1], applying a raised-cosine fade of rampSamples at the start and
+// end of every active run (including the signal boundaries) to avoid clicks.
+// At the center of a long run the gain is exactly 1; at a run edge it is 0.
+func frameMaskToSamples(frameMask []bool, hopSamples, n, rampSamples int) []float32 {
+	gain := make([]float32, n)
+	if hopSamples <= 0 {
+		return gain
+	}
+	on := func(i int) bool {
+		if i < 0 || i >= n {
+			return false // off the ends of the signal → treat as inactive
+		}
+		f := i / hopSamples
+		return f < len(frameMask) && frameMask[f]
+	}
+	for i := 0; i < n; i++ {
+		if !on(i) {
+			continue
+		}
+		if rampSamples <= 0 {
+			gain[i] = 1
+			continue
+		}
+		// d = distance to the nearer edge of this active run, capped at
+		// rampSamples (symmetric expansion stops when either side turns off).
+		d := 0
+		for d < rampSamples && on(i-d-1) && on(i+d+1) {
+			d++
+		}
+		t := float64(d) / float64(rampSamples)
+		gain[i] = float32(0.5 * (1 - math.Cos(math.Pi*t)))
+	}
+	return gain
+}
+
+// applyMask multiplies mixed by gain element-wise. Returns a fresh slice.
+func applyMask(mixed, gain []float32) []float32 {
+	out := make([]float32, len(mixed))
+	for i := range mixed {
+		if i < len(gain) {
+			out[i] = mixed[i] * gain[i]
+		}
+	}
+	return out
 }
