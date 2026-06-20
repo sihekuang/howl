@@ -118,6 +118,33 @@ type DiarMaskOptions struct {
 }
 ```
 
+#### Interface compatibility and the `"tse"` name coupling
+
+The interfaces above are **identical** to `SpeakerGate`'s, so `diar_mask` is a
+drop-in via DI with no interface changes, and for the harness pass nothing else
+is needed (the matrix consumes `Cleanup` directly; `Name()` is just a row
+label). One caveat for the **later live-wiring** step: the pipeline does not
+dispatch purely on the interface — three call sites string-match the stage name
+`"tse"`:
+
+- `pipeline.go:156` — `if st.Name() == "tse"` then type-asserts
+  `LastSimilarity()` for event emission.
+- `manifest.go:52` — same guard, for the session manifest similarity.
+- `resolve.go:90,140` — the preset resolver only wires a chunk stage named
+  `"tse"`.
+
+Recommended live-wiring path (out of scope this pass, noted so the plan
+accounts for it): **keep the chunk-stage slot named `"tse"` and add `diar_mask`
+as a new `backend` value** — `{"name": "tse", "backend": "diar_mask"}`, mirroring
+the existing `{"name": "tse", "backend": "ecapa"}`. Then all three call sites
+work untouched and `LastSimilarity()` surfaces for free. The only real
+adjustment is that `Backend` (backend.go:17) models a combined-TSE-ONNX +
+encoder layout; `diar_mask` uses a segmentation-ONNX + encoder layout, so it
+needs a small `Backend` extension (a model-kind / segmentation-file field) or a
+construction branch — a config-descriptor change, **not** an interface change.
+(Alternatively, decouple by widening the two `LastSimilarity` guards to be
+type-driven rather than name-driven — a strict improvement.)
+
 ### 2. Algorithm (mask-select, per whole-utterance buffer)
 
 `Process(mixed)` operates on the full input buffer (a chunker emission in
