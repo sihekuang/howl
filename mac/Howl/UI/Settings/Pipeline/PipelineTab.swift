@@ -15,6 +15,9 @@ struct PipelineTab: View {
     let replay: any ReplayClient
     let audioCapture: any AudioCapture
     @Binding var settings: UserSettings
+    /// Owned by CompositionRoot — survives this view being recreated on
+    /// navigation, so the editor's preset pick sticks for the app run.
+    @ObservedObject var editorState: PipelineEditorState
     let navigateTo: (SettingsPage) -> Void
 
     @State private var selectedView: SubView = .editor
@@ -27,6 +30,7 @@ struct PipelineTab: View {
         replay: any ReplayClient,
         audioCapture: any AudioCapture,
         settings: Binding<UserSettings>,
+        editorState: PipelineEditorState,
         navigateTo: @escaping (SettingsPage) -> Void
     ) {
         self.engine = engine
@@ -35,6 +39,7 @@ struct PipelineTab: View {
         self.replay = replay
         self.audioCapture = audioCapture
         self._settings = settings
+        self.editorState = editorState
         self.navigateTo = navigateTo
         self._tseLabRecorder = StateObject(wrappedValue: TSELabRecorder(audioCapture: audioCapture))
     }
@@ -65,6 +70,7 @@ struct PipelineTab: View {
                     presets: presets,
                     sessions: sessions,
                     settings: $settings,
+                    editorState: editorState,
                     navigateTo: navigateTo
                 )
             case .compare:
