@@ -1,6 +1,7 @@
 package speaker
 
 import (
+	"context"
 	"math"
 	"reflect"
 	"testing"
@@ -142,5 +143,140 @@ func TestSelectTarget_SingleSpeakerNotOK(t *testing.T) {
 	}
 	if ok {
 		t.Errorf("ok=true, want false (only one track)")
+	}
+}
+
+// fakeSegmenter returns a scripted activity, ignoring audio content.
+type fakeSegmenter struct {
+	act SpeakerActivity
+}
+
+func (f *fakeSegmenter) Segment(_ context.Context, _ []float32) (SpeakerActivity, error) {
+	return f.act, nil
+}
+func (f *fakeSegmenter) Close() error { return nil }
+
+func newTestDiarMask(t *testing.T, seg Segmenter, embed func([]float32) ([]float32, error), fallback bool) *DiarMask {
+	t.Helper()
+	d, err := NewDiarMask(DiarMaskOptions{
+		Segmenter:           seg,
+		Embed:               embed,
+		Reference:           []float32{1, 0},
+		MinSelectCosine:     0.40,
+		MinExclusiveSeconds: 0, // 0 → any non-empty exclusive audio qualifies
+		FallbackPassthrough: fallback,
+		// BoundaryRampMs unset → defaults to 15 ms; assertions below sample
+		// run interiors, where gain is exactly 1 regardless of edge ramps.
+	})
+	if err != nil {
+		t.Fatalf("NewDiarMask: %v", err)
+	}
+	return d
+}
+
+func TestDiarMask_MasksNonTargetFramesKeepsTarget(t *testing.T) {
+	// hop = diarWindowLen / 4 so 4 frames cover a full 10 s window.
+	hop := diarWindowLen / 4
+	act := SpeakerActivity{
+		Frames: [][]bool{
+			{true, false, false},  // target only → keep
+			{true, true, false},   // overlap → keep
+			{false, true, false},  // interferer only → drop
+			{false, false, false}, // silence → drop
+		},
+		FrameHopSamples: hop,
+	}
+	embed := func(s []float32) ([]float32, error) {
+		// spk0 exclusive region is marked 0.5; spk1 region 0.9.
+		if len(s) > 0 && s[0] == 0.5 {
+			return []float32{1, 0}, nil
+		}
+		return []float32{0, 1}, nil
+	}
+	mixed := make([]float32, diarWindowLen)
+	for i := 0; i < hop; i++ {
+		mixed[i] = 0.5 // spk0 exclusive frame 0
+	}
+	for i := 2 * hop; i < 3*hop; i++ {
+		mixed[i] = 0.9 // spk1 exclusive frame 2
+	}
+	d := newTestDiarMask(t, &fakeSegmenter{act: act}, embed, true)
+	out, err := d.Process(context.Background(), mixed)
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if len(out) != len(mixed) {
+		t.Fatalf("len(out)=%d want %d", len(out), len(mixed))
+	}
+	// Sample run interiors (gain is exactly 1 inside an active run, 0 inside a
+	// dropped run) so the assertions are robust to the default edge ramp.
+	if out[hop/2] != 0.5 { // target frame kept verbatim
+		t.Errorf("target sample dropped: out[%d]=%f want 0.5", hop/2, out[hop/2])
+	}
+	if out[2*hop+hop/2] != 0 { // interferer frame silenced
+		t.Errorf("interferer sample kept: out[%d]=%f want 0", 2*hop+hop/2, out[2*hop+hop/2])
+	}
+	if got := d.LastSimilarity(); got < 0.99 {
+		t.Errorf("LastSimilarity=%f want ~1.0", got)
+	}
+}
+
+func TestDiarMask_SingleSpeakerPassesThrough(t *testing.T) {
+	hop := diarWindowLen / 2
+	act := SpeakerActivity{
+		Frames:          [][]bool{{true, false, false}, {true, false, false}},
+		FrameHopSamples: hop,
+	}
+	embed := func(s []float32) ([]float32, error) { return []float32{1, 0}, nil }
+	mixed := make([]float32, diarWindowLen)
+	for i := range mixed {
+		mixed[i] = 0.3
+	}
+	d := newTestDiarMask(t, &fakeSegmenter{act: act}, embed, true)
+	out, err := d.Process(context.Background(), mixed)
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	for i := range out {
+		if out[i] != mixed[i] {
+			t.Fatalf("single-speaker should pass through; out[%d]=%f", i, out[i])
+		}
+	}
+}
+
+func TestDiarMask_LowConfidenceFallbackPassthrough(t *testing.T) {
+	hop := diarWindowLen / 4
+	act := SpeakerActivity{
+		Frames: [][]bool{
+			{true, false, false}, {false, true, false},
+			{true, false, false}, {false, true, false},
+		},
+		FrameHopSamples: hop,
+	}
+	// Both tracks orthogonal to ref → best cos ~0 < MinSelectCosine.
+	embed := func(s []float32) ([]float32, error) { return []float32{0, 1}, nil }
+	mixed := make([]float32, diarWindowLen)
+	for i := range mixed {
+		mixed[i] = 0.2
+	}
+	d := newTestDiarMask(t, &fakeSegmenter{act: act}, embed, true)
+	out, err := d.Process(context.Background(), mixed)
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	for i := range out {
+		if out[i] != mixed[i] {
+			t.Fatalf("low-confidence should pass through; out[%d]=%f", i, out[i])
+		}
+	}
+}
+
+func TestDiarMask_InterfaceCompliance(t *testing.T) {
+	d := newTestDiarMask(t, &fakeSegmenter{}, func(s []float32) ([]float32, error) { return []float32{1, 0}, nil }, true)
+	if d.Name() != "diar_mask" {
+		t.Errorf("Name()=%q want diar_mask", d.Name())
+	}
+	if d.OutputRate() != 0 {
+		t.Errorf("OutputRate()=%d want 0", d.OutputRate())
 	}
 }

@@ -1,8 +1,11 @@
 package speaker
 
 import (
+	"context"
 	"fmt"
 	"math"
+
+	"github.com/voice-keyboard/core/internal/audio"
 )
 
 const (
@@ -120,6 +123,147 @@ func applyMask(mixed, gain []float32) []float32 {
 	}
 	return out
 }
+
+// Segmenter produces per-frame local-speaker activity for ONE ≤10 s window of
+// 16 kHz mono audio (implementations zero-pad short input to the model length).
+// DiarMask owns windowing across longer buffers.
+type Segmenter interface {
+	Segment(ctx context.Context, window []float32) (SpeakerActivity, error)
+	Close() error
+}
+
+// DiarMaskOptions configures NewDiarMask. See the design spec for semantics.
+type DiarMaskOptions struct {
+	Segmenter           Segmenter
+	Embed               func([]float32) ([]float32, error) // embeds 16 kHz mono → L2-normalised vector
+	Reference           []float32                          // enrolled L2-normalised embedding
+	MinSelectCosine     float32                            // below → low-confidence passthrough (default 0.40)
+	MinExclusiveSeconds float32                            // min exclusive speech to embed a track (default 0.75)
+	FallbackPassthrough bool                               // default true; false → mask even when low-confidence
+	BoundaryRampMs      int                                // raised-cosine ramp at mask edges (default 15)
+}
+
+// DiarMask is a Cleanup + audio.Stage that isolates the enrolled speaker by
+// time-masking the original audio (no separation, no threshold gate).
+type DiarMask struct {
+	opts           DiarMaskOptions
+	rampSamples    int
+	minExclusive   int
+	lastSimilarity float32
+}
+
+// NewDiarMask validates options and applies defaults.
+func NewDiarMask(opts DiarMaskOptions) (*DiarMask, error) {
+	if opts.Segmenter == nil {
+		return nil, fmt.Errorf("diarmask: nil Segmenter")
+	}
+	if opts.Embed == nil {
+		return nil, fmt.Errorf("diarmask: nil Embed")
+	}
+	if len(opts.Reference) == 0 {
+		return nil, fmt.Errorf("diarmask: empty Reference")
+	}
+	if opts.MinSelectCosine == 0 {
+		opts.MinSelectCosine = 0.40
+	}
+	if opts.BoundaryRampMs == 0 {
+		opts.BoundaryRampMs = 15
+	}
+	return &DiarMask{
+		opts:           opts,
+		rampSamples:    opts.BoundaryRampMs * diarSampleRate / 1000,
+		minExclusive:   int(opts.MinExclusiveSeconds * float32(diarSampleRate)),
+		lastSimilarity: 1.0,
+	}, nil
+}
+
+func (d *DiarMask) Name() string    { return "diar_mask" }
+func (d *DiarMask) OutputRate() int { return 0 }
+
+// LastSimilarity returns the best target-track cosine observed in the last
+// Process call (1.0 when every window passed through).
+func (d *DiarMask) LastSimilarity() float32 {
+	if d == nil {
+		return 0
+	}
+	return d.lastSimilarity
+}
+
+// Close releases the segmenter.
+func (d *DiarMask) Close() error {
+	if d == nil || d.opts.Segmenter == nil {
+		return nil
+	}
+	return d.opts.Segmenter.Close()
+}
+
+// Process masks the enrolled speaker's audio out of mixed. Returns same-length
+// 16 kHz mono. Windows of diarWindowLen are processed independently; per-window
+// masks are concatenated.
+func (d *DiarMask) Process(ctx context.Context, mixed []float32) ([]float32, error) {
+	gain := make([]float32, len(mixed))
+	bestCos := float32(-2)
+	sawSelection := false
+	for start := 0; start < len(mixed); start += diarWindowLen {
+		end := start + diarWindowLen
+		if end > len(mixed) {
+			end = len(mixed)
+		}
+		window := mixed[start:end]
+		winGain, cos, selected, err := d.processWindow(ctx, window)
+		if err != nil {
+			return nil, err
+		}
+		copy(gain[start:end], winGain)
+		if selected {
+			sawSelection = true
+			if cos > bestCos {
+				bestCos = cos
+			}
+		}
+	}
+	if sawSelection {
+		d.lastSimilarity = bestCos
+	} else {
+		d.lastSimilarity = 1.0
+	}
+	return applyMask(mixed, gain), nil
+}
+
+// processWindow returns the gain curve for one window plus the selection cosine
+// (selected=false → all-ones passthrough gain).
+func (d *DiarMask) processWindow(ctx context.Context, window []float32) ([]float32, float32, bool, error) {
+	passthrough := func() []float32 {
+		g := make([]float32, len(window))
+		for i := range g {
+			g[i] = 1
+		}
+		return g
+	}
+	act, err := d.opts.Segmenter.Segment(ctx, window)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("diarmask: segment: %w", err)
+	}
+	idx, cos, ok, err := selectTarget(act, window, d.opts.Embed, d.opts.Reference, d.minExclusive)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	// Single-track (or nothing qualifies) → keep everything.
+	if !ok || idx < 0 {
+		return passthrough(), 0, false, nil
+	}
+	// Low-confidence → keep everything when fallback is on.
+	if cos < d.opts.MinSelectCosine && d.opts.FallbackPassthrough {
+		return passthrough(), cos, false, nil
+	}
+	frameMask := buildFrameMask(act, idx)
+	g := frameMaskToSamples(frameMask, act.FrameHopSamples, len(window), d.rampSamples)
+	return g, cos, true, nil
+}
+
+// Compile-time interface checks.
+var _ Cleanup = (*DiarMask)(nil)
+var _ audio.Stage = (*DiarMask)(nil)
 
 // selectTarget embeds each local speaker's exclusive-frame audio and returns
 // the track whose embedding has the highest cosine to ref. ok is false when
