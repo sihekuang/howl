@@ -5,6 +5,7 @@ package speaker
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,7 +40,7 @@ type adapterFactory struct {
 	build func(t *testing.T, refEmb []float32, encoderPath string) Cleanup
 }
 
-func cleanupAdapters(encoderPath, tsePath, pyannotePath string) []adapterFactory {
+func cleanupAdapters(encoderPath, tsePath, pyannotePath, pyannoteSegPath string) []adapterFactory {
 	return []adapterFactory{
 		{
 			name: "passthrough",
@@ -73,6 +74,36 @@ func cleanupAdapters(encoderPath, tsePath, pyannotePath string) []adapterFactory
 					return nil
 				}
 				return a
+			},
+		},
+		{
+			name: "diar_mask",
+			build: func(t *testing.T, ref []float32, encPath string) Cleanup {
+				if pyannoteSegPath == "" {
+					return nil
+				}
+				seg, err := NewPyannoteSegmenter(pyannoteSegPath)
+				if err != nil {
+					t.Logf("diar_mask segmenter unavailable: %v", err)
+					return nil
+				}
+				d, err := NewDiarMask(DiarMaskOptions{
+					Segmenter: seg,
+					Embed: func(s []float32) ([]float32, error) {
+						return ComputeEmbedding(encPath, s, 192)
+					},
+					Reference:           ref,
+					MinSelectCosine:     0.40,
+					MinExclusiveSeconds: 0.75,
+					FallbackPassthrough: true,
+					BoundaryRampMs:      15,
+				})
+				if err != nil {
+					t.Logf("diar_mask unavailable: %v", err)
+					_ = seg.Close()
+					return nil
+				}
+				return d
 			},
 		},
 	}
@@ -122,6 +153,7 @@ func TestCleanup_Matrix(t *testing.T) {
 	whisperPath := resolveModelPath(t, "WHISPER_MODEL_PATH", "ggml-small.bin")
 	tsePath := optionalModelPath("TSE_MODEL_PATH", "tse_model.onnx")
 	pyannotePath := optionalModelPath("PYANNOTE_SEP_PATH", "pyannote_sep.onnx")
+	pyannoteSegPath := optionalModelPath("PYANNOTE_SEG_PATH", "pyannote_seg.onnx")
 	initONNXOnce(t)
 
 	transcriber, err := transcribe.NewWhisperCpp(transcribe.WhisperOptions{
@@ -138,13 +170,13 @@ func TestCleanup_Matrix(t *testing.T) {
 
 	for _, fix := range fixtures {
 		t.Run(fix.Name(), func(t *testing.T) {
-			runMatrixForFixture(t, fix, noise.Samples, encoderPath, tsePath, pyannotePath, transcriber)
+			runMatrixForFixture(t, fix, noise.Samples, encoderPath, tsePath, pyannotePath, pyannoteSegPath, transcriber)
 		})
 	}
 }
 
 func runMatrixForFixture(t *testing.T, fix voiceFixture, noise []float32,
-	encoderPath, tsePath, pyannotePath string, transcriber transcribe.Transcriber) {
+	encoderPath, tsePath, pyannotePath, pyannoteSegPath string, transcriber transcribe.Transcriber) {
 	t.Helper()
 	a, b := fix.Voices(t)
 	transcriptA, _ := fix.(*libriSpeechFixture).Transcripts(t)
@@ -166,43 +198,43 @@ func runMatrixForFixture(t *testing.T, fix voiceFixture, noise []float32,
 	}
 
 	conds := matrixConditions()
-	adapters := cleanupAdapters(encoderPath, tsePath, pyannotePath)
+	adapters := cleanupAdapters(encoderPath, tsePath, pyannotePath, pyannoteSegPath)
 
 	t.Logf("\nMatrix: fixture=%s  target=A  reference voice clip = %s", fix.Name(), a.Label)
-	t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %s",
-		"candidate", "condition", "simT", "simI", "margin", "RMSr", "WER%", "notes")
-	t.Logf("%s", "---------------------+--------------------------------+---------+---------+---------+--------+--------+------")
+	t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %-6s | %s",
+		"candidate", "condition", "simT", "simI", "margin", "RMSr", "reten", "WER%", "notes")
+	t.Logf("%s", "---------------------+--------------------------------+---------+---------+---------+--------+--------+--------+------")
 
 	for _, cnd := range conds {
 		mixed := cnd.build(a.Samples, b.Samples, noise)
 		for _, fac := range adapters {
 			adapter := fac.build(t, embA, encoderPath)
 			if adapter == nil {
-				t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %s",
-					fac.name, cnd.label, "—", "—", "—", "—", "—", "skipped (model unavailable)")
+				t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %-6s | %s",
+					fac.name, cnd.label, "—", "—", "—", "—", "—", "—", "skipped (model unavailable)")
 				continue
 			}
-			rowLogger(t, fac.name, cnd.label, adapter, mixed, embA, embB, transcriptA, encoderPath, transcriber)
+			rowLogger(t, fac.name, cnd.label, adapter, mixed, a.Samples, embA, embB, transcriptA, encoderPath, transcriber)
 			_ = adapter.Close()
 		}
 	}
 }
 
 func rowLogger(t *testing.T, name, condLabel string, adapter Cleanup,
-	mixed, embA, embB []float32, transcriptA, encoderPath string, transcriber transcribe.Transcriber) {
+	mixed, cleanTarget, embA, embB []float32, transcriptA, encoderPath string, transcriber transcribe.Transcriber) {
 	t.Helper()
 
 	out, err := adapter.Process(context.Background(), mixed)
 	if err != nil {
-		t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | error: %v",
-			name, condLabel, "—", "—", "—", "—", "—", err)
+		t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %-6s | error: %v",
+			name, condLabel, "—", "—", "—", "—", "—", "—", err)
 		return
 	}
 
 	cleanedEmb, err := ComputeEmbedding(encoderPath, out, 192)
 	if err != nil {
-		t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | embed error: %v",
-			name, condLabel, "—", "—", "—", "—", "—", err)
+		t.Logf("%-20s | %-30s | %-7s | %-7s | %-7s | %-6s | %-6s | %-6s | embed error: %v",
+			name, condLabel, "—", "—", "—", "—", "—", "—", err)
 		return
 	}
 	simT := cosineSimilarity(cleanedEmb, embA)
@@ -214,11 +246,12 @@ func rowLogger(t *testing.T, name, condLabel string, adapter Cleanup,
 	if rmsIn > 0 {
 		rmsRatio = rmsOut / rmsIn
 	}
+	retention := evaluateRetention(out, cleanTarget)
 
 	werRes := evaluateWER(t, out, transcriptA, transcriber)
 
-	t.Logf("%-20s | %-30s | %7.4f | %7.4f | %+7.4f | %6.3f | %6.2f | hyp=%q",
-		name, condLabel, simT, simI, margin, rmsRatio, werRes.WER*100, werRes.Hypothesis)
+	t.Logf("%-20s | %-30s | %7.4f | %7.4f | %+7.4f | %6.3f | %6.3f | %6.2f | hyp=%q",
+		name, condLabel, simT, simI, margin, rmsRatio, retention, werRes.WER*100, werRes.Hypothesis)
 
 	// Diagnostic gates (rubric, not pass/fail). Logged when triggered.
 	if simT < 0.40 {
@@ -230,4 +263,62 @@ func rowLogger(t *testing.T, name, condLabel string, adapter Cleanup,
 
 	// Tag-only fmt usage to keep imports honest if other formatting is removed later.
 	_ = fmt.Sprintf
+}
+
+// evaluateRetention measures how much of the clean target's own speech energy
+// survives in out. 1.0 = nothing of the target was cut; 0.0 = target silenced.
+// Only frames where the clean target is voiced count, so interferer-only
+// regions don't dilute the score.
+func evaluateRetention(out, cleanTarget []float32) float32 {
+	n := len(out)
+	if len(cleanTarget) < n {
+		n = len(cleanTarget)
+	}
+	if n == 0 {
+		return 0
+	}
+	// Voiced threshold: 10% of the clean target's global RMS.
+	thr := rms(cleanTarget[:n]) * 0.1
+	var num, den float64
+	const frame = 320 // 20 ms @ 16 kHz
+	for start := 0; start < n; start += frame {
+		end := start + frame
+		if end > n {
+			end = n
+		}
+		seg := cleanTarget[start:end]
+		if rms(seg) < thr {
+			continue // unvoiced target frame — skip
+		}
+		for i := start; i < end; i++ {
+			den += float64(cleanTarget[i]) * float64(cleanTarget[i])
+			num += float64(out[i]) * float64(out[i])
+		}
+	}
+	if den == 0 {
+		return 0
+	}
+	r := num / den
+	if r < 0 {
+		r = 0
+	}
+	return float32(math.Sqrt(r))
+}
+
+func TestEvaluateRetention_FullKeepIsOne(t *testing.T) {
+	target := []float32{0, 0.5, 0, 0.7, 0, 0.3}
+	// out == cleanTarget over its voiced samples → retention ~1.0
+	got := evaluateRetention(target, target)
+	if got < 0.99 || got > 1.01 {
+		t.Errorf("retention=%f want ~1.0", got)
+	}
+}
+
+func TestEvaluateRetention_SilencedTargetIsZero(t *testing.T) {
+	target := []float32{0, 0.5, 0, 0.7, 0, 0.3}
+	out := make([]float32, len(target)) // everything cut
+	got := evaluateRetention(out, target)
+	if got > 0.01 {
+		t.Errorf("retention=%f want ~0.0", got)
+	}
 }
