@@ -120,3 +120,54 @@ func applyMask(mixed, gain []float32) []float32 {
 	}
 	return out
 }
+
+// selectTarget embeds each local speaker's exclusive-frame audio and returns
+// the track whose embedding has the highest cosine to ref. ok is false when
+// fewer than two tracks have enough exclusive audio to embed (nothing to
+// separate → caller should pass through).
+func selectTarget(act SpeakerActivity, window []float32, embed func([]float32) ([]float32, error), ref []float32, minExclusiveSamples int) (int, float32, bool, error) {
+	hop := act.FrameHopSamples
+	// Gather exclusive samples per speaker.
+	exclusive := make([][]float32, diarMaxSpeakers)
+	for f, active := range act.Frames {
+		count := 0
+		only := -1
+		for spk, on := range active {
+			if on {
+				count++
+				only = spk
+			}
+		}
+		if count != 1 {
+			continue // non-speech or overlap → not exclusive
+		}
+		start := f * hop
+		end := start + hop
+		if start >= len(window) {
+			break
+		}
+		if end > len(window) {
+			end = len(window)
+		}
+		exclusive[only] = append(exclusive[only], window[start:end]...)
+	}
+	bestIdx, bestCos, qualifying := -1, float32(-2), 0
+	for spk := 0; spk < diarMaxSpeakers; spk++ {
+		if len(exclusive[spk]) == 0 || len(exclusive[spk]) < minExclusiveSamples {
+			continue // never embed an empty track (ComputeEmbedding rejects empty input)
+		}
+		qualifying++
+		emb, err := embed(exclusive[spk])
+		if err != nil {
+			return 0, 0, false, fmt.Errorf("diarmask: embed track %d: %w", spk, err)
+		}
+		c := cosineSimilarity(ref, emb)
+		if c > bestCos {
+			bestCos, bestIdx = c, spk
+		}
+	}
+	if qualifying < 2 {
+		return bestIdx, bestCos, false, nil
+	}
+	return bestIdx, bestCos, true, nil
+}

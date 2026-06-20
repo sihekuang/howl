@@ -86,3 +86,61 @@ func TestApplyMask_ScalesAndCopies(t *testing.T) {
 		t.Errorf("applyMask aliased input")
 	}
 }
+
+func TestSelectTarget_PicksHighestCosineTrack(t *testing.T) {
+	// Frames: spk0 exclusive on [0,2), spk1 exclusive on [2,4). hop=100 → 200 samples each.
+	act := SpeakerActivity{
+		Frames: [][]bool{
+			{true, false, false}, {true, false, false},
+			{false, true, false}, {false, true, false},
+		},
+		FrameHopSamples: 100,
+	}
+	window := make([]float32, 400)
+	ref := []float32{1, 0}
+	embed := func(s []float32) ([]float32, error) {
+		// Embedding encodes which half had energy via length heuristic:
+		// caller hands us spk0's samples (idx 0..199) vs spk1's (200..399).
+		// We can't see indices, so key off a marker: spk0 region is all 0.25,
+		// spk1 region all 0.75 (set below).
+		if s[0] == 0.25 {
+			return []float32{1, 0}, nil // matches ref
+		}
+		return []float32{0, 1}, nil // orthogonal to ref
+	}
+	for i := 0; i < 200; i++ {
+		window[i] = 0.25
+	}
+	for i := 200; i < 400; i++ {
+		window[i] = 0.75
+	}
+	idx, cos, ok, err := selectTarget(act, window, embed, ref, 100)
+	if err != nil {
+		t.Fatalf("selectTarget: %v", err)
+	}
+	if !ok {
+		t.Fatalf("ok=false, want true (two qualifying tracks)")
+	}
+	if idx != 0 {
+		t.Errorf("idx=%d want 0 (spk0 matches ref)", idx)
+	}
+	if cos < 0.99 {
+		t.Errorf("cos=%f want ~1.0", cos)
+	}
+}
+
+func TestSelectTarget_SingleSpeakerNotOK(t *testing.T) {
+	act := SpeakerActivity{
+		Frames:          [][]bool{{true, false, false}, {true, false, false}},
+		FrameHopSamples: 100,
+	}
+	window := make([]float32, 200)
+	embed := func(s []float32) ([]float32, error) { return []float32{1, 0}, nil }
+	_, _, ok, err := selectTarget(act, window, embed, []float32{1, 0}, 100)
+	if err != nil {
+		t.Fatalf("selectTarget: %v", err)
+	}
+	if ok {
+		t.Errorf("ok=true, want false (only one track)")
+	}
+}
