@@ -99,7 +99,6 @@ Expected: FAIL — `undefined: powersetToActivity` / `SpeakerActivity`.
 package speaker
 
 import (
-	"context"
 	"fmt"
 )
 
@@ -159,9 +158,6 @@ func powersetToActivity(data []float32, shape []int64, hopSamples int) (SpeakerA
 	}
 	return SpeakerActivity{Frames: frames, FrameHopSamples: hopSamples}, nil
 }
-
-// Ensures context import is used by later steps in this file.
-var _ = context.Background
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -272,46 +268,39 @@ func buildFrameMask(act SpeakerActivity, targetIdx int) []bool {
 }
 
 // frameMaskToSamples upsamples a frame-level boolean mask to an n-sample gain
-// curve in [0,1], applying raised-cosine ramps of rampSamples at each on/off
-// transition to avoid clicks.
+// curve in [0,1], applying a raised-cosine fade of rampSamples at the start and
+// end of every active run (including the signal boundaries) to avoid clicks.
+// At the center of a long run the gain is exactly 1; at a run edge it is 0.
 func frameMaskToSamples(frameMask []bool, hopSamples, n, rampSamples int) []float32 {
 	gain := make([]float32, n)
 	if hopSamples <= 0 {
 		return gain
 	}
-	for i := 0; i < n; i++ {
-		f := i / hopSamples
-		if f < len(frameMask) && frameMask[f] {
-			gain[i] = 1
+	on := func(i int) bool {
+		if i < 0 || i >= n {
+			return false // off the ends of the signal → treat as inactive
 		}
+		f := i / hopSamples
+		return f < len(frameMask) && frameMask[f]
 	}
-	if rampSamples <= 0 {
-		return gain
-	}
-	// Raised-cosine ramp across each rising/falling edge, centered on the edge.
-	smooth := make([]float32, n)
-	copy(smooth, gain)
-	for i := 1; i < n; i++ {
-		if gain[i] == gain[i-1] {
+	for i := 0; i < n; i++ {
+		if !on(i) {
 			continue
 		}
-		rising := gain[i] > gain[i-1]
-		for k := 0; k < rampSamples; k++ {
-			// position within the ramp, 0..1
-			t := (float64(k) + 0.5) / float64(rampSamples)
-			rc := float32(0.5 * (1 - math.Cos(math.Pi*t)))
-			up := i - rampSamples/2 + k
-			if up < 0 || up >= n {
-				continue
-			}
-			if rising {
-				smooth[up] = rc
-			} else {
-				smooth[up] = 1 - rc
-			}
+		if rampSamples <= 0 {
+			gain[i] = 1
+			continue
 		}
+		// d = distance to the nearer edge of this active run, capped at
+		// rampSamples (symmetric expansion stops when either side turns off).
+		d := 0
+		for d < rampSamples && on(i-d-1) && on(i+d+1) {
+			d++
+		}
+		t := float64(d) / float64(rampSamples)
+		gain[i] = float32(0.5 * (1 - math.Cos(math.Pi*t)))
 	}
-	return smooth
+	return gain
 }
 
 // applyMask multiplies mixed by gain element-wise. Returns a fresh slice.
@@ -456,8 +445,8 @@ func selectTarget(act SpeakerActivity, window []float32, embed func([]float32) (
 	}
 	bestIdx, bestCos, qualifying := -1, float32(-2), 0
 	for spk := 0; spk < diarMaxSpeakers; spk++ {
-		if len(exclusive[spk]) < minExclusiveSamples {
-			continue
+		if len(exclusive[spk]) == 0 || len(exclusive[spk]) < minExclusiveSamples {
+			continue // never embed an empty track (ComputeEmbedding rejects empty input)
 		}
 		qualifying++
 		emb, err := embed(exclusive[spk])
@@ -528,9 +517,10 @@ func newTestDiarMask(t *testing.T, seg Segmenter, embed func([]float32) ([]float
 		Embed:               embed,
 		Reference:           []float32{1, 0},
 		MinSelectCosine:     0.40,
-		MinExclusiveSeconds: 0, // 0 → any exclusive audio qualifies, simplifies tests
+		MinExclusiveSeconds: 0, // 0 → any non-empty exclusive audio qualifies
 		FallbackPassthrough: fallback,
-		BoundaryRampMs:      0, // no ramp → exact 0/1 gains in assertions
+		// BoundaryRampMs unset → defaults to 15 ms; assertions below sample
+		// run interiors, where gain is exactly 1 regardless of edge ramps.
 	})
 	if err != nil {
 		t.Fatalf("NewDiarMask: %v", err)
@@ -572,11 +562,13 @@ func TestDiarMask_MasksNonTargetFramesKeepsTarget(t *testing.T) {
 	if len(out) != len(mixed) {
 		t.Fatalf("len(out)=%d want %d", len(out), len(mixed))
 	}
-	if out[0] != 0.5 { // target frame kept verbatim
-		t.Errorf("target sample dropped: out[0]=%f want 0.5", out[0])
+	// Sample run interiors (gain is exactly 1 inside an active run, 0 inside a
+	// dropped run) so the assertions are robust to the default edge ramp.
+	if out[hop/2] != 0.5 { // target frame kept verbatim
+		t.Errorf("target sample dropped: out[%d]=%f want 0.5", hop/2, out[hop/2])
 	}
-	if out[2*hop] != 0 { // interferer frame silenced
-		t.Errorf("interferer sample kept: out[%d]=%f want 0", 2*hop, out[2*hop])
+	if out[2*hop+hop/2] != 0 { // interferer frame silenced
+		t.Errorf("interferer sample kept: out[%d]=%f want 0", 2*hop+hop/2, out[2*hop+hop/2])
 	}
 	if got := d.LastSimilarity(); got < 0.99 {
 		t.Errorf("LastSimilarity=%f want ~1.0", got)
@@ -796,7 +788,7 @@ var _ Cleanup = (*DiarMask)(nil)
 var _ audio.Stage = (*DiarMask)(nil)
 ```
 
-Add `"github.com/voice-keyboard/core/internal/audio"` to the import block in `diarmask.go`, and remove the temporary `var _ = context.Background` line from Task 1 (context is now used by real methods).
+Update the import block in `diarmask.go` to add `"context"` (first used here, by the `Segmenter` interface and the `Process`/`processWindow` signatures) and `"github.com/voice-keyboard/core/internal/audio"` (for the `audio.Stage` compile-time check). After this task the block is: `"context"`, `"fmt"`, `"math"`, `"github.com/voice-keyboard/core/internal/audio"`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1055,27 +1047,11 @@ func evaluateRetention(out, cleanTarget []float32) float32 {
 	if r < 0 {
 		r = 0
 	}
-	return float32(mathSqrt(r))
-}
-
-// mathSqrt avoids adding a new import if math is already imported in the file;
-// if math is imported, replace mathSqrt(r) with math.Sqrt(r) and delete this.
-func mathSqrt(x float64) float64 {
-	// Newton's method is overkill; cleanup_eval_test.go may already import math.
-	// Prefer: import "math" and use math.Sqrt. This shim only exists so the
-	// step is self-contained.
-	guess := x
-	if guess == 0 {
-		return 0
-	}
-	for i := 0; i < 40; i++ {
-		guess = 0.5 * (guess + x/guess)
-	}
-	return guess
+	return float32(math.Sqrt(r))
 }
 ```
 
-NOTE for the implementer: `cleanup_eval_test.go` does not currently import `math`. Either add `"math"` to its import block and replace `mathSqrt(r)` with `math.Sqrt(r)` (delete the shim), or keep the shim. Prefer the real import.
+Add `"math"` to the import block of `cleanup_eval_test.go` (it is not currently imported).
 
 - [ ] **Step 4: Register the `diar_mask` adapter and thread the clean target + retention column**
 
