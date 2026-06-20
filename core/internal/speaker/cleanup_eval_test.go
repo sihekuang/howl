@@ -322,3 +322,31 @@ func TestEvaluateRetention_SilencedTargetIsZero(t *testing.T) {
 		t.Errorf("retention=%f want ~0.0", got)
 	}
 }
+
+func TestEvaluateRetention_PartialKeepIsBetween(t *testing.T) {
+	// Build a clearly-voiced target: 16 frames of 320 samples each, all above threshold.
+	const frameSize = 320
+	const nFrames = 16
+	target := make([]float32, frameSize*nFrames)
+	for i := range target {
+		// Alternating +/-0.5 to ensure rms is well above the 10% threshold.
+		if i%2 == 0 {
+			target[i] = 0.5
+		} else {
+			target[i] = -0.5
+		}
+	}
+
+	// out preserves the first half of frames and zeros the second half.
+	out := make([]float32, len(target))
+	copy(out[:frameSize*(nFrames/2)], target[:frameSize*(nFrames/2)])
+	// second half stays zero
+
+	got := evaluateRetention(out, target)
+	// Retention = sqrt(kept_energy / total_energy).
+	// Half the frames kept → kept_energy / total_energy = 0.5 → retention = ~0.707.
+	// We assert a robust range: strictly between 0.3 and 0.95.
+	if got <= 0.3 || got >= 0.95 {
+		t.Errorf("partial retention=%f; want strictly between 0.3 and 0.95", got)
+	}
+}

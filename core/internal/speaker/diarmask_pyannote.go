@@ -57,12 +57,9 @@ func (s *pyannoteSegmenter) Segment(_ context.Context, window []float32) (Speake
 	defer outT.Destroy()
 
 	shape := outT.GetShape()
-	numFrames := 1
-	for _, dPart := range shape[:len(shape)-1] {
-		numFrames *= int(dPart)
-	}
-	if numFrames <= 0 {
-		return SpeakerActivity{}, fmt.Errorf("pyannote_seg: bad output shape %v", shape)
+	numFrames, err := framesFromShape(shape)
+	if err != nil {
+		return SpeakerActivity{}, err
 	}
 	hop := diarWindowLen / numFrames
 	return powersetToActivity(outT.GetData(), shape, hop)
@@ -75,6 +72,24 @@ func (s *pyannoteSegmenter) Close() error {
 	err := s.session.Destroy()
 	s.session = nil
 	return err
+}
+
+// framesFromShape derives the number of output frames from an ONNX output shape.
+// It requires at least two dimensions (the last is the class dim) and every
+// dimension must be positive. Returns the product of all dims except the last.
+// For shape [1, 625, 7] it returns 625.
+func framesFromShape(shape []int64) (int, error) {
+	if len(shape) < 2 {
+		return 0, fmt.Errorf("pyannote_seg: output rank %d < 2 (shape %v)", len(shape), shape)
+	}
+	numFrames := 1
+	for _, d := range shape[:len(shape)-1] {
+		if d <= 0 {
+			return 0, fmt.Errorf("pyannote_seg: non-positive dimension %d in shape %v", d, shape)
+		}
+		numFrames *= int(d)
+	}
+	return numFrames, nil
 }
 
 // Compile-time interface check.

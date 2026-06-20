@@ -271,6 +271,38 @@ func TestDiarMask_LowConfidenceFallbackPassthrough(t *testing.T) {
 	}
 }
 
+func TestFramesFromShape(t *testing.T) {
+	cases := []struct {
+		name    string
+		shape   []int64
+		want    int
+		wantErr bool
+	}{
+		{name: "normal [1,625,7]", shape: []int64{1, 625, 7}, want: 625, wantErr: false},
+		{name: "empty shape", shape: []int64{}, want: 0, wantErr: true},
+		{name: "rank-1 [7]", shape: []int64{7}, want: 0, wantErr: true},
+		{name: "negative dim [1,-3,7]", shape: []int64{1, -3, 7}, want: 0, wantErr: true},
+		{name: "zero dim [1,0,7]", shape: []int64{1, 0, 7}, want: 0, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := framesFromShape(tc.shape)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("framesFromShape(%v) = %d, nil; want error", tc.shape, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("framesFromShape(%v): unexpected error: %v", tc.shape, err)
+			}
+			if got != tc.want {
+				t.Errorf("framesFromShape(%v) = %d, want %d", tc.shape, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDiarMask_InterfaceCompliance(t *testing.T) {
 	d := newTestDiarMask(t, &fakeSegmenter{}, func(s []float32) ([]float32, error) { return []float32{1, 0}, nil }, true)
 	if d.Name() != "diar_mask" {
