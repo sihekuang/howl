@@ -31,6 +31,12 @@ DIAR_SYNTH_DUMP_DIR="$OUT" go test -tags cleanupeval ./internal/speaker/ \
 DIAR_SYNTH_HTML="$HTML" go test -tags cleanupeval ./internal/speaker/ \
   -run TestDiarMask_SynthHTML -count=1
 
+# WER sweep (SNR + multi-voice) — the decisive transcription metric. Needs the
+# whispercpp build + a whisper model (WHISPER_MODEL_PATH or ggml-small.en.bin).
+go test -tags 'cleanupeval whispercpp' ./internal/speaker/ \
+  -run TestDiarMask_WERSweep -v -count=1 2>&1 | grep -E 'WER sweep|condition|----|clean|overlap|intermittent|heard|lower WER' || \
+  echo "(WER sweep skipped — set WHISPER_MODEL_PATH / build whispercpp)"
+
 echo
 echo "WAVs:        $OUT  (mixed.wav, diar_mask.wav, tse.wav, cleanA.wav)"
 echo "Comparison:  $HTML"
