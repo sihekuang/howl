@@ -4,22 +4,34 @@
 # Synthesizes two distinct speakers with macOS `say`, mixes them on a known
 # timeline (target solo / overlap / interferer solo / target solo), and runs
 # diar_mask (oracle segmenter + real ECAPA cosine selection) head-to-head with
-# the TSE baseline — printing a retention / interferer-leakage / cosine table.
-# Also writes mixed/diar_mask/tse/cleanA WAVs you can listen to.
+# the TSE baseline. Produces:
+#   - a metrics table in the console (retention / interferer-leak / cosine),
+#   - per-stage WAVs you can listen to (mixed/diar_mask/tse/cleanA),
+#   - a self-contained stage-by-stage comparison HTML (opened at the end).
 #
-# Requirements (all already present on a dev Mac): `say`, `ffmpeg`, the
-# onnxruntime dylib, and speaker_encoder.onnx + tse_model.onnx resolvable via
-# ~/Library/Application Support/Howl/models (or the *_PATH env vars). The test
-# skips cleanly if any are missing.
+# Requirements (already present on a dev Mac): `say`, `ffmpeg`, the onnxruntime
+# dylib, and speaker_encoder.onnx + tse_model.onnx resolvable via
+# ~/Library/Application Support/Howl/models (or the *_PATH env vars). The tests
+# skip cleanly if any are missing.
 #
-# Usage: scripts/diar-synth-eval.sh [DUMP_DIR]
+# Usage: scripts/diar-synth-eval.sh [OUT_DIR]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DUMP="${1:-${TMPDIR:-/tmp}/diar-synth-out}"
-mkdir -p "$DUMP"
-echo "diar_mask synthesized-audio eval — WAV dump -> $DUMP"
+OUT="${1:-${TMPDIR:-/tmp}/diar-synth-out}"
+mkdir -p "$OUT"
+HTML="$OUT/diar-compare.html"
+echo "diar_mask synthesized-audio eval — output -> $OUT"
 cd "$ROOT/core"
-DIAR_SYNTH_DUMP_DIR="$DUMP" go test -tags cleanupeval ./internal/speaker/ \
+
+# Metrics table + WAV dump.
+DIAR_SYNTH_DUMP_DIR="$OUT" go test -tags cleanupeval ./internal/speaker/ \
   -run TestDiarMask_SynthEndToEnd -v -count=1
+
+# Stage-by-stage comparison HTML.
+DIAR_SYNTH_HTML="$HTML" go test -tags cleanupeval ./internal/speaker/ \
+  -run TestDiarMask_SynthHTML -count=1
+
 echo
-echo "Listen: open \"$DUMP\"   (mixed.wav, diar_mask.wav, tse.wav, cleanA.wav)"
+echo "WAVs:        $OUT  (mixed.wav, diar_mask.wav, tse.wav, cleanA.wav)"
+echo "Comparison:  $HTML"
+command -v open >/dev/null 2>&1 && open "$HTML" || echo "Open $HTML in a browser."
