@@ -13,6 +13,10 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
     public static let kVK_Space: UInt16 = 49
     public static let kVK_Escape: UInt16 = 53
     public static let kVK_Function: UInt16 = 63
+    /// Sentinel keyCode meaning "no base key" — a modifier-only trigger
+    /// (Control/Option/Command/Shift held alone). fn-based triggers do NOT
+    /// use this; they keep `kVK_Function`. Must never carry `.fn`.
+    public static let kVK_None: UInt16 = 0xFFFF
 
     public static let defaultPTT = KeyboardShortcut(
         keyCode: kVK_Space,
@@ -38,7 +42,34 @@ public struct KeyboardShortcut: Codable, Equatable, Sendable {
         keyCode != Self.kVK_Function && modifiers.contains(.fn)
     }
 
+    /// True for any trigger with no base key: bare modifiers (`kVK_None`) or
+    /// the legacy fn-alone / fn+modifier form (`kVK_Function`). Both are
+    /// watched via the CGEventTap flagsChanged path, not Carbon RegisterEventHotKey.
+    public var isModifierOnly: Bool {
+        keyCode == Self.kVK_None || keyCode == Self.kVK_Function
+    }
+
+    /// The full modifier set the runtime tap must see held. `kVK_Function`
+    /// implies `.fn` (fn is encoded in the keyCode, not the modifier set).
+    public var requiredModifiers: ModifierFlags {
+        keyCode == Self.kVK_Function ? modifiers.union(.fn) : modifiers
+    }
+
+    /// True for any trigger handled by the CGEventTap rather than Carbon:
+    /// modifier-only holds and fn+letter combos.
+    public var usesEventTap: Bool {
+        isModifierOnly || isFnLetterCombo
+    }
+
     public var displayString: String {
+        if keyCode == Self.kVK_None {
+            var s = ""
+            if modifiers.contains(.control) { s += "⌃" }
+            if modifiers.contains(.option)  { s += "⌥" }
+            if modifiers.contains(.shift)   { s += "⇧" }
+            if modifiers.contains(.command) { s += "⌘" }
+            return s.isEmpty ? "None" : s
+        }
         if isFnBased {
             if isFnLetterCombo {
                 return "fn \(keyName)"

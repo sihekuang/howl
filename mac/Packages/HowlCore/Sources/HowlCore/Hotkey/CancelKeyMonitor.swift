@@ -4,9 +4,11 @@ import os
 
 private let log = Logger(subsystem: "com.howl.app", category: "CancelKey")
 
-/// Watches for ANY key globally while a dictation cycle is active — both
-/// recording and processing — and fires `onCancel`, which aborts the whole
-/// pipeline.
+/// Watches for any fresh keypress globally while a dictation cycle is active —
+/// both recording and processing — and fires `onCancel`, which aborts the whole
+/// pipeline. "Fresh" excludes OS auto-repeat: a held push-to-talk combo's base
+/// key repeats while held, and those repeats must not cancel the dictation they
+/// triggered (see `shouldCancel`).
 ///
 /// Uses a `CGEvent` tap rather than `NSEvent.addGlobalMonitorForEvents`:
 /// global NSEvent monitors do NOT reliably observe key presses made while the
@@ -33,12 +35,17 @@ public final class CancelKeyMonitor: @unchecked Sendable {
         self.onCancel = onCancel
     }
 
-    /// Pure cancel decision: any observed key cancels unless it carries
-    /// Howl's synthetic-event marker (i.e. it's our own injection).
-    /// `userData` is the event's `eventSourceUserData` field value
-    /// (0 for real hardware keypresses).
-    static func shouldCancel(userData: Int64) -> Bool {
-        userData != HowlSyntheticEvent.marker
+    /// Pure cancel decision: a fresh, real keypress cancels. Two exclusions:
+    /// - our own injected keystrokes (they carry `HowlSyntheticEvent.marker`
+    ///   in `eventSourceUserData`; 0 for real hardware keypresses);
+    /// - OS auto-repeat events. A held push-to-talk *combo* (e.g. ⌃F) makes its
+    ///   base key auto-repeat, and those repeats would otherwise cancel the very
+    ///   dictation they triggered. Auto-repeat is the OS continuing a held key,
+    ///   not a new user action, so it never cancels — only a genuine fresh
+    ///   keypress (`isAutorepeat == false`) does. This mirrors how hold-to-talk
+    ///   tools treat key-repeat as part of the hold rather than a separate key.
+    static func shouldCancel(userData: Int64, isAutorepeat: Bool) -> Bool {
+        userData != HowlSyntheticEvent.marker && !isAutorepeat
     }
 
     /// Called from the tap callback (already hopped to the main queue) for a
@@ -96,15 +103,15 @@ public final class CancelKeyMonitor: @unchecked Sendable {
 
     // MARK: - Test surface
 
-    /// Simulates a real (non-synthetic) keypress — should cancel.
+    /// Simulates a real keypress — should cancel unless it's an auto-repeat.
     /// Routes through `shouldCancel` so the seam exercises the live decision.
-    public func simulateKeyForTest(keyCode _: UInt16 = 0) {
-        if Self.shouldCancel(userData: 0) { onCancel() }
+    public func simulateKeyForTest(keyCode _: UInt16 = 0, isAutorepeat: Bool = false) {
+        if Self.shouldCancel(userData: 0, isAutorepeat: isAutorepeat) { onCancel() }
     }
 
     /// Simulates a Howl-injected keystroke — should NOT cancel.
     public func simulateSyntheticKeyForTest() {
-        if Self.shouldCancel(userData: HowlSyntheticEvent.marker) { onCancel() }
+        if Self.shouldCancel(userData: HowlSyntheticEvent.marker, isAutorepeat: false) { onCancel() }
     }
 
     /// Simulates Esc — now just one of "any key".
@@ -132,8 +139,10 @@ private func cancelKeyEventTapCallback(
     guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
     let userData = event.getIntegerValueField(.eventSourceUserData)
-    let decision = CancelKeyMonitor.shouldCancel(userData: userData)
-    log.debug("CancelKeyMonitor: keyDown observed userData=\(userData, privacy: .public) shouldCancel=\(decision, privacy: .public)")
+    let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+    let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+    let decision = CancelKeyMonitor.shouldCancel(userData: userData, isAutorepeat: isAutorepeat)
+    log.info("CancelKeyMonitor: keyDown kc=\(keyCode, privacy: .public) autorepeat=\(isAutorepeat, privacy: .public) userData=\(userData, privacy: .public) shouldCancel=\(decision, privacy: .public)")
     if decision {
         // Hop to the main queue: start()/stop() and the engine teardown all
         // run on the main actor. Listen-only tap, so we never modify the event.
