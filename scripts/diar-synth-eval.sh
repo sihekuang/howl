@@ -33,11 +33,18 @@ DIAR_SYNTH_HTML="$HTML" go test -tags cleanupeval ./internal/speaker/ \
 
 # WER sweep (SNR + multi-voice) — the decisive transcription metric. Needs the
 # whispercpp build + a whisper model (WHISPER_MODEL_PATH or ggml-small.en.bin).
-go test -tags 'cleanupeval whispercpp' ./internal/speaker/ \
+# Emits an HTML results dashboard alongside the console table.
+WER_HTML="$OUT/diar-wer.html"
+DIAR_WER_HTML="$WER_HTML" go test -tags 'cleanupeval whispercpp' ./internal/speaker/ \
   -run TestDiarMask_WERSweep -v -count=1 2>&1 | grep -E 'WER sweep|condition|----|clean|overlap|intermittent|heard|lower WER' || \
   echo "(WER sweep skipped — set WHISPER_MODEL_PATH / build whispercpp)"
 
 echo
-echo "WAVs:        $OUT  (mixed.wav, diar_mask.wav, tse.wav, cleanA.wav)"
-echo "Comparison:  $HTML"
-command -v open >/dev/null 2>&1 && open "$HTML" || echo "Open $HTML in a browser."
+echo "WAVs:           $OUT  (mixed.wav, diar_mask.wav, tse.wav, cleanA.wav)"
+echo "Stage compare:  $HTML"
+echo "WER results:    $WER_HTML"
+if command -v open >/dev/null 2>&1; then
+  open "$HTML"; [ -f "$WER_HTML" ] && open "$WER_HTML"
+else
+  echo "Open the HTML files above in a browser."
+fi
