@@ -5,13 +5,18 @@ The `pyannoteSegmenter` (diar_mask) expects an ONNX export of
 Day-to-day contributors don't need this — `diar_mask` `t.Skip`s without it.
 
 ## Prerequisites
-- Python 3.10+
-- HuggingFace token with access to `pyannote/segmentation-3.0` (gated; accept the EULA)
-- `pip install pyannote.audio onnx onnxruntime torch torchaudio`
+- Python 3.10–3.12 (3.13+ not yet supported by torch/pyannote as of 2026-06)
+- HuggingFace token with access to `pyannote/segmentation-3.0` (gated; accept the
+  EULA), cached via `huggingface-cli login` — the script reads the cache, so no
+  token goes on the command line
+- `pip install pyannote.audio onnx onnxruntime torch torchaudio onnxscript`
+  (`onnxscript` is imported by torch's ONNX exporter on torch ≥ 2.9, even for the
+  legacy path)
 
 ## Export script
 
-Save as `scripts/export-pyannote-seg.py`:
+The maintained copy is committed at `core/scripts/export-pyannote-seg.py` — run it
+with `python core/scripts/export-pyannote-seg.py OUT.onnx`. For reference:
 
 ```python
 """Export pyannote/segmentation-3.0 to ONNX.
@@ -23,8 +28,8 @@ Output names + shapes MUST match core/internal/speaker/diarmask_pyannote.go:
 import os, torch
 from pyannote.audio import Model
 
-model = Model.from_pretrained("pyannote/segmentation-3.0",
-                              use_auth_token=os.environ["HF_TOKEN"])
+# use_auth_token=True reads the token cached by `huggingface-cli login`.
+model = Model.from_pretrained("pyannote/segmentation-3.0", use_auth_token=True)
 model.eval()
 
 dummy = torch.zeros(1, 1, 160000)
@@ -33,6 +38,9 @@ torch.onnx.export(
     input_names=["waveform"], output_names=["segmentation"],
     dynamic_axes={"segmentation": {1: "num_frames"}},
     opset_version=17,
+    dynamo=False,  # torch>=2.9: the new dynamo exporter fails on SincNet's
+                   # learnable filterbank (aten::clamp w/ a FakeTensor min);
+                   # the legacy TorchScript exporter traces it concretely.
 )
 print("wrote pyannote_seg.onnx")
 ```
