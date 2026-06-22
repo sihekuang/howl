@@ -26,6 +26,7 @@ struct TSELabClientTests {
         #expect(call.voiceDir == "/voice")
         #expect(call.onnxLibPath == "/usr/local/lib/libonnxruntime.dylib")
         #expect(call.output == out.path)
+        #expect(call.backend == "ecapa")
     }
 
     @Test func nonZeroRC_throwsBackendError_withLastError() async {

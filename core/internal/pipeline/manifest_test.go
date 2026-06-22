@@ -128,6 +128,6 @@ func TestWriteSessionManifest_AnyChunkStageWithLastSimilarityPopulatesField(t *t
 	var m sessions.Manifest
 	_ = json.Unmarshal(data, &m)
 	if m.Stages[0].TSESimilarity == nil || *m.Stages[0].TSESimilarity != 0.42 {
-		t.Errorf("expected TSESimilarity=0.42 for audio_filter stage, got %v", m.Stages[0].TSESimilarity)
+		t.Errorf("expected TSESimilarity=0.42 for other_stage chunk stage, got %v", m.Stages[0].TSESimilarity)
 	}
 }

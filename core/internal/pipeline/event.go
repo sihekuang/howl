@@ -68,9 +68,9 @@ type Event struct {
 	ElapsedMs  int
 	Text       string
 
-	// TSESimilarity, when non-nil, is the cosine similarity the TSE
-	// chunk stage computed for this chunk. Populated only on
-	// EventStageProcessed events for the "tse" stage.
+	// TSESimilarity, when non-nil, is the cosine similarity the chunk
+	// stage computed for this chunk. Populated on EventStageProcessed
+	// for the audio_filter chunk stage (any stage exposing LastSimilarity).
 	TSESimilarity *float32
 }
 
