@@ -6,6 +6,17 @@ import (
 	"sort"
 )
 
+// BackendKind distinguishes how a backend isolates the enrolled speaker.
+type BackendKind int
+
+const (
+	// BackendSeparation reconstructs the target's audio (TSE / SpeakerGate).
+	BackendSeparation BackendKind = iota
+	// BackendDiarMask diarizes, cosine-SELECTs the enrolled track, and
+	// time-MASKs the original audio (DiarMask + pyannote segmenter).
+	BackendDiarMask
+)
+
 // Backend describes a TSE backend: the on-disk model layout and the shape
 // of the embedding it produces.
 //
@@ -17,13 +28,19 @@ import (
 type Backend struct {
 	// Name is the identifier surfaced in flags, logs, and config.
 	Name string
+	// Kind selects the isolation strategy (separation vs diarize-mask).
+	Kind BackendKind
 	// EmbeddingDim is the encoder output dimensionality (length of
 	// enrollment.emb / ref_embedding tensor).
 	EmbeddingDim int
-	// EncoderModelFile is the ONNX filename inside modelsDir.
+	// EncoderModelFile is the speaker-encoder ONNX filename inside modelsDir.
 	EncoderModelFile string
-	// TSEModelFile is the combined-TSE ONNX filename inside modelsDir.
+	// TSEModelFile is the combined-TSE (separation) ONNX filename inside
+	// modelsDir. Set only for BackendSeparation.
 	TSEModelFile string
+	// SegModelFile is the segmentation ONNX filename inside modelsDir.
+	// Set only for BackendDiarMask.
+	SegModelFile string
 }
 
 // EncoderPath resolves the encoder ONNX file relative to modelsDir.
@@ -36,14 +53,31 @@ func (b *Backend) TSEPath(modelsDir string) string {
 	return filepath.Join(modelsDir, b.TSEModelFile)
 }
 
+// SegPath resolves the segmentation ONNX file relative to modelsDir.
+func (b *Backend) SegPath(modelsDir string) string {
+	return filepath.Join(modelsDir, b.SegModelFile)
+}
+
 // ECAPA: Wespeaker ECAPA-TDNN-512 with Kaldi Fbank front-end + JorisCos
 // ConvTasNet Libri2Mix sep_noisy 16k separator. Output is 192-dim,
 // L2-normalised inside the ONNX.
 var ECAPA = &Backend{
 	Name:             "ecapa",
+	Kind:             BackendSeparation,
 	EmbeddingDim:     192,
 	EncoderModelFile: "speaker_encoder.onnx",
 	TSEModelFile:     "tse_model.onnx",
+}
+
+// Pyannote: pyannote/segmentation-3.0 powerset diarizer + ECAPA encoder for
+// cosine target SELECT, then time-MASK of the original audio (no separation,
+// no suppression gate). Inclusion-biased — see DiarMask.
+var Pyannote = &Backend{
+	Name:             "pyannote",
+	Kind:             BackendDiarMask,
+	EmbeddingDim:     192,
+	EncoderModelFile: "speaker_encoder.onnx",
+	SegModelFile:     "pyannote_seg.onnx",
 }
 
 // Default is the backend used when no explicit selection is made.
@@ -51,7 +85,8 @@ var Default = ECAPA
 
 // backends is the registry keyed by Name. Add new backends here.
 var backends = map[string]*Backend{
-	ECAPA.Name: ECAPA,
+	ECAPA.Name:    ECAPA,
+	Pyannote.Name: Pyannote,
 }
 
 // BackendByName returns the registered backend with the given name. If

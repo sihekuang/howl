@@ -73,3 +73,44 @@ func TestBackend_PathHelpers(t *testing.T) {
 		t.Errorf("TSEPath = %q, want %q", tse, want)
 	}
 }
+
+func TestBackendByName_Pyannote(t *testing.T) {
+	b, err := BackendByName("pyannote")
+	if err != nil {
+		t.Fatalf("BackendByName(pyannote): %v", err)
+	}
+	if b.Name != "pyannote" {
+		t.Errorf("Name = %q, want pyannote", b.Name)
+	}
+	if b.Kind != BackendDiarMask {
+		t.Errorf("Kind = %v, want BackendDiarMask", b.Kind)
+	}
+	if b.SegModelFile != "pyannote_seg.onnx" {
+		t.Errorf("SegModelFile = %q, want pyannote_seg.onnx", b.SegModelFile)
+	}
+	if got := b.SegPath("/tmp/models"); got != "/tmp/models/pyannote_seg.onnx" {
+		t.Errorf("SegPath = %q", got)
+	}
+	if b.EncoderModelFile != "speaker_encoder.onnx" || b.EmbeddingDim != 192 {
+		t.Errorf("encoder/dim = %q/%d", b.EncoderModelFile, b.EmbeddingDim)
+	}
+}
+
+func TestECAPA_KindIsSeparation(t *testing.T) {
+	if ECAPA.Kind != BackendSeparation {
+		t.Errorf("ECAPA.Kind = %v, want BackendSeparation", ECAPA.Kind)
+	}
+}
+
+func TestBackendNames_IncludesPyannote(t *testing.T) {
+	names := BackendNames()
+	found := false
+	for _, n := range names {
+		if n == "pyannote" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("BackendNames %v missing 'pyannote'", names)
+	}
+}
