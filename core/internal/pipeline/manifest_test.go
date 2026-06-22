@@ -79,7 +79,7 @@ func TestWriteSessionManifest_FrameAndChunkStages(t *testing.T) {
 	if m.Stages[1].Name != "decimate" || m.Stages[1].Kind != "frame" || m.Stages[1].RateHz != 16000 {
 		t.Errorf("frame[1] = %+v", m.Stages[1])
 	}
-	// TSE in the chunk lane carries forward the 16 kHz running rate.
+	// audio_filter in the chunk lane carries forward the 16 kHz running rate.
 	if m.Stages[2].Name != "audio_filter" || m.Stages[2].Kind != "chunk" || m.Stages[2].RateHz != 16000 {
 		t.Errorf("chunk[0] = %+v", m.Stages[2])
 	}
@@ -118,7 +118,7 @@ func TestWriteSessionManifest_AnyChunkStageWithLastSimilarityPopulatesField(t *t
 	dir := t.TempDir()
 	p := New(nil, nil, nil)
 	p.ChunkStages = []audio.Stage{
-		&fakeChunkStage{name: "audio_filter", outputRate: 0, withSim: true, simValue: 0.42},
+		&fakeChunkStage{name: "other_stage", outputRate: 0, withSim: true, simValue: 0.42},
 	}
 
 	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
