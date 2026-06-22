@@ -49,11 +49,12 @@ func (p *Pipeline) WriteSessionManifest(dir, id, preset string) error {
 			WavRel: st.Name() + ".wav",
 			RateHz: r,
 		}
-		if st.Name() == "tse" {
-			if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
-				sim := g.LastSimilarity()
-				entry.TSESimilarity = &sim
-			}
+		// Any chunk stage exposing LastSimilarity reports it (both the
+		// ecapa SpeakerGate and the pyannote DiarMask do). The JSON key
+		// stays "tse_similarity" for back-compat (see design spec §3 D).
+		if g, ok := st.(interface{ LastSimilarity() float32 }); ok {
+			sim := g.LastSimilarity()
+			entry.TSESimilarity = &sim
 		}
 		stages = append(stages, entry)
 		if out := st.OutputRate(); out != 0 {

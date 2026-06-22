@@ -42,7 +42,7 @@ func TestWriteSessionManifest_FrameAndChunkStages(t *testing.T) {
 		denoise.NewStage(denoise.NewPassthrough()),
 		resample.NewDecimate3(),
 	}
-	tse := &fakeChunkStage{name: "tse", outputRate: 0, withSim: true, simValue: 0.71}
+	tse := &fakeChunkStage{name: "audio_filter", outputRate: 0, withSim: true, simValue: 0.71}
 	p.ChunkStages = []audio.Stage{tse}
 
 	if err := p.WriteSessionManifest(dir, "2026-05-07T00:00:00Z", "default"); err != nil {
@@ -80,7 +80,7 @@ func TestWriteSessionManifest_FrameAndChunkStages(t *testing.T) {
 		t.Errorf("frame[1] = %+v", m.Stages[1])
 	}
 	// TSE in the chunk lane carries forward the 16 kHz running rate.
-	if m.Stages[2].Name != "tse" || m.Stages[2].Kind != "chunk" || m.Stages[2].RateHz != 16000 {
+	if m.Stages[2].Name != "audio_filter" || m.Stages[2].Kind != "chunk" || m.Stages[2].RateHz != 16000 {
 		t.Errorf("chunk[0] = %+v", m.Stages[2])
 	}
 	if m.Stages[2].TSESimilarity == nil || *m.Stages[2].TSESimilarity != 0.71 {
@@ -112,14 +112,13 @@ func TestWriteSessionManifest_NoChunkStages_OmitsThem(t *testing.T) {
 	}
 }
 
-func TestWriteSessionManifest_NonTSEChunkSkipsSimilarity(t *testing.T) {
-	// A future chunk stage with a different name should not get
-	// TSESimilarity populated even if it happens to expose
-	// LastSimilarity (the field is tse-specific).
+func TestWriteSessionManifest_AnyChunkStageWithLastSimilarityPopulatesField(t *testing.T) {
+	// Any chunk stage implementing LastSimilarity() should get TSESimilarity
+	// populated regardless of its name — the hook is type-driven, not name-driven.
 	dir := t.TempDir()
 	p := New(nil, nil, nil)
 	p.ChunkStages = []audio.Stage{
-		&fakeChunkStage{name: "futurestage", outputRate: 0, withSim: true, simValue: 0.42},
+		&fakeChunkStage{name: "audio_filter", outputRate: 0, withSim: true, simValue: 0.42},
 	}
 
 	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
@@ -128,7 +127,7 @@ func TestWriteSessionManifest_NonTSEChunkSkipsSimilarity(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(dir, "session.json"))
 	var m sessions.Manifest
 	_ = json.Unmarshal(data, &m)
-	if m.Stages[0].TSESimilarity != nil {
-		t.Errorf("expected nil TSESimilarity for non-tse stage, got %v", *m.Stages[0].TSESimilarity)
+	if m.Stages[0].TSESimilarity == nil || *m.Stages[0].TSESimilarity != 0.42 {
+		t.Errorf("expected TSESimilarity=0.42 for audio_filter stage, got %v", m.Stages[0].TSESimilarity)
 	}
 }

@@ -305,8 +305,8 @@ func TestFramesFromShape(t *testing.T) {
 
 func TestDiarMask_InterfaceCompliance(t *testing.T) {
 	d := newTestDiarMask(t, &fakeSegmenter{}, func(s []float32) ([]float32, error) { return []float32{1, 0}, nil }, true)
-	if d.Name() != "diar_mask" {
-		t.Errorf("Name()=%q want diar_mask", d.Name())
+	if d.Name() != "audio_filter" {
+		t.Errorf("Name() = %q, want audio_filter", d.Name())
 	}
 	if d.OutputRate() != 0 {
 		t.Errorf("OutputRate()=%d want 0", d.OutputRate())

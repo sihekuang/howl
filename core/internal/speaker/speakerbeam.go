@@ -109,7 +109,7 @@ func NewSpeakerGate(opts SpeakerGateOptions) (*SpeakerGate, error) {
 	return g, nil
 }
 
-func (g *SpeakerGate) Name() string    { return "tse" }
+func (g *SpeakerGate) Name() string    { return "audio_filter" }
 func (g *SpeakerGate) OutputRate() int { return 0 } // preserves 16 kHz input
 
 // Process satisfies audio.Stage. Equivalent to Extract.

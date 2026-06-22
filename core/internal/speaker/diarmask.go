@@ -177,7 +177,7 @@ func NewDiarMask(opts DiarMaskOptions) (*DiarMask, error) {
 	}, nil
 }
 
-func (d *DiarMask) Name() string    { return "diar_mask" }
+func (d *DiarMask) Name() string    { return "audio_filter" }
 func (d *DiarMask) OutputRate() int { return 0 }
 
 // LastSimilarity returns the best target-track cosine observed in the last
