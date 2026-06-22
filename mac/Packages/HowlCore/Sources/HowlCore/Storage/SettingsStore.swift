@@ -125,7 +125,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         for st in preset.frameStages where st.name == "denoise" {
             s.disableNoiseSuppression = !st.enabled
         }
-        for st in preset.chunkStages where st.name == "tse" {
+        for st in preset.chunkStages where st.name == "audio_filter" || st.name == "tse" {
             s.tseEnabled = st.enabled
             s.tseThreshold = st.threshold
             s.tseBackend = st.backend ?? ""

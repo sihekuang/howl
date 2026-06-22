@@ -33,7 +33,7 @@ struct StageDetailPane: View {
             .background(Color.secondary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .task(id: ref) {
-                if ref.lane == .chunk && ref.name == "tse" {
+                if ref.lane == .chunk && (ref.name == "audio_filter" || ref.name == "tse") {
                     await refreshSimilarity()
                 }
             }
@@ -71,7 +71,7 @@ struct StageDetailPane: View {
             Text("No tunables — toggle this stage on or off via the checkbox in the row.")
                 .font(.caption).foregroundStyle(.secondary)
         case .chunk:
-            if ref.name == "tse", let stage = draft.stage(for: ref) {
+            if (ref.name == "audio_filter" || ref.name == "tse"), let stage = draft.stage(for: ref) {
                 tseBody(ref: ref, stage: stage)
                     .disabled(editingDisabled)
             } else {
@@ -108,8 +108,25 @@ struct StageDetailPane: View {
     @ViewBuilder
     private func tseBody(ref: StageRef, stage: Preset.StageSpec) -> some View {
         backendRow(ref: ref, stage: stage)
-        thresholdRow(ref: ref, stage: stage)
-        recentSimilarityRow(stage: stage)
+        if (stage.backend ?? "ecapa") == "pyannote" {
+            pyannoteNote()
+        } else {
+            thresholdRow(ref: ref, stage: stage)
+            recentSimilarityRow(stage: stage)
+        }
+    }
+
+    @ViewBuilder
+    private func pyannoteNote() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Diarization mask is inclusion-biased — it keeps your voice and masks others, with no suppression threshold.")
+                .font(.caption).foregroundStyle(.secondary)
+            if !FileManager.default.fileExists(atPath: ModelPaths.pyannoteSeg.path) {
+                Label("pyannote_seg.onnx not found in models dir — backend inactive until installed.",
+                      systemImage: "xmark.octagon.fill")
+                    .font(.caption).foregroundStyle(.red)
+            }
+        }
     }
 
     @ViewBuilder
@@ -120,7 +137,8 @@ struct StageDetailPane: View {
                 get: { stage.backend ?? "ecapa" },
                 set: { draft.setBackend($0, for: ref) }
             )) {
-                Text("ecapa").tag("ecapa")
+                Text("ecapa — target extraction").tag("ecapa")
+                Text("pyannote — diarization mask").tag("pyannote")
             }
             .labelsHidden()
             .frame(maxWidth: 160)

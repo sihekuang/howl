@@ -17,6 +17,8 @@ struct VoiceTab: View {
                            url: ModelPaths.tseModel)
             modelStatusRow(label: "Speaker encoder",
                            url: ModelPaths.speakerEncoder)
+            modelStatusRow(label: "Diarization model (pyannote)",
+                           url: ModelPaths.pyannoteSeg)
             if !modelsPresent {
                 Text(modelInstructions)
                     .font(.caption)

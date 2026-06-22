@@ -18,8 +18,8 @@ public struct RecentSimilarityProbe {
         let manifests = try await sessions.list()
         var out: [Float] = []
         for m in manifests {
-            guard let tse = m.stages.first(where: { $0.name == "tse" }) else { continue }
-            guard let sim = tse.tseSimilarity else { continue }
+            guard let af = m.stages.first(where: { $0.isAudioFilter }) else { continue }
+            guard let sim = af.tseSimilarity else { continue }
             out.append(sim)
             if out.count >= limit { break }
         }

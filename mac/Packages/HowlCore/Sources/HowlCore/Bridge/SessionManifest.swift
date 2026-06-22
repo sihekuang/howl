@@ -22,6 +22,10 @@ public struct SessionManifest: Codable, Equatable, Sendable, Identifiable {
             case rateHz = "rate_hz"
             case tseSimilarity = "tse_similarity"
         }
+
+        /// True for the audio-filter chunk stage, tolerating the legacy
+        /// name "tse" persisted in pre-rename session manifests.
+        public var isAudioFilter: Bool { name == "audio_filter" || name == "tse" }
     }
 
     public struct Transcripts: Codable, Equatable, Sendable {

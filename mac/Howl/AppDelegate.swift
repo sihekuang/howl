@@ -218,6 +218,12 @@ enum ModelPaths {
         }
         return modelsDir.appendingPathComponent("speaker_encoder.onnx")
     }
+    /// pyannote/segmentation-3.0 diarizer used by the audio-filter "pyannote"
+    /// backend. Not bundled in the .app — resolved from the models dir only;
+    /// absence is surfaced as a "model missing" state in Settings → Voice.
+    static var pyannoteSeg: URL {
+        return modelsDir.appendingPathComponent("pyannote_seg.onnx")
+    }
     /// Where enrollment artefacts live (enrollment.wav, enrollment.emb, speaker.json).
     static var voiceProfileDir: URL {
         let appSupport = FileManager.default.urls(
