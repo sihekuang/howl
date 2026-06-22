@@ -184,19 +184,22 @@ public actor LibhowlEngine: CoreEngine {
         }
     }
 
-    public func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) -> Int32 {
+    public func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String, backend: String) -> Int32 {
         return inputPath.withCString { cIn in
             outputPath.withCString { cOut in
                 modelsDir.withCString { cModels in
                     voiceDir.withCString { cVoice in
                         onnxLibPath.withCString { cLib in
-                            howl_tse_extract_file(
-                                UnsafeMutablePointer(mutating: cIn),
-                                UnsafeMutablePointer(mutating: cOut),
-                                UnsafeMutablePointer(mutating: cModels),
-                                UnsafeMutablePointer(mutating: cVoice),
-                                UnsafeMutablePointer(mutating: cLib)
-                            )
+                            backend.withCString { cBackend in
+                                howl_tse_extract_file(
+                                    UnsafeMutablePointer(mutating: cIn),
+                                    UnsafeMutablePointer(mutating: cOut),
+                                    UnsafeMutablePointer(mutating: cModels),
+                                    UnsafeMutablePointer(mutating: cVoice),
+                                    UnsafeMutablePointer(mutating: cLib),
+                                    UnsafeMutablePointer(mutating: cBackend)
+                                )
+                            }
                         }
                     }
                 }

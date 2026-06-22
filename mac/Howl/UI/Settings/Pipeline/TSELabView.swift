@@ -15,6 +15,7 @@ struct TSELabView: View {
     let client: any TSELabClient
     @ObservedObject var recorder: TSELabRecorder
 
+    @State private var labBackend: String = "ecapa"
     @State private var inputURL: URL? = nil
     @State private var outputURL: URL? = nil
     @State private var status: Status = .idle
@@ -102,6 +103,12 @@ struct TSELabView: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            Picker("Backend", selection: $labBackend) {
+                Text("ecapa").tag("ecapa")
+                Text("pyannote").tag("pyannote")
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 220)
         }
     }
 
@@ -306,7 +313,7 @@ struct TSELabView: View {
         errorMessage = nil
         status = .running
         do {
-            let out = try await client.extract(input: input)
+            let out = try await client.extract(input: input, backend: labBackend)
             outputURL = out
             status = .ready
         } catch {

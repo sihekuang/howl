@@ -14,7 +14,7 @@ public protocol TSELabClient: Sendable {
     /// the extracted output WAV. The output file lives under the
     /// caller's temp directory; it's the caller's responsibility to
     /// clean up if they care.
-    func extract(input: URL) async throws -> URL
+    func extract(input: URL, backend: String) async throws -> URL
 }
 
 /// libhowl-backed implementation. Construct against a CoreEngine that
@@ -33,16 +33,16 @@ public final class LibVKBTSELabClient: TSELabClient {
         self.onnxLibPath = onnxLibPath
     }
 
-    public func extract(input: URL) async throws -> URL {
+    public func extract(input: URL, backend: String) async throws -> URL {
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("tse-lab-\(UUID().uuidString).wav")
-
         let rc = await engine.tseExtractFile(
             inputPath: input.path,
             outputPath: outURL.path,
             modelsDir: modelsDir.path,
             voiceDir: voiceDir.path,
-            onnxLibPath: onnxLibPath
+            onnxLibPath: onnxLibPath,
+            backend: backend
         )
         guard rc == 0 else {
             let detail = await engine.lastError() ?? "howl_tse_extract_file failed (rc=\(rc))"

@@ -95,5 +95,5 @@ public protocol CoreEngine: Sendable {
     /// Lab debug surface to exercise extraction outside the live capture
     /// pipeline. Returns the C ABI return code (0 = success); on failure
     /// callers should consult `lastError()` for the description.
-    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) async -> Int32
+    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String, backend: String) async -> Int32
 }

@@ -15,7 +15,7 @@ struct TSELabClientTests {
             onnxLibPath: "/usr/local/lib/libonnxruntime.dylib"
         )
         let input = URL(fileURLWithPath: "/tmp/in.wav")
-        let out = try await c.extract(input: input)
+        let out = try await c.extract(input: input, backend: "ecapa")
 
         #expect(out.path.contains("tse-lab-"))
         #expect(out.pathExtension == "wav")
@@ -39,7 +39,7 @@ struct TSELabClientTests {
             onnxLibPath: "/lib/libonnx.dylib"
         )
         await #expect(throws: TSELabClientError.self) {
-            _ = try await c.extract(input: URL(fileURLWithPath: "/missing.wav"))
+            _ = try await c.extract(input: URL(fileURLWithPath: "/missing.wav"), backend: "ecapa")
         }
     }
 
@@ -54,7 +54,7 @@ struct TSELabClientTests {
             onnxLibPath: "/lib/libonnx.dylib"
         )
         do {
-            _ = try await c.extract(input: URL(fileURLWithPath: "/missing.wav"))
+            _ = try await c.extract(input: URL(fileURLWithPath: "/missing.wav"), backend: "ecapa")
             Issue.record("expected error")
         } catch let TSELabClientError.backend(msg) {
             #expect(msg.contains("rc=-1"))

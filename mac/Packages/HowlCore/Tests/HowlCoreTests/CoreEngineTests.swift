@@ -21,7 +21,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     var stubReplayJSON: String? = "[]"
     var stubTSEExtractRC: Int32 = 0
     var stubLastError: String?
-    var tseExtractCalls: [(input: String, output: String, modelsDir: String, voiceDir: String, onnxLibPath: String)] = []
+    var tseExtractCalls: [(input: String, output: String, modelsDir: String, voiceDir: String, onnxLibPath: String, backend: String)] = []
 
     func configure(_ config: EngineConfig) async throws {
         configureCalls.append(config)
@@ -48,8 +48,8 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     func presetDelete(_ name: String) -> Int32 { stubPresetDeleteRC }
     func replayJSON(sourceID: String, presetsCSV: String) -> String? { stubReplayJSON }
 
-    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) -> Int32 {
-        tseExtractCalls.append((inputPath, outputPath, modelsDir, voiceDir, onnxLibPath))
+    func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String, backend: String) -> Int32 {
+        tseExtractCalls.append((inputPath, outputPath, modelsDir, voiceDir, onnxLibPath, backend))
         return stubTSEExtractRC
     }
 }
