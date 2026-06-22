@@ -78,7 +78,7 @@ func runPipe(args []string) int {
 		// Preset's chunk-stage list drives speaker mode + tse backend.
 		// First enabled `tse` entry wins (the spec only allows one today).
 		for _, st := range p.ChunkStages {
-			if st.Name != "tse" || !st.Enabled {
+			if (st.Name != "audio_filter" && st.Name != "tse") || !st.Enabled {
 				continue
 			}
 			if !explicit["speaker"] {

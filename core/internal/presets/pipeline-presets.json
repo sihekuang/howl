@@ -10,7 +10,7 @@
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
+        {"name": "audio_filter","enabled": false, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
@@ -25,7 +25,7 @@
         {"name": "decimate3", "enabled": false}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": false, "backend": "ecapa", "threshold": 0.0}
+        {"name": "audio_filter","enabled": false, "backend": "ecapa", "threshold": 0.0}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
@@ -40,7 +40,7 @@
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.35}
+        {"name": "audio_filter","enabled": true, "backend": "ecapa", "threshold": 0.35}
       ],
       "transcribe": {"model_size": "base"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
@@ -55,7 +55,7 @@
         {"name": "decimate3", "enabled": true}
       ],
       "chunk_stages": [
-        {"name": "tse", "enabled": true, "backend": "ecapa", "threshold": 0.45}
+        {"name": "audio_filter","enabled": true, "backend": "ecapa", "threshold": 0.45}
       ],
       "transcribe": {"model_size": "small"},
       "llm":        {"provider": "anthropic", "model": "claude-sonnet-4-6"},

@@ -147,3 +147,29 @@ func TestResolveLeavesLLMModelWhenPresetEmpty(t *testing.T) {
 		t.Errorf("LLMModel = %q, want %q (preset-empty should preserve secrets)", cfg.LLMModel, "from-secrets")
 	}
 }
+
+func TestNormalizeStageName_LegacyTSE(t *testing.T) {
+	if got := normalizeStageName("tse"); got != "audio_filter" {
+		t.Errorf("normalizeStageName(tse) = %q, want audio_filter", got)
+	}
+	if got := normalizeStageName("audio_filter"); got != "audio_filter" {
+		t.Errorf("normalizeStageName(audio_filter) = %q", got)
+	}
+	if got := normalizeStageName("denoise"); got != "denoise" {
+		t.Errorf("normalizeStageName(denoise) = %q, want denoise (identity)", got)
+	}
+}
+
+func TestResolve_LegacyTSEChunkStageStillApplies(t *testing.T) {
+	p := Preset{
+		Name:        "legacy",
+		ChunkStages: []StageSpec{{Name: "tse", Enabled: true, Backend: "ecapa"}},
+	}
+	cfg := Resolve(p, EngineSecrets{})
+	if !cfg.TSEEnabled {
+		t.Errorf("legacy tse chunk stage did not set TSEEnabled")
+	}
+	if cfg.TSEBackend != "ecapa" {
+		t.Errorf("TSEBackend = %q, want ecapa", cfg.TSEBackend)
+	}
+}

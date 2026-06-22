@@ -49,6 +49,17 @@ func resolveLLMModel(p Preset, secrets EngineSecrets) string {
 	return secrets.LLMModel
 }
 
+// normalizeStageName maps a persisted/legacy chunk-stage name to the current
+// canonical name. The audio-filter slot was historically named "tse"; presets
+// and manifests written before the rename carry that. Normalizing on read lets
+// old presets keep resolving. New writes always use "audio_filter".
+func normalizeStageName(name string) string {
+	if name == "tse" {
+		return "audio_filter"
+	}
+	return name
+}
+
 // Resolve produces a config.Config equivalent to running this preset.
 // secrets supplies fields the preset doesn't (and shouldn't) specify.
 //
@@ -87,7 +98,7 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 	}
 	// Chunk stages: only TSE today.
 	for _, st := range p.ChunkStages {
-		if st.Name != "tse" {
+		if normalizeStageName(st.Name) != "audio_filter" {
 			continue
 		}
 		cfg.TSEEnabled = st.Enabled
@@ -137,7 +148,7 @@ func presetMatchesConfig(p Preset, cfg config.Config) bool {
 		}
 	}
 	for _, st := range p.ChunkStages {
-		if st.Name != "tse" {
+		if normalizeStageName(st.Name) != "audio_filter" {
 			continue
 		}
 		if cfg.TSEEnabled != st.Enabled {
