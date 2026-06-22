@@ -13,6 +13,7 @@ import (
 	"github.com/voice-keyboard/core/internal/dict"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/resample"
+	"github.com/voice-keyboard/core/internal/speaker"
 	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
@@ -540,5 +541,18 @@ func TestPipeline_CancelMidRecordingReturnsContextErr(t *testing.T) {
 	}
 	if cl.streamCalls != 0 {
 		t.Errorf("CleanStream called %d times after cancel, want 0", cl.streamCalls)
+	}
+}
+
+func TestLoadAudioFilter_NoEnrollmentReturnsNil(t *testing.T) {
+	dir := t.TempDir() // empty: no speaker.json
+	for _, b := range []*speaker.Backend{speaker.ECAPA, speaker.Pyannote} {
+		st, err := LoadAudioFilter(b, dir, dir, "", 0)
+		if err != nil {
+			t.Errorf("LoadAudioFilter(%s) err = %v, want nil", b.Name, err)
+		}
+		if st != nil {
+			t.Errorf("LoadAudioFilter(%s) stage = %v, want nil (no enrollment)", b.Name, st)
+		}
 	}
 }

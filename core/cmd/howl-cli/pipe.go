@@ -214,7 +214,7 @@ func runPipe(args []string) int {
 		// howl leaves the post-extract similarity gate disabled (threshold=0);
 		// the libhowl engine wires presets/threshold through. CLI is for raw
 		// pipeline shape verification, not preset evaluation.
-		tseStage, err := pipeline.LoadTSE(backend, profileDir, modelsDir, onnxLib, 0)
+		tseStage, err := pipeline.LoadAudioFilter(backend, profileDir, modelsDir, onnxLib, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "speaker gate: %v\n", err)
 			return 1

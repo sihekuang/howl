@@ -104,7 +104,7 @@ func FromOptions(opts Options) (*pipeline.Pipeline, error) {
 			return p, nil
 		}
 		modelsDir := filepath.Dir(cfg.TSEModelPath)
-		tse, tseErr := pipeline.LoadTSE(backend, cfg.TSEProfileDir, modelsDir, cfg.ONNXLibPath, cfg.TSEThresholdValue())
+		tse, tseErr := pipeline.LoadAudioFilter(backend, cfg.TSEProfileDir, modelsDir, cfg.ONNXLibPath, cfg.TSEThresholdValue())
 		if tseErr != nil {
 			log.Printf("[howl] build.FromOptions: TSE load failed, continuing without TSE: %v", tseErr)
 			setLastError("tse: " + tseErr.Error())

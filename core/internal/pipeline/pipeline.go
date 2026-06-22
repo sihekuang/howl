@@ -353,51 +353,74 @@ func (p *Pipeline) emit(e Event) {
 	p.Listener(e)
 }
 
-// LoadTSE initialises a TSE extractor for the given backend and loads the
-// enrollment embedding from profileDir. Returns nil extractor + nil error
-// when speaker.json is absent (TSE off). Returns error only on partial
-// state (json present but embedding missing/corrupt).
+// LoadAudioFilter initialises the audio-filter chunk stage for the given
+// backend and loads the enrollment embedding from profileDir. Returns a nil
+// stage + nil error when speaker.json is absent (filter off). Returns an error
+// only on partial state (json present but embedding missing/corrupt) or on a
+// model/runtime failure.
 //
-// modelsDir holds the backend's ONNX files (resolved via backend.TSEPath
-// and backend.EncoderPath). threshold > 0 enables the post-extract
-// similarity gate (zeros out chunks whose extracted output doesn't sound
-// enough like the enrolled speaker).
-func LoadTSE(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string, threshold float32) (audio.Stage, error) {
+// Dispatches on backend.Kind: BackendSeparation → SpeakerGate (reconstructing
+// TSE, with the optional post-extract similarity gate when threshold > 0);
+// BackendDiarMask → DiarMask + pyannote segmenter (diarize → cosine SELECT →
+// time MASK, inclusion-biased, no gate — threshold is ignored).
+func LoadAudioFilter(backend *speaker.Backend, profileDir, modelsDir, onnxLibPath string, threshold float32) (audio.Stage, error) {
 	if backend == nil {
 		backend = speaker.Default
 	}
 	_, err := speaker.LoadProfile(profileDir)
-	if os.IsNotExist(err) {
-		return nil, nil // no enrollment — TSE off
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil // no enrollment — audio filter off
 	}
 	if err != nil {
-		return nil, fmt.Errorf("load tse: profile: %w", err)
+		return nil, fmt.Errorf("load audiofilter: profile: %w", err)
 	}
 	embPath := profileDir + "/enrollment.emb"
 	ref, err := speaker.LoadEmbedding(embPath, backend.EmbeddingDim)
-	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("load tse: enrollment.emb missing — re-run enroll.sh")
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load audiofilter: enrollment.emb missing — re-run enroll.sh")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("load tse: embedding: %w", err)
+		return nil, fmt.Errorf("load audiofilter: embedding: %w", err)
 	}
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
-		return nil, fmt.Errorf("load tse: onnx runtime: %w", err)
+		return nil, fmt.Errorf("load audiofilter: onnx runtime: %w", err)
 	}
-	opts := speaker.SpeakerGateOptions{
-		ModelPath: backend.TSEPath(modelsDir),
-		Reference: ref,
-		Threshold: threshold,
+
+	switch backend.Kind {
+	case speaker.BackendDiarMask:
+		seg, err := speaker.NewPyannoteSegmenter(backend.SegPath(modelsDir))
+		if err != nil {
+			return nil, fmt.Errorf("load audiofilter: segmenter: %w", err)
+		}
+		encPath := backend.EncoderPath(modelsDir)
+		dim := backend.EmbeddingDim
+		dm, err := speaker.NewDiarMask(speaker.DiarMaskOptions{
+			Segmenter: seg,
+			Embed:     func(s []float32) ([]float32, error) { return speaker.ComputeEmbedding(encPath, s, dim) },
+			Reference: ref,
+			// threshold intentionally not wired: diarmask has no gate.
+		})
+		if err != nil {
+			_ = seg.Close()
+			return nil, fmt.Errorf("load audiofilter: diarmask: %w", err)
+		}
+		return dm, nil
+	default: // BackendSeparation
+		opts := speaker.SpeakerGateOptions{
+			ModelPath: backend.TSEPath(modelsDir),
+			Reference: ref,
+			Threshold: threshold,
+		}
+		if threshold > 0 {
+			opts.EncoderPath = backend.EncoderPath(modelsDir)
+			opts.EncoderDim = backend.EmbeddingDim
+		}
+		gate, err := speaker.NewSpeakerGate(opts)
+		if err != nil {
+			return nil, fmt.Errorf("load audiofilter: model: %w", err)
+		}
+		return gate, nil
 	}
-	if threshold > 0 {
-		opts.EncoderPath = backend.EncoderPath(modelsDir)
-		opts.EncoderDim = backend.EmbeddingDim
-	}
-	tse, err := speaker.NewSpeakerGate(opts)
-	if err != nil {
-		return nil, fmt.Errorf("load tse: model: %w", err)
-	}
-	return tse, nil
 }
 
 // Close releases resources owned by stages and the transcriber.
