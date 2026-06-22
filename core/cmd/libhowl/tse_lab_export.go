@@ -16,18 +16,23 @@ import (
 	"github.com/voice-keyboard/core/internal/speaker"
 )
 
-// howl_tse_extract_file runs Target Speaker Extraction on a WAV file
-// using the user's enrolled speaker embedding. Used by the Mac app's
-// TSE Lab — a debug surface for verifying TSE works on arbitrary
-// inputs (e.g. a 2-speaker mixture saved from another tool).
+// howl_tse_extract_file runs audio filtering on a WAV file using the
+// user's enrolled speaker embedding. Used by the Mac app's TSE Lab — a
+// debug surface for verifying speaker isolation works on arbitrary inputs
+// (e.g. a 2-speaker mixture saved from another tool).
 //
 // inputPath:   16 kHz mono 16-bit PCM WAV (any duration).
-// outputPath:  where to write the extracted WAV (16 kHz mono 16-bit PCM).
-// modelsDir:   directory containing tse_model.onnx and speaker_encoder.onnx.
+// outputPath:  where to write the filtered WAV (16 kHz mono 16-bit PCM).
+// modelsDir:   directory containing backend model files. For the ecapa
+//              backend: tse_model.onnx + speaker_encoder.onnx. For the
+//              pyannote backend: pyannote_seg.onnx + speaker_encoder.onnx.
 // voiceDir:    directory containing enrollment.emb (raw little-endian
 //              float32 array of length backend.EmbeddingDim, written by
 //              howl_enroll_compute → speaker.SaveEmbedding).
 // onnxLibPath: absolute path to libonnxruntime.dylib.
+// backend:     optional backend name ("" / "ecapa" → SpeakerGate
+//              separation; "pyannote" → DiarMask diarize+mask). NULL
+//              treated as empty (defaults to ecapa).
 //
 // Synchronous and self-contained: doesn't touch the engine's pipeline
 // state, so it's safe to call alongside an in-flight capture. The only
@@ -38,7 +43,7 @@ import (
 // via howl_free_string).
 //
 //export howl_tse_extract_file
-func howl_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath *C.char) C.int {
+func howl_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath, backend *C.char) C.int {
 	e := getEngine()
 	if e == nil {
 		// No engine — we can't surface the error via setLastError, but
@@ -57,22 +62,27 @@ func howl_tse_extract_file(inputPath, outputPath, modelsDir, voiceDir, onnxLibPa
 	models := C.GoString(modelsDir)
 	voice := C.GoString(voiceDir)
 	onnxLib := C.GoString(onnxLibPath)
+	backendName := "" // empty → speaker.Default (ecapa)
+	if backend != nil {
+		backendName = C.GoString(backend)
+	}
 	if in == "" || out == "" || models == "" || voice == "" || onnxLib == "" {
 		e.setLastError("howl_tse_extract_file: empty argument")
 		return -1
 	}
 
-	if err := runTSEExtractFile(in, out, models, voice, onnxLib); err != nil {
+	if err := runAudioFilterExtractFile(in, out, models, voice, onnxLib, backendName); err != nil {
 		e.setLastError("howl_tse_extract_file: " + err.Error())
 		return -1
 	}
 	return 0
 }
 
-// runTSEExtractFile is the testable Go-level body of howl_tse_extract_file.
-// Splitting it out keeps the C ABI thin (string marshalling + error code)
-// and lets unit tests exercise the pipeline without going through cgo.
-func runTSEExtractFile(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath string) error {
+// runAudioFilterExtractFile is the testable body of howl_tse_extract_file.
+// It dispatches on the named backend's Kind: separation backends run the
+// reconstructing SpeakerGate; diarmask backends run DiarMask (diarize →
+// cosine SELECT → time MASK). Both read a 16 kHz mono WAV and write one.
+func runAudioFilterExtractFile(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath, backendName string) error {
 	samples, sr, err := audio.ReadWAVMono(inputPath)
 	if err != nil {
 		return fmt.Errorf("read input wav: %w", err)
@@ -84,35 +94,60 @@ func runTSEExtractFile(inputPath, outputPath, modelsDir, voiceDir, onnxLibPath s
 		return fmt.Errorf("input wav is empty")
 	}
 
-	backend := speaker.Default
+	backend, err := speaker.BackendByName(backendName)
+	if err != nil {
+		return fmt.Errorf("backend: %w", err)
+	}
 	embPath := filepath.Join(voiceDir, "enrollment.emb")
 	ref, err := speaker.LoadEmbedding(embPath, backend.EmbeddingDim)
 	if err != nil {
 		return fmt.Errorf("load enrollment: %w", err)
 	}
-
 	if err := speaker.InitONNXRuntime(onnxLibPath); err != nil {
 		return fmt.Errorf("init onnx runtime: %w", err)
 	}
 
-	tse, err := speaker.NewSpeakerGate(speaker.SpeakerGateOptions{
-		ModelPath:   backend.TSEPath(modelsDir),
-		Reference:   ref,
-		Threshold:   0.40,
-		EncoderPath: backend.EncoderPath(modelsDir),
-		EncoderDim:  backend.EmbeddingDim,
-	})
-	if err != nil {
-		return fmt.Errorf("new speaker gate: %w", err)
+	var filtered []float32
+	switch backend.Kind {
+	case speaker.BackendDiarMask:
+		seg, err := speaker.NewPyannoteSegmenter(backend.SegPath(modelsDir))
+		if err != nil {
+			return fmt.Errorf("new segmenter: %w", err)
+		}
+		defer seg.Close()
+		encPath := backend.EncoderPath(modelsDir)
+		dim := backend.EmbeddingDim
+		dm, err := speaker.NewDiarMask(speaker.DiarMaskOptions{
+			Segmenter: seg,
+			Embed:     func(s []float32) ([]float32, error) { return speaker.ComputeEmbedding(encPath, s, dim) },
+			Reference: ref,
+		})
+		if err != nil {
+			return fmt.Errorf("new diarmask: %w", err)
+		}
+		filtered, err = dm.Process(context.Background(), samples)
+		if err != nil {
+			return fmt.Errorf("diarmask process: %w", err)
+		}
+	default: // BackendSeparation
+		gate, err := speaker.NewSpeakerGate(speaker.SpeakerGateOptions{
+			ModelPath:   backend.TSEPath(modelsDir),
+			Reference:   ref,
+			Threshold:   0.40,
+			EncoderPath: backend.EncoderPath(modelsDir),
+			EncoderDim:  backend.EmbeddingDim,
+		})
+		if err != nil {
+			return fmt.Errorf("new speaker gate: %w", err)
+		}
+		defer gate.Close()
+		filtered, err = gate.Extract(context.Background(), samples)
+		if err != nil {
+			return fmt.Errorf("extract: %w", err)
+		}
 	}
-	defer tse.Close()
 
-	extracted, err := tse.Extract(context.Background(), samples)
-	if err != nil {
-		return fmt.Errorf("extract: %w", err)
-	}
-
-	if err := audio.WriteWAVMono(outputPath, extracted, targetSampleRate); err != nil {
+	if err := audio.WriteWAVMono(outputPath, filtered, targetSampleRate); err != nil {
 		return fmt.Errorf("write output wav: %w", err)
 	}
 	return nil

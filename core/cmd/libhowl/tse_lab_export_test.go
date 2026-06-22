@@ -71,8 +71,8 @@ func TestHowlTSEExtractFile_Smoke(t *testing.T) {
 		onnxLib = "/opt/homebrew/lib/libonnxruntime.dylib"
 	}
 
-	if err := runTSEExtractFile(mixPath, outPath, modelsDir, voiceDir, onnxLib); err != nil {
-		t.Fatalf("runTSEExtractFile: %v", err)
+	if err := runAudioFilterExtractFile(mixPath, outPath, modelsDir, voiceDir, onnxLib, "ecapa"); err != nil {
+		t.Fatalf("runAudioFilterExtractFile(ecapa): %v", err)
 	}
 
 	out, sr2, err := audio.ReadWAVMono(outPath)
@@ -94,4 +94,42 @@ func TestHowlTSEExtractFile_Smoke(t *testing.T) {
 		t.Errorf("output looks silent: RMS=%.6f", rmsOut)
 	}
 	t.Logf("extracted %d samples, RMS=%.4f", len(out), rmsOut)
+}
+
+func TestRunAudioFilterExtractFile_PyannoteSmoke(t *testing.T) {
+	models := os.Getenv("HOWL_MODELS_DIR")
+	voice := os.Getenv("HOWL_VOICE_DIR")
+	onnx := os.Getenv("ONNXRUNTIME_LIB_PATH")
+	seg := filepath.Join(models, "pyannote_seg.onnx")
+	emb := filepath.Join(voice, "enrollment.emb")
+	if models == "" || voice == "" || onnx == "" {
+		t.Skip("set HOWL_MODELS_DIR, HOWL_VOICE_DIR, ONNXRUNTIME_LIB_PATH to run")
+	}
+	if _, err := os.Stat(seg); err != nil {
+		t.Skipf("pyannote_seg.onnx absent: %v", err)
+	}
+	if _, err := os.Stat(emb); err != nil {
+		t.Skipf("enrollment.emb absent: %v", err)
+	}
+	// A short 16 kHz mono WAV of low-level noise is enough to exercise the
+	// path; we assert the output WAV is produced and non-empty, not labels.
+	in := filepath.Join(t.TempDir(), "in.wav")
+	samples := make([]float32, 16000*3)
+	for i := range samples {
+		samples[i] = float32(i%11)*0.001 - 0.005
+	}
+	if err := audio.WriteWAVMono(in, samples, targetSampleRate); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "out.wav")
+	if err := runAudioFilterExtractFile(in, out, models, voice, onnx, "pyannote"); err != nil {
+		t.Fatalf("runAudioFilterExtractFile(pyannote): %v", err)
+	}
+	got, sr, err := audio.ReadWAVMono(out)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if sr != targetSampleRate || len(got) == 0 {
+		t.Errorf("output sr=%d len=%d, want sr=%d len>0", sr, len(got), targetSampleRate)
+	}
 }
