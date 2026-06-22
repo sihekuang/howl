@@ -33,7 +33,7 @@ struct StageDetailPane: View {
             .background(Color.secondary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .task(id: ref) {
-                if ref.lane == .chunk && (ref.name == "audio_filter" || ref.name == "tse") {
+                if ref.lane == .chunk && ref.isAudioFilter {
                     await refreshSimilarity()
                 }
             }
@@ -71,7 +71,7 @@ struct StageDetailPane: View {
             Text("No tunables — toggle this stage on or off via the checkbox in the row.")
                 .font(.caption).foregroundStyle(.secondary)
         case .chunk:
-            if (ref.name == "audio_filter" || ref.name == "tse"), let stage = draft.stage(for: ref) {
+            if ref.isAudioFilter, let stage = draft.stage(for: ref) {
                 tseBody(ref: ref, stage: stage)
                     .disabled(editingDisabled)
             } else {

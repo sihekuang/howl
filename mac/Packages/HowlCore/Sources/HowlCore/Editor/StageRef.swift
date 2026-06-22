@@ -17,4 +17,8 @@ public struct StageRef: Hashable, Equatable, Codable, Sendable {
         self.lane = lane
         self.name = name
     }
+
+    /// True for the audio-filter chunk stage, tolerating the legacy name "tse"
+    /// persisted before the tse->audio_filter rename.
+    public var isAudioFilter: Bool { name == "audio_filter" || name == "tse" }
 }
