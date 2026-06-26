@@ -121,9 +121,10 @@ func howl_configure(jsonC *C.char) C.int {
 	}
 	config.WithDefaults(&cfg)
 
-	// Log recognition-relevant config so dictionary → initial-prompt and
-	// primary/secondary language propagation are observable in /tmp/howl.log.
-	log.Printf("[howl] howl_configure: %s", cfg.LogSummary())
+	// Log the custom dictionary the engine received so the dictionary →
+	// whisper-initial-prompt / fuzzy-post-correction propagation is
+	// directly observable in /tmp/howl.log on every configure.
+	log.Printf("[howl] howl_configure: received %d dictionary term(s): %q", len(cfg.CustomDict), cfg.CustomDict)
 
 	e.mu.Lock()
 	if e.pushCh != nil {

@@ -147,13 +147,3 @@ func TestResolveLeavesLLMModelWhenPresetEmpty(t *testing.T) {
 		t.Errorf("LLMModel = %q, want %q (preset-empty should preserve secrets)", cfg.LLMModel, "from-secrets")
 	}
 }
-
-func TestResolve_ThreadsSecondaryLanguage(t *testing.T) {
-	cfg := Resolve(Preset{}, EngineSecrets{Language: "en", SecondaryLanguage: "zh"})
-	if cfg.SecondaryLanguage != "zh" {
-		t.Errorf("Resolve SecondaryLanguage = %q, want \"zh\"", cfg.SecondaryLanguage)
-	}
-	if cfg.Language != "en" {
-		t.Errorf("Resolve Language = %q, want \"en\"", cfg.Language)
-	}
-}

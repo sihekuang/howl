@@ -6,7 +6,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var whisperModelPath: String
     public var whisperModelSize: String
     public var language: String
-    public var secondaryLanguage: String
     public var disableNoiseSuppression: Bool
     public var deepFilterModelPath: String
     public var llmProvider: String
@@ -45,7 +44,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         whisperModelPath: String,
         whisperModelSize: String,
         language: String,
-        secondaryLanguage: String = "none",
         disableNoiseSuppression: Bool,
         deepFilterModelPath: String,
         llmProvider: String,
@@ -68,7 +66,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.whisperModelPath = whisperModelPath
         self.whisperModelSize = whisperModelSize
         self.language = language
-        self.secondaryLanguage = secondaryLanguage
         self.disableNoiseSuppression = disableNoiseSuppression
         self.deepFilterModelPath = deepFilterModelPath
         self.llmProvider = llmProvider
@@ -94,7 +91,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         try c.encode(whisperModelPath, forKey: .whisperModelPath)
         try c.encode(whisperModelSize, forKey: .whisperModelSize)
         try c.encode(language, forKey: .language)
-        try c.encode(secondaryLanguage, forKey: .secondaryLanguage)
         try c.encode(disableNoiseSuppression, forKey: .disableNoiseSuppression)
         try c.encode(deepFilterModelPath, forKey: .deepFilterModelPath)
         try c.encode(llmProvider, forKey: .llmProvider)
@@ -129,7 +125,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.whisperModelPath = try c.decode(String.self, forKey: .whisperModelPath)
         self.whisperModelSize = try c.decode(String.self, forKey: .whisperModelSize)
         self.language = try c.decode(String.self, forKey: .language)
-        self.secondaryLanguage = try c.decodeIfPresent(String.self, forKey: .secondaryLanguage) ?? "none"
         self.disableNoiseSuppression = try c.decode(Bool.self, forKey: .disableNoiseSuppression)
         self.deepFilterModelPath = try c.decode(String.self, forKey: .deepFilterModelPath)
         self.llmProvider = try c.decode(String.self, forKey: .llmProvider)
@@ -154,7 +149,6 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case whisperModelPath = "whisper_model_path"
         case whisperModelSize = "whisper_model_size"
         case language
-        case secondaryLanguage = "secondary_language"
         case disableNoiseSuppression = "disable_noise_suppression"
         case deepFilterModelPath = "deep_filter_model_path"
         case llmProvider = "llm_provider"
@@ -230,7 +224,6 @@ public extension EngineConfig {
             whisperModelPath: paths.whisperModelPath,
             whisperModelSize: paths.resolvedWhisperSize,
             language: settings.language,
-            secondaryLanguage: settings.secondaryLanguage,
             disableNoiseSuppression: settings.disableNoiseSuppression,
             deepFilterModelPath: paths.deepFilterModelPath,
             llmProvider: settings.llmProvider,

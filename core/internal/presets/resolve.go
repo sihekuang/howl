@@ -23,7 +23,6 @@ type EngineSecrets struct {
 	ONNXLibPath         string
 	CustomDict          []string
 	Language            string
-	SecondaryLanguage   string
 	LLMProvider         string
 	LLMBaseURL          string
 	LLMModel            string
@@ -62,7 +61,6 @@ func Resolve(p Preset, secrets EngineSecrets) config.Config {
 		WhisperModelPath:    secrets.WhisperModelPath,
 		WhisperModelSize:    p.Transcribe.ModelSize,
 		Language:            secrets.Language,
-		SecondaryLanguage:   secrets.SecondaryLanguage,
 		DeepFilterModelPath: secrets.DeepFilterModelPath,
 		LLMProvider:         resolveLLMProvider(p, secrets),
 		LLMModel:            resolveLLMModel(p, secrets),

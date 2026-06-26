@@ -36,7 +36,6 @@ struct GeneralTab: View {
         ("large", "Large", "3.1 GB"),
     ]
     private let languages = ["auto", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
-    private let secondaryLanguages = ["none", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
 
     var body: some View {
         SettingsPane {
@@ -67,19 +66,8 @@ struct GeneralTab: View {
                 }
             }
             modelStatusRow
-            Picker("Primary language", selection: $settings.language) {
+            Picker("Language", selection: $settings.language) {
                 ForEach(languages, id: \.self) { Text($0).tag($0) }
-            }
-            Picker("Secondary language", selection: $settings.secondaryLanguage) {
-                ForEach(secondaryLanguages, id: \.self) { lang in
-                    Text(lang == "none" ? "None" : lang).tag(lang)
-                }
-            }
-            if settings.secondaryLanguage != "none" {
-                Text("Code-switching is best-effort — whisper transcribes each window as one language. For best results, add your common terms in both languages to the Dictionary. Requires the large multilingual model (3.1 GB).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             Toggle("Open at login", isOn: Binding(
                 get: { launchAtLoginEnabled },
@@ -214,19 +202,9 @@ struct GeneralTab: View {
         }
     }
 
-    /// The model size the engine will actually load given the language
-    /// settings — "large" when multilingual is needed (so the status row and
-    /// download target the model that will really be used).
-    private var effectiveModelSize: String {
-        WhisperModelSelection.effectiveSize(
-            requested: settings.whisperModelSize,
-            primary: settings.language,
-            secondary: settings.secondaryLanguage)
-    }
-
     @ViewBuilder
     private var modelStatusRow: some View {
-        let size = effectiveModelSize
+        let size = settings.whisperModelSize
         let path = ModelPaths.whisperModel(size: size).path
         // modelStatusTick is referenced so SwiftUI re-evaluates after
         // a download completes.
@@ -280,7 +258,7 @@ struct GeneralTab: View {
     /// real engine behavior.
     private var activeFallbackSize: String? {
         let _ = modelStatusTick
-        let preferred = effectiveModelSize
+        let preferred = settings.whisperModelSize
         guard !FileManager.default.fileExists(atPath: ModelPaths.whisperModel(size: preferred).path)
         else { return nil }
         let resolved = ModelPaths.availableSize(preferred: preferred)

@@ -121,7 +121,6 @@ func cliSecrets() presets.EngineSecrets {
 	if lang == "" {
 		lang = "en"
 	}
-	secondaryLang := os.Getenv("HOWL_SECONDARY_LANGUAGE")
 	modelsDir := os.Getenv("HOWL_MODELS_DIR")
 	if modelsDir == "" {
 		modelsDir = os.ExpandEnv("$HOME/Library/Application Support/Howl/models")
@@ -138,7 +137,6 @@ func cliSecrets() presets.EngineSecrets {
 		LLMAPIKey:           os.Getenv("ANTHROPIC_API_KEY"),
 		WhisperModelPath:    modelPath,
 		Language:            lang,
-		SecondaryLanguage:   secondaryLang,
 		DeepFilterModelPath: os.Getenv("HOWL_DEEPFILTER_MODEL_PATH"),
 		TSEProfileDir:       profileDir,
 		TSEModelPath:        modelsDir,
