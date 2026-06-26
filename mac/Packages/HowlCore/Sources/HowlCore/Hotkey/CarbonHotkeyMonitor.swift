@@ -60,8 +60,8 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         // fn/Globe key: use CGEvent.tapCreate with .maskSecondaryFn — the
         // same technique OpenWhisper uses. NSEvent.addGlobalMonitorForEvents
         // isn't reliable for Globe key on macOS 15+.
-        if shortcut.isFnBased {
-            fnRequired = shortcut.modifiers
+        if shortcut.usesEventTap {
+            fnRequired = shortcut.requiredModifiers
             fnLetterKeyCode = shortcut.isFnLetterCombo ? Int64(shortcut.keyCode) : -1
             let reqRaw = fnRequired.rawValue
             log.notice("PTT (CGEventTap/fn) start: mods=0x\(String(format: "%X", reqRaw), privacy: .public) letterKC=\(self.fnLetterKeyCode, privacy: .public)")
@@ -216,6 +216,19 @@ public final class CarbonHotkeyMonitor: HotkeyMonitor, @unchecked Sendable {
         if m.contains(.control) { out |= UInt32(controlKey) }
         return out
     }
+
+    /// True when every modifier in `required` is present in the live CGEvent
+    /// flags. Pure and side-effect free so the bit-mapping is unit-testable
+    /// without a live event tap. Extra held modifiers are ignored (a control
+    /// trigger still fires when command is also down).
+    static func requiredFlagsHeld(_ flags: CGEventFlags, required: ModifierFlags) -> Bool {
+        if required.contains(.control), !flags.contains(.maskControl)     { return false }
+        if required.contains(.option),  !flags.contains(.maskAlternate)   { return false }
+        if required.contains(.command), !flags.contains(.maskCommand)     { return false }
+        if required.contains(.shift),   !flags.contains(.maskShift)       { return false }
+        if required.contains(.fn),      !flags.contains(.maskSecondaryFn) { return false }
+        return true
+    }
 }
 
 // File-scope C callback for the CGEventTap — mirrors OpenWhisper's
@@ -255,18 +268,11 @@ private func fnGlobeEventTapCallback(
         return Unmanaged.passUnretained(event)
     }
 
-    // fn-alone / fn+modifier mode: detect via flagsChanged.
+    // modifier-only mode (bare modifiers, or fn-alone / fn+modifier): detect via flagsChanged.
     guard type == .flagsChanged else { return Unmanaged.passUnretained(event) }
     let flags = event.flags
-    let rawFlags = flags.rawValue
-    var allHeld = flags.contains(.maskSecondaryFn)
-    log.info("CGEventTap flagsChanged: raw=0x\(String(format: "%X", rawFlags), privacy: .public) maskSecondaryFn=\(allHeld, privacy: .public)")
-    let req = monitor.fnRequired
-    if req.contains(.shift)   { allHeld = allHeld && flags.contains(.maskShift) }
-    if req.contains(.control) { allHeld = allHeld && flags.contains(.maskControl) }
-    if req.contains(.option)  { allHeld = allHeld && flags.contains(.maskAlternate) }
-    if req.contains(.command) { allHeld = allHeld && flags.contains(.maskCommand) }
-
+    let allHeld = CarbonHotkeyMonitor.requiredFlagsHeld(flags, required: monitor.fnRequired)
+    log.info("CGEventTap flagsChanged: raw=0x\(String(format: "%X", flags.rawValue), privacy: .public) allHeld=\(allHeld, privacy: .public)")
     DispatchQueue.main.async {
         if allHeld { monitor.firePress() } else { monitor.fireRelease() }
     }

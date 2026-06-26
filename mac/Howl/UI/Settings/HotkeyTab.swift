@@ -97,6 +97,13 @@ struct HotkeyTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            if settings.hotkey.isModifierOnly,
+               !settings.hotkey.requiredModifiers.intersection([.shift, .command]).isEmpty {
+                Text("This key is also used in normal shortcuts — dictation will trigger whenever you hold it.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             if !conflicts.isEmpty {
                 Divider()
                 Label {
@@ -239,12 +246,15 @@ final class KeyListenerView: NSView {
     // delivered to SwiftUI-hosted NSViews through the responder chain, so
     // we install a local monitor that fires before sendEvent dispatches.
     private var localFlagsMonitor: Any?
-    // Composing state: fn-press starts composing; fn-release commits the
-    // recorded combo (fn alone, fn+Shift, fn+Control, etc.).
-    private var pendingFn = false
-    private var pendingFnNSFlags: NSEvent.ModifierFlags = []
-    // Shared debounce guard (local monitor + responder override).
-    private var fnSeen = false
+    // Composing state: any monitored modifier down starts composing; full
+    // release commits a modifier-only trigger (⌃ alone, ⌃⌥, fn, fn+⇧, …).
+    private var composing = false
+    private var composedNSFlags: NSEvent.ModifierFlags = []
+    // Set when a key+modifier combo is committed via keyDown, so the trailing
+    // modifier release in flagsChanged does not also commit a modifier-only trigger.
+    private var committedCombo = false
+    // Modifiers we treat as triggers (incl. fn/Globe via .function).
+    private let monitoredFlags: NSEvent.ModifierFlags = [.control, .option, .command, .shift, .function]
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -285,54 +295,68 @@ final class KeyListenerView: NSView {
             NSEvent.removeMonitor(m)
             localFlagsMonitor = nil
         }
-        pendingFn = false
-        pendingFnNSFlags = []
-        fnSeen = false
+        composing = false
+        composedNSFlags = []
+        committedCombo = false
         log.info("KeyListenerView: removed local flagsChanged monitor")
     }
 
     // Called by both the local monitor and the responder-chain override.
-    // fn-press enters composing mode; fn-release commits whatever modifier
-    // combo was held alongside fn (fn alone, fn+Shift, fn+Control, etc.).
+    // Any monitored modifier down enters composing; full release commits the
+    // held modifier set as a modifier-only trigger (unless a combo was just
+    // committed via keyDown).
     private func handleFlagsChanged(_ event: NSEvent) {
-        let flags = event.modifierFlags
-        let fnDown = flags.contains(.function)
-
-        if fnDown {
-            // fn pressed or a co-modifier changed while fn is held.
-            pendingFn = true
-            fnSeen = true
-            pendingFnNSFlags = flags   // track latest modifier state while fn held
-            let desc = composedFnDisplay(flags)
-            log.info("KeyListenerView fn composing: \(desc, privacy: .public)")
+        let flags = event.modifierFlags.intersection(monitoredFlags)
+        if !flags.isEmpty {
+            composing = true
+            composedNSFlags = flags
+            let desc = composedDisplay(flags)
+            log.info("KeyListenerView composing: \(desc, privacy: .public)")
             onKeySeen?(desc)
-        } else if pendingFn {
-            // fn released — commit the recorded combination.
-            pendingFn = false
-            fnSeen = false
-            let shortcut = fnShortcut(from: pendingFnNSFlags)
-            log.info("KeyListenerView fn committed: \(shortcut.displayString, privacy: .public)")
+        } else if composing {
+            composing = false
+            if committedCombo {
+                committedCombo = false
+                return
+            }
+            let shortcut = modifierOnlyShortcut(from: composedNSFlags)
+            log.info("KeyListenerView modifier-only committed: \(shortcut.displayString, privacy: .public)")
             onRecord?(shortcut)
         }
     }
 
-    private func composedFnDisplay(_ flags: NSEvent.ModifierFlags) -> String {
-        var s = "fn"
-        if flags.contains(.control) { s += "⌃" }
-        if flags.contains(.option)  { s += "⌥" }
-        if flags.contains(.shift)   { s += "⇧" }
-        if flags.contains(.command) { s += "⌘" }
+    private func composedDisplay(_ flags: NSEvent.ModifierFlags) -> String {
+        var s = ""
+        if flags.contains(.function) { s += "fn" }
+        if flags.contains(.control)  { s += "⌃" }
+        if flags.contains(.option)   { s += "⌥" }
+        if flags.contains(.shift)    { s += "⇧" }
+        if flags.contains(.command)  { s += "⌘" }
         return s
     }
 
-    private func fnShortcut(from flags: NSEvent.ModifierFlags) -> HowlCore.KeyboardShortcut {
+    private func mappedModifiers(_ flags: NSEvent.ModifierFlags) -> ModifierFlags {
         var mods: ModifierFlags = []
-        if flags.contains(.shift)   { mods.insert(.shift) }
-        if flags.contains(.control) { mods.insert(.control) }
-        if flags.contains(.option)  { mods.insert(.option) }
-        if flags.contains(.command) { mods.insert(.command) }
+        if flags.contains(.shift)    { mods.insert(.shift) }
+        if flags.contains(.control)  { mods.insert(.control) }
+        if flags.contains(.option)   { mods.insert(.option) }
+        if flags.contains(.command)  { mods.insert(.command) }
+        if flags.contains(.function) { mods.insert(.fn) }
+        return mods
+    }
+
+    /// Build a modifier-only trigger from a flags-only hold. fn-based holds keep
+    /// the legacy kVK_Function representation; non-fn holds use kVK_None.
+    private func modifierOnlyShortcut(from flags: NSEvent.ModifierFlags) -> HowlCore.KeyboardShortcut {
+        let mods = mappedModifiers(flags)
+        if mods.contains(.fn) {
+            return HowlCore.KeyboardShortcut(
+                keyCode: HowlCore.KeyboardShortcut.kVK_Function,
+                modifiers: mods.subtracting(.fn)
+            )
+        }
         return HowlCore.KeyboardShortcut(
-            keyCode: HowlCore.KeyboardShortcut.kVK_Function,
+            keyCode: HowlCore.KeyboardShortcut.kVK_None,
             modifiers: mods
         )
     }
@@ -345,48 +369,30 @@ final class KeyListenerView: NSView {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let desc = "kc=\(event.keyCode) flags=0x\(String(flags.rawValue, radix: 16))"
         log.info("KeyListenerView.keyDown \(desc, privacy: .public)")
-        // onKeySeen is called later, after early-return guards, so the
-        // "Last key seen" hint doesn't fire for suppressed events.
 
         // Escape cancels — ignore fn if it's held alongside.
         let nonFnFlags = flags.subtracting(.function)
         if event.keyCode == UInt16(kVK_Escape) && nonFnFlags.isEmpty {
-            pendingFn = false
-            fnSeen = false
+            composing = false
+            committedCombo = false
             onCancel?()
-            return
-        }
-
-        // fn is composing — if a non-modifier key is pressed, commit fn+letter.
-        // If it's a pure modifier (shift, ctrl, etc.), fall through to flagsChanged.
-        if pendingFn {
-            let isModifierOnly = [kVK_Shift, kVK_RightShift, kVK_Control, kVK_RightControl,
-                                  kVK_Option, kVK_RightOption, kVK_Command, kVK_RightCommand,
-                                  kVK_CapsLock, kVK_Function].contains(Int(event.keyCode))
-            if !isModifierOnly {
-                pendingFn = false
-                fnSeen = false
-                let shortcut = HowlCore.KeyboardShortcut(keyCode: event.keyCode, modifiers: [.fn])
-                log.info("KeyListenerView fn+letter committed: kc=\(event.keyCode, privacy: .public)")
-                onRecord?(shortcut)
-            }
             return
         }
 
         onKeySeen?(desc)
 
-        guard !nonFnFlags.isEmpty else {
-            log.debug("KeyListenerView: ignoring — no modifiers")
+        // A bare key with no modifier is not a valid trigger (it would capture
+        // ordinary typing). Require at least one monitored modifier — including
+        // fn, which makes fn+letter valid.
+        guard !flags.intersection(monitoredFlags).isEmpty else {
+            log.debug("KeyListenerView: ignoring key with no modifiers")
             return
         }
 
-        var modifiers: ModifierFlags = []
-        if flags.contains(.shift)   { modifiers.insert(.shift) }
-        if flags.contains(.control) { modifiers.insert(.control) }
-        if flags.contains(.option)  { modifiers.insert(.option) }
-        if flags.contains(.command) { modifiers.insert(.command) }
-
-        onRecord?(HowlCore.KeyboardShortcut(keyCode: event.keyCode, modifiers: modifiers))
+        let shortcut = HowlCore.KeyboardShortcut(keyCode: event.keyCode, modifiers: mappedModifiers(flags))
+        committedCombo = true
+        log.info("KeyListenerView combo committed: \(shortcut.displayString, privacy: .public)")
+        onRecord?(shortcut)
     }
 
     // Some hosts route key events through performKeyEquivalent first

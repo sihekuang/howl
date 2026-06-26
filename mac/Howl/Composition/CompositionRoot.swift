@@ -53,5 +53,11 @@ public final class CompositionRoot {
     public lazy var overlay = RecordingOverlayController(appState: appState)
     public lazy var coordinator = EngineCoordinator(composition: self)
 
+    /// Session-scoped selection for the Pipeline editor's preset picker.
+    /// App-lifetime + in-memory so a manual pick survives the editor view
+    /// being recreated during navigation, and resets to the active preset
+    /// on relaunch. Internal: only the app's UI layer touches it.
+    lazy var pipelineEditorState = PipelineEditorState()
+
     public lazy var conflictChecker: any SymbolicHotkeyChecker = DefaultSymbolicHotkeyChecker()
 }

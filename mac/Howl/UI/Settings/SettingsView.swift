@@ -252,6 +252,7 @@ private struct DetailView: View {
                 replay: LibVKBReplayClient(engine: composition.engine),
                 audioCapture: composition.audioCapture,
                 settings: $settings,
+                editorState: composition.pipelineEditorState,
                 navigateTo: navigateTo
             )
         case .about:
