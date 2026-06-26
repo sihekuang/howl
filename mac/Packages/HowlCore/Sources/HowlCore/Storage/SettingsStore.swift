@@ -3,10 +3,6 @@ import Foundation
 public struct UserSettings: Codable, Equatable, Sendable {
     public var whisperModelSize: String
     public var language: String
-    /// Optional second language for code-switch dictation. "none" (default)
-    /// means single-language behavior. When set, the engine loads the
-    /// multilingual large model and the dictionary primes both scripts.
-    public var secondaryLanguage: String
     public var disableNoiseSuppression: Bool
     public var llmProvider: String
     public var llmModel: String
@@ -46,7 +42,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
     public init(
         whisperModelSize: String = "small",
         language: String = "en",
-        secondaryLanguage: String = "none",
         disableNoiseSuppression: Bool = false,
         llmProvider: String = "anthropic",
         llmModel: String = "claude-sonnet-4-6",
@@ -64,7 +59,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
-        self.secondaryLanguage = secondaryLanguage
         self.disableNoiseSuppression = disableNoiseSuppression
         self.llmProvider = llmProvider
         self.llmModel = llmModel
@@ -85,7 +79,6 @@ public struct UserSettings: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         whisperModelSize = try c.decodeIfPresent(String.self, forKey: .whisperModelSize) ?? "small"
         language = try c.decodeIfPresent(String.self, forKey: .language) ?? "en"
-        secondaryLanguage = try c.decodeIfPresent(String.self, forKey: .secondaryLanguage) ?? "none"
         disableNoiseSuppression = try c.decodeIfPresent(Bool.self, forKey: .disableNoiseSuppression) ?? false
         llmProvider = try c.decodeIfPresent(String.self, forKey: .llmProvider) ?? "anthropic"
         llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel) ?? "claude-sonnet-4-6"
@@ -103,7 +96,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case whisperModelSize, language, secondaryLanguage, disableNoiseSuppression
+        case whisperModelSize, language, disableNoiseSuppression
         case llmProvider, llmModel, llmBaseURL, llmPrompt, customDict, hotkey, hidBinding, inputDeviceUID, tseEnabled
         case tseThreshold, tseBackend, pipelineTimeoutSec
         case selectedPresetName

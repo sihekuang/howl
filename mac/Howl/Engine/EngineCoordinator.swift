@@ -547,7 +547,7 @@ public final class EngineCoordinator {
         let key = needsKey ? (try? composition.secrets.getAPIKey(forProvider: settings.llmProvider)) ?? "" : ""
         let paths = resolveEnginePaths(for: settings)
         let cfg = EngineConfig(settings: settings, apiKey: key, paths: paths)
-        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) sec=\(settings.secondaryLanguage, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public)")
+        log.info("applyConfig: whisper=\(paths.resolvedWhisperSize, privacy: .public) llm=\(settings.llmProvider, privacy: .public)/\(settings.llmModel, privacy: .public) keyLen=\(key.count, privacy: .public) lang=\(settings.language, privacy: .public) tse=\(cfg.tseEnabled, privacy: .public) thr=\(String(describing: settings.tseThreshold), privacy: .public) backend=\(settings.tseBackend, privacy: .public) timeout=\(settings.pipelineTimeoutSec, privacy: .public)")
         do {
             try await composition.engine.configure(cfg)
             log.info("applyConfig: engine configured cleanly")
@@ -562,14 +562,7 @@ public final class EngineCoordinator {
     /// any other downloaded size if the configured one is missing —
     /// better than failing configure entirely.
     private func resolveEnginePaths(for settings: UserSettings) -> EnginePaths {
-        // Code-switch / non-English dictation needs the multilingual model;
-        // WhisperModelSelection forces "large" when so, otherwise honors the
-        // user's chosen size.
-        let requestedSize = WhisperModelSelection.effectiveSize(
-            requested: settings.whisperModelSize,
-            primary: settings.language,
-            secondary: settings.secondaryLanguage)
-        let resolvedSize = ModelPaths.availableSize(preferred: requestedSize)
+        let resolvedSize = ModelPaths.availableSize(preferred: settings.whisperModelSize)
         let modelPath = ModelPaths.whisperModel(size: resolvedSize).path
         if resolvedSize != settings.whisperModelSize {
             log.info("applyConfig: configured model '\(settings.whisperModelSize, privacy: .public)' missing; falling back to '\(resolvedSize, privacy: .public)'")
