@@ -1,0 +1,53 @@
+# Decisions Log
+
+Append-only record of decisions made autonomously from converging evidence
+(see the `evidence-based-decisions` skill). Entries the human partner
+decided are recorded in the relevant design spec instead.
+
+## 2026-08-29 — On-screen OCR engine: Apple Vision (`VNRecognizeTextRequest`)
+
+**Decision:** For the screen-context feature, do OCR with Apple's Vision
+framework (`VNRecognizeTextRequest`, `.accurate` recognition level) rather
+than bundling Tesseract or any third-party OCR engine.
+
+**Trigger:** The screen-context → Whisper-prompt feature needs to turn a
+screenshot into text on macOS; no OCR engine exists in the repo yet.
+
+**Basis:** Unanimous across 3+ independent sources — every source treats the
+built-in Vision/Live Text stack as the default and best-performing OCR on
+macOS, and the one project that exists specifically to expose OCR to another
+language on Mac wraps Vision rather than shipping Tesseract. No source
+recommended Tesseract on macOS. It is also on-device (no network, matching
+Howl's local-first stance), zero-dependency, and already linked into the OS.
+
+**Sources:**
+- Apple, Vision framework / `VNRecognizeTextRequest` documentation — https://developer.apple.com/documentation/vision/vnrecognizetextrequest
+- `ocrmac` (Maximilian Strauss) — a wrapper that exists because Vision beats the alternatives on Mac — https://github.com/straussmaximilian/ocrmac
+- Evan Hahn, "Simple macOS script to extract text from images (OCR)" — https://evanhahn.com/mac-ocr-script/
+- "How to Extract Text from Image on Mac" (2026) — https://www.screensnap.pro/blog/extract-text-from-text-mac
+
+## 2026-08-29 — Whisper prompt budget: hard 224-token cap, dictionary keeps priority
+
+**Decision:** Screen-derived keywords share the existing
+`transcribe.MaxInitialPromptLen` (896 bytes ≈ 224 tokens) budget rather than
+getting their own. The custom dictionary is composed FIRST and screen keywords
+fill only the remainder, so overflow always evicts screen keywords, never
+dictionary terms. The feature must be switchable off.
+
+**Trigger:** "Make sure that we are not blowing up Whisper's context" — needed
+a factual answer for how much prompt Whisper actually accepts and what happens
+past it.
+
+**Basis:** Unanimous across the OpenAI Whisper cookbook (authoritative) and 3
+independent discussions/analyses: the prompt is capped at 224 tokens and
+anything longer is *silently* truncated to the FINAL 224 tokens — so an
+oversized prompt is not an error, it is silent, unpredictable loss. Sources
+also unanimously document that prompts can induce hallucination (text not
+present in the audio), which is why the feature needs an off switch and a
+conservative sub-budget rather than "fill the window."
+
+**Sources:**
+- OpenAI Cookbook, "Whisper prompting guide" — https://developers.openai.com/cookbook/examples/whisper_prompting_guide
+- openai/whisper Discussion #1824, "Prompt length (244 characters or tokens?)" — https://github.com/openai/whisper/discussions/1824
+- openai/whisper Discussion #1386, "Maximum number of 'initial_prompt' characters/tokens" — https://github.com/openai/whisper/discussions/1386
+- David Cochard, "Prompt Engineering in Whisper" (ailia Tech Blog) — https://medium.com/axinc-ai/prompt-engineering-in-whisper-6bb18003562d
