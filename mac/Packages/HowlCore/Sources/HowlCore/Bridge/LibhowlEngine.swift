@@ -209,4 +209,34 @@ public actor LibhowlEngine: CoreEngine {
         defer { howl_free_string(cstr) }
         return String(cString: cstr)
     }
+
+    public func extractScreenKeywords(text: String) async -> [String] {
+        struct Request: Encodable { let text: String }
+        struct Response: Decodable {
+            let keywords: [String]?
+            let error: String?
+        }
+        guard let json = try? JSONEncoder().encode(Request(text: text)),
+              let jsonString = String(data: json, encoding: .utf8) else { return [] }
+
+        let raw: String? = jsonString.withCString { cstr in
+            guard let out = howl_extract_keywords(UnsafeMutablePointer(mutating: cstr)) else { return nil }
+            defer { howl_free_string(out) }
+            return String(cString: out)
+        }
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return [] }
+        // An error response degrades to "no screen context" by design.
+        return decoded.keywords ?? []
+    }
+
+    public func setScreenKeywords(_ keywords: [String]) async {
+        struct Request: Encodable { let keywords: [String] }
+        guard let json = try? JSONEncoder().encode(Request(keywords: keywords)),
+              let jsonString = String(data: json, encoding: .utf8) else { return }
+        _ = jsonString.withCString { cstr in
+            howl_set_screen_keywords(UnsafeMutablePointer(mutating: cstr))
+        }
+    }
 }

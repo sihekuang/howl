@@ -52,6 +52,9 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
         tseExtractCalls.append((inputPath, outputPath, modelsDir, voiceDir, onnxLibPath))
         return stubTSEExtractRC
     }
+
+    func extractScreenKeywords(text: String) async -> [String] { [] }
+    func setScreenKeywords(_ keywords: [String]) async {}
 }
 
 @Suite("CoreEngine protocol")

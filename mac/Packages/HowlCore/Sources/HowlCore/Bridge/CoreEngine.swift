@@ -96,4 +96,14 @@ public protocol CoreEngine: Sendable {
     /// pipeline. Returns the C ABI return code (0 = success); on failure
     /// callers should consult `lastError()` for the description.
     func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) async -> Int32
+
+    /// Derive whisper biasing keywords from focused-window text via the
+    /// configured LLM provider. Blocking on the C side, so the actor
+    /// hop matters: never call this from a latency-sensitive path.
+    /// Returns [] on any failure — screen context is best-effort.
+    func extractScreenKeywords(text: String) async -> [String]
+
+    /// Store the keyword list applied at the next startCapture.
+    /// Instant; no network.
+    func setScreenKeywords(_ keywords: [String]) async
 }

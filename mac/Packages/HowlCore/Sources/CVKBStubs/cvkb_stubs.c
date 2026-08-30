@@ -46,3 +46,10 @@ int howl_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, ch
     (void)inputPath; (void)outputPath; (void)modelsDir; (void)voiceDir; (void)onnxLibPath;
     return -1;
 }
+
+// Screen-context whisper biasing — link stub. No HowlCoreTests exercise
+// LibhowlEngine's extractScreenKeywords/setScreenKeywords directly (the
+// coordinator tests inject a fake engine closure instead), so these are
+// never actually invoked; they exist only to satisfy the linker.
+char* howl_extract_keywords(char* jsonC) { (void)jsonC; return NULL; }
+int   howl_set_screen_keywords(char* jsonC) { (void)jsonC; return 0; }

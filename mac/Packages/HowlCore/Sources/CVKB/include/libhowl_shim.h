@@ -39,4 +39,8 @@ char* howl_replay(const char* source_id, const char* presets_csv);
 // Returns 0 on success, non-zero on failure (use howl_last_error for detail).
 int howl_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, char* voiceDir, char* onnxLibPath);
 
+// Screen-context whisper biasing. See core/cmd/libhowl/screenctx_export.go.
+char* howl_extract_keywords(char* jsonC);
+int howl_set_screen_keywords(char* jsonC);
+
 #endif
