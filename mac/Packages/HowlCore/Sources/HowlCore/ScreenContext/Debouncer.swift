@@ -23,7 +23,8 @@ public final class Debouncer: @unchecked Sendable {
     // nil once the action actually STARTS firing (not when it
     // finishes) or is cancelled, so the next `schedule` call starts a
     // fresh maxDelay window rather than inheriting a stale one. See
-    // `beginRun` for why fire time and not finish time.
+    // `beginRun` for why fire time and not finish time, and for how
+    // an epoch inherited across that same boundary is retired.
     private var runStartedAt: Date?
     // Identifies the current run. Every `schedule` (and `cancel`)
     // stamps a new id, so a task that reaches its own bookkeeping
@@ -64,7 +65,25 @@ public final class Debouncer: @unchecked Sendable {
         pending = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             if Task.isCancelled { return }
-            self?.beginRun(myRun)
+            // Second supersede check, and the one that actually
+            // decides whether to fire. `Task.isCancelled` above can be
+            // passed a moment before a newer `schedule` lands, so on
+            // its own it lets a superseded run execute its action
+            // anyway — a double fire. `beginRun` re-checks under the
+            // lock, so exactly one of the two runs proceeds.
+            //
+            // No fire is lost by bailing here: `id != runID` means
+            // either a newer run exists (and will fire) or `cancel()`
+            // happened (and nothing should fire).
+            //
+            // A deallocated `self` deliberately does NOT fire either.
+            // With the debouncer gone there is nothing left that could
+            // supersede or cancel this run, so letting it through
+            // would be an action escaping its own scheduler's
+            // lifetime — the exact "fires after teardown" shape this
+            // type exists to prevent, and what `deinit`'s
+            // `pending?.cancel()` already asks for.
+            guard self?.beginRun(myRun, epoch: startedAt) == true else { return }
             await action()
             self?.finishRun(myRun)
         }
@@ -96,10 +115,30 @@ public final class Debouncer: @unchecked Sendable {
     /// Guarded on `runID` because a newer `schedule` may have landed
     /// between this task's cancellation check and here; that newer run
     /// owns `runStartedAt` now, and its fresh epoch must survive.
-    private func beginRun(_ id: UInt64) {
+    ///
+    /// The `runStartedAt == epoch` arm closes the residual window in
+    /// that guard. A `schedule` landing between this task's
+    /// cancellation check and this lock acquisition *inherits* this
+    /// run's epoch (nothing has cleared it yet) and bumps `runID`, so
+    /// the id check alone fails and the epoch is never consumed —
+    /// leaving every subsequent `schedule` to keep inheriting an epoch
+    /// whose cap deadline is already in the past, i.e. firing with no
+    /// debounce at all, until some run's own `beginRun` finally
+    /// matches. Matching on the epoch value retires it immediately
+    /// instead. A superseded run that inherited a *fresh* epoch won't
+    /// match and correctly leaves it alone. (Two runs could in
+    /// principle carry byte-identical `Date`s; they would then denote
+    /// the same instant and the same cap, so clearing either is
+    /// equivalent.)
+    ///
+    /// Returns whether this run is still the current one — see the
+    /// call site for why that gates the action.
+    private func beginRun(_ id: UInt64, epoch: Date) -> Bool {
         lock.lock()
-        if id == runID { runStartedAt = nil }
-        lock.unlock()
+        defer { lock.unlock() }
+        let isCurrent = (id == runID)
+        if isCurrent || runStartedAt == epoch { runStartedAt = nil }
+        return isCurrent
     }
 
     /// Clears the run state only if this run is still the current one.

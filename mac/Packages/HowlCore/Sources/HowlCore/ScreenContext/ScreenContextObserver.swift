@@ -16,12 +16,18 @@ private final class ObserverToken: @unchecked Sendable {
 /// `AXObserverCallback` is a C function pointer and cannot capture
 /// Swift closures. Holds exactly what the callback needs to do its
 /// (trivial) job. `@unchecked Sendable` because it's only ever
-/// touched from the main run loop — both by AppKit, which delivers AX
-/// notifications there, and by `ScreenContextObserver` itself, which
-/// is `@MainActor` and therefore only ever deinitialized from the
-/// main actor too — so the callback (main run loop) and `deinit`
-/// (main actor) can never interleave; there is no thread on which
-/// this could race.
+/// touched from the main actor — by AppKit, which delivers AX
+/// notifications on the main run loop, and by the attach/teardown
+/// paths, which are all main-actor-isolated. The callback and a
+/// teardown therefore can never interleave.
+///
+/// Note what this does NOT rest on: `ScreenContextObserver` being
+/// `@MainActor` does not mean it is *deallocated* on the main actor.
+/// `deinit` is nonisolated and runs on whichever thread drops the last
+/// reference, which is exactly why `deinit` hands its teardown to the
+/// main actor instead of doing it inline — see `deinit` below. Were it
+/// to release this object off-main, it could free the very memory the
+/// main run loop was mid-callout dereferencing through `refcon`.
 private final class AXCallbackContext: @unchecked Sendable {
     let debouncer: Debouncer
     let action: @Sendable () async -> Void
@@ -40,6 +46,36 @@ private final class AXObserverToken: @unchecked Sendable {
     var observer: AXObserver?
     var pid: pid_t?
     var context: AXCallbackContext?
+}
+
+/// The attach-attempt generation counter, in a lock-guarded box
+/// rather than as plain `@MainActor` stored state on the observer.
+///
+/// Two readers live off the main actor: the AX registration queue
+/// re-checks it *before* paying for its IPC (see `axRegistrationQueue`),
+/// and `deinit` — nonisolated, and running wherever the last reference
+/// happened to drop — bumps it so a still-queued attempt skips that
+/// IPC entirely. Attempts are still only ever *started* from the main
+/// actor, so this box provides synchronization, not ownership.
+private final class AttachGeneration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+
+    /// Invalidates every attempt currently in flight and returns the
+    /// id of the new one. `&+` wraps rather than traps; the counter is
+    /// only ever compared for equality, never for ordering, so
+    /// wraparound (which needs 2^64 activations) is harmless anyway.
+    @discardableResult
+    func bump() -> UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        value &+= 1
+        return value
+    }
+
+    func isCurrent(_ id: UInt64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return id == value
+    }
 }
 
 /// Bundles the CF/AX references an in-flight attach attempt needs to
@@ -75,12 +111,18 @@ private final class PendingAXAttach: @unchecked Sendable {
 }
 
 /// Removes `token`'s AX observer from the main run loop and clears
-/// it. A free function (not a method) so it can be called both from
-/// `ScreenContextObserver`'s (actor-isolated) `stop()`/`teardownAXObserver()`
-/// and from its nonisolated `deinit` — none of `CFRunLoopRemoveSource`,
-/// `AXObserverGetRunLoopSource`, or `CFRunLoopGetMain` are
-/// actor-isolated, so this is safe to call from either context,
-/// exactly like the NSWorkspace removal a few lines below.
+/// it. A free function (not a method) so it can be called without a
+/// `ScreenContextObserver` in hand: `stop()` and the completion of an
+/// attach attempt both call it on the main actor, and `deinit`'s
+/// main-actor teardown hop calls it holding only the token, never the
+/// (already dying) observer object.
+///
+/// Every caller is on the main actor. That is a requirement, not a
+/// convenience: `CFRunLoopRemoveSource` is thread-safe but does NOT
+/// wait for an in-progress callout, so clearing `token.context` off
+/// the main thread could release the `AXCallbackContext` while the
+/// main run loop is still dereferencing that same `refcon` inside
+/// `axScreenContextCallback`.
 private func detachAXObserver(_ token: AXObserverToken) {
     if let observer = token.observer {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
@@ -148,10 +190,39 @@ public final class ScreenContextObserver {
     /// run loop. `AXObserverGetRunLoopSource` is a *Get* — the
     /// observer owns the source — so that leaves the run loop holding
     /// a source whose owner has been freed, with a `refcon` aimed at a
-    /// context freed on the next line. `stop()` bumps this too, so an
-    /// in-flight attempt cannot repopulate the token after stop.
-    /// Compared only for equality, so `&+` wraparound is harmless.
-    private var attachGeneration: UInt64 = 0
+    /// context freed on the next line. `stop()` and `deinit` bump it
+    /// too, so an in-flight attempt cannot repopulate the token after
+    /// teardown.
+    private let attachGeneration = AttachGeneration()
+
+    /// Dedicated serial queue for the blocking
+    /// `AXObserverAddNotification` IPC.
+    ///
+    /// Mirrors `LibhowlEngine.screenContextQueue` and for the same
+    /// reason: getting a blocking call off the main actor is only half
+    /// the job, because a `Task.detached` still parks a
+    /// Swift-concurrency cooperative-pool thread, and that pool is
+    /// small and shared across the whole process. Two
+    /// `AXObserverAddNotification` calls at a 0.25s messaging timeout
+    /// can block for ~0.5s against a hung or mid-launch app, and rapid
+    /// alt-tabbing across several such apps would otherwise occupy
+    /// several pool threads at once.
+    ///
+    /// Serial, not concurrent, and that buys a second thing: because a
+    /// queued attempt re-checks `attachGeneration` before doing any
+    /// IPC, a burst of activations collapses to roughly ONE real
+    /// registration — every attempt but the newest finds itself
+    /// already superseded and returns without touching AX at all.
+    /// The generation counter is what makes that safe.
+    ///
+    /// The trade, accepted deliberately: one hung app's ~0.5s delays
+    /// the *next* app's attach by up to ~0.5s. Attach is not on the
+    /// dictation path and the focus debounce is 0.8s anyway, so this
+    /// is invisible — the same trade the LLM extraction queue already
+    /// makes.
+    private static let axRegistrationQueue = DispatchQueue(
+        label: "com.howl.app.screencontext-axregister", qos: .utility
+    )
 
     public init(debounce: TimeInterval = 0.8,
                 onFocusSettled: @escaping @Sendable () async -> Void) {
@@ -200,22 +271,59 @@ public final class ScreenContextObserver {
         // repopulate `axToken` after stop() — leaving the observer
         // firing (and its source installed) past the point the caller
         // asked for it to be gone.
-        attachGeneration &+= 1
+        attachGeneration.bump()
         detachAXObserver(axToken)
     }
 
     deinit {
-        if let observer = token.value {
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
-        }
+        // `deinit` is nonisolated even on a `@MainActor` class: it
+        // runs on whichever thread drops the last reference, NOT
+        // necessarily the main one. The previous version tore the AX
+        // observer down inline on the strength of a comment asserting
+        // otherwise, and that assertion is not something the type
+        // system enforces or a future owner is obliged to honour.
+        //
+        // The race it left open is concrete. `CFRunLoopRemoveSource`
+        // is thread-safe but does NOT wait for an in-progress callout,
+        // so clearing `token.context` from another thread can release
+        // the `AXCallbackContext` while the main run loop is still
+        // inside `axScreenContextCallback` dereferencing that same
+        // `refcon` — a use-after-free reached by a different door than
+        // the one the generation counter closed.
+        //
+        // So the CF/AppKit teardown is handed to the main actor. What
+        // makes that legal from a dying object is capturing the TOKEN
+        // OBJECTS rather than `self`: both are independent
+        // `@unchecked Sendable` reference types, so the closure keeps
+        // exactly the state it needs alive on its own refcount without
+        // resurrecting the observer.
+        let notificationToken = token
+        let observerToken = axToken
+        let debouncer = self.debouncer
+
+        // Synchronous, and first: invalidates any attempt sitting on
+        // the registration queue so it skips its IPC and can never
+        // install into a token that is about to be torn down.
+        attachGeneration.bump()
         debouncer.cancel()
-        // Safe without extra synchronization: `ScreenContextObserver`
-        // is `@MainActor`, so it is only ever deallocated from the
-        // main actor, on the main thread — the same thread the AX
-        // callback (`axScreenContextCallback`) and the run loop
-        // deliver on. deinit and the callback can never run
-        // concurrently with each other; there is nothing to race.
-        detachAXObserver(axToken)
+
+        Task { @MainActor in
+            if let observer = notificationToken.value {
+                NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            }
+            notificationToken.value = nil
+            detachAXObserver(observerToken)
+            // Again, after the source is gone. The hop above is a
+            // window in which the run loop can still deliver one AX
+            // notification, and that callback would schedule a fresh
+            // debounced run through the context it still (legally)
+            // holds. Cancelling once more here retires it. Only a main
+            // thread stalled longer than the whole debounce interval
+            // could get an action out, and even that would be
+            // memory-safe — every object the callback touches is kept
+            // alive by these captures.
+            debouncer.cancel()
+        }
     }
 
     /// Tears down any existing AX observer and attaches a fresh one to
@@ -229,16 +337,16 @@ public final class ScreenContextObserver {
     /// actor — none of it is IPC into another process. Only
     /// `AXObserverAddNotification` — genuine Mach IPC into the
     /// just-activated app's own accessibility server, with no
-    /// messaging timeout otherwise bounding it — is moved off the
-    /// main actor below, so a hung, beachballing, or mid-launch app
-    /// can never block Howl's UI thread on activation.
+    /// messaging timeout otherwise bounding it — runs on
+    /// `axRegistrationQueue` below, so a hung, beachballing, or
+    /// mid-launch app can block neither Howl's UI thread nor a
+    /// cooperative-pool thread on activation.
     private func reattachAXObserver() {
         // Bumped at the very top, deliberately covering the two early
         // returns below as well: both leave the observer state in a
         // shape that no older in-flight attempt should be allowed to
         // finish writing into.
-        attachGeneration &+= 1
-        let myAttach = attachGeneration
+        let myAttach = attachGeneration.bump()
 
         guard let app = NSWorkspace.shared.frontmostApplication else {
             detachAXObserver(axToken)
@@ -274,7 +382,28 @@ public final class ScreenContextObserver {
 
         let attach = PendingAXAttach(observer: observer, appElement: appElement, refcon: refcon, pid: pid, context: context)
 
-        Task.detached { [weak self] in
+        // Deliberately captures the token objects and the generation
+        // box rather than `self`. Nothing below needs the observer
+        // object itself, and not holding it means an attempt in flight
+        // neither keeps a dying observer alive nor has to reason about
+        // a half-torn-down one: `deinit` bumps the generation, so a
+        // queued attempt is superseded exactly the way `stop()`
+        // supersedes one, and the token it would have written into is
+        // kept alive independently by these captures.
+        let generation = self.attachGeneration
+        let axToken = self.axToken
+        let log = self.log
+
+        Self.axRegistrationQueue.async {
+            // Cheap supersede check BEFORE the expensive IPC. This is
+            // what collapses a burst of activations to roughly one
+            // real registration: on a serial queue every attempt but
+            // the newest arrives already superseded and skips AX
+            // entirely. Correctness does not depend on it — the
+            // main-actor check below is the one that guards the
+            // install — so a race here costs at worst one wasted IPC.
+            guard generation.isCurrent(myAttach) else { return }
+
             let addedFocusedWindow = AXObserverAddNotification(
                 attach.observer, attach.appElement,
                 kAXFocusedWindowChangedNotification as CFString, attach.refcon
@@ -284,8 +413,7 @@ public final class ScreenContextObserver {
                 kAXTitleChangedNotification as CFString, attach.refcon
             ) == .success
 
-            await MainActor.run {
-                guard let self else { return }
+            Task { @MainActor in
                 // Is this still the newest attach attempt? Checked
                 // BEFORE the frontmost-app test, because the pid test
                 // cannot catch the dangerous case: two attempts for
@@ -295,14 +423,21 @@ public final class ScreenContextObserver {
                 // after `start()`'s own priming call — the in-flight
                 // window is up to ~0.5s for exactly the hung or
                 // mid-launch apps the messaging timeout exists for.
-                // It also catches `stop()`, which bumps the
-                // generation. Discarding here is safe and self-healing
-                // in every case: nothing was added to the run loop, so
-                // releasing `attach` releases the observer, its
-                // (uninstalled) source, and `context` together, and
-                // `axToken.pid` stays nil so the next activation
+                // It also catches `stop()` and `deinit`, both of which
+                // bump the generation.
+                //
+                // Discarding here is always safe: nothing was added to
+                // the run loop, so releasing `attach` releases the
+                // observer, its (uninstalled) source, and `context`
+                // together, and the `refcon` is never dereferenced.
+                // It is also always self-healing, though by two
+                // different routes — either this attempt was
+                // superseded by one that has already attached (so the
+                // app IS observed, and `axToken` holds that newer
+                // observer and its pid), or no attach succeeded and
+                // `axToken.pid` is nil, so the next activation
                 // retries.
-                guard myAttach == self.attachGeneration else { return }
+                guard generation.isCurrent(myAttach) else { return }
                 // The frontmost app may have changed again while this
                 // was in flight (another activation dispatched its own
                 // reattachAXObserver, which may already have attached
@@ -322,7 +457,7 @@ public final class ScreenContextObserver {
                     // released when this attempt ends; nothing was
                     // registered and no source was installed, so the
                     // `refcon` can never be dereferenced.
-                    self.log.debug("screen context AX add-notification failed")
+                    log.debug("screen context AX add-notification failed")
                     return
                 }
                 // Belt-and-braces: never install a second source while
@@ -335,14 +470,14 @@ public final class ScreenContextObserver {
                 // structurally rather than by argument. NOT a
                 // replacement for the generation guard: on its own it
                 // would still allow a post-`stop()` install.
-                detachAXObserver(self.axToken)
+                detachAXObserver(axToken)
                 CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(attach.observer), .commonModes)
-                self.axToken.observer = attach.observer
-                self.axToken.pid = attach.pid
+                axToken.observer = attach.observer
+                axToken.pid = attach.pid
                 // Ownership of `context` transfers to the token now
                 // that registration has actually succeeded — `detachAXObserver`
                 // will release it on the next teardown.
-                self.axToken.context = attach.context
+                axToken.context = attach.context
             }
         }
     }
