@@ -198,7 +198,14 @@ func (o *Ollama) Clean(ctx context.Context, raw string, preserveTerms []string) 
 		KeepAlive: ollamaKeepAlive,
 	})
 	t0 := time.Now()
-	log.Printf("[howl] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
+	// Screen-context extraction reuses this same Clean path on every
+	// window focus change (see screenctx.NewExtractor) — suppress this
+	// line for it so cleanup's Clean: lines stay one-to-one with actual
+	// dictations, and so the log doesn't record the byte size of every
+	// focused window's text on every focus change.
+	if !IsScreenContextSource(ctx) {
+		log.Printf("[howl] ollama.Clean: sending model=%s baseURL=%s rawLen=%d termCount=%d (first request after idle may take 5-15s while Ollama loads the model)", o.model, o.baseURL, len(raw), len(preserveTerms))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {

@@ -46,6 +46,43 @@ func TestSetScreenKeywords_EmptyListClearsPrevious(t *testing.T) {
 	}
 }
 
+func TestScreenExtractorFor_CachesForSameConfig(t *testing.T) {
+	resetEngineForTest(t)
+	e := getEngine()
+	cfg := config.Config{LLMProvider: "ollama", LLMModel: "qwen2.5:7b"}
+
+	first, err := e.screenExtractorFor(cfg)
+	if err != nil {
+		t.Fatalf("screenExtractorFor: %v", err)
+	}
+	second, err := e.screenExtractorFor(cfg)
+	if err != nil {
+		t.Fatalf("screenExtractorFor (second call): %v", err)
+	}
+	if first != second {
+		t.Errorf("expected the same cached Cleaner for an unchanged config, got two different instances")
+	}
+}
+
+func TestScreenExtractorFor_RebuildsWhenConfigChanges(t *testing.T) {
+	resetEngineForTest(t)
+	e := getEngine()
+
+	first, err := e.screenExtractorFor(config.Config{LLMProvider: "ollama", LLMModel: "qwen2.5:7b"})
+	if err != nil {
+		t.Fatalf("screenExtractorFor: %v", err)
+	}
+	// Model differs — a settings change must still rebuild, not reuse
+	// the cached extractor for the old model.
+	second, err := e.screenExtractorFor(config.Config{LLMProvider: "ollama", LLMModel: "qwen2.5:14b"})
+	if err != nil {
+		t.Fatalf("screenExtractorFor (changed model): %v", err)
+	}
+	if first == second {
+		t.Errorf("expected a rebuilt Cleaner after the model changed, got the same cached instance")
+	}
+}
+
 func TestExtractKeywords_UnknownProviderReturnsErrorJSON(t *testing.T) {
 	resetEngineForTest(t)
 	e := getEngine()
@@ -102,4 +139,13 @@ func resetEngineForTest(t *testing.T) {
 	e.screenKeywords = nil
 	e.cfg = config.Config{}
 	e.mu.Unlock()
+	// gEngine is reused across every test in this binary (see the
+	// comment above), so the screen-extractor cache added alongside
+	// screenExtractorFor needs clearing here too — otherwise a test
+	// that successfully builds one could leak it into an unrelated
+	// later test.
+	e.extractorMu.Lock()
+	e.screenExtractor = nil
+	e.screenExtractorKey = extractorCacheKey{}
+	e.extractorMu.Unlock()
 }

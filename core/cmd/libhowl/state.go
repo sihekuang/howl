@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/voice-keyboard/core/internal/config"
+	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/pipeline"
 	pipelinebuild "github.com/voice-keyboard/core/internal/pipeline/build"
 	"github.com/voice-keyboard/core/internal/recorder"
@@ -79,6 +80,22 @@ type engine struct {
 	// transcriber at howl_start_capture — never mid-capture, so there
 	// is no race against an in-flight Transcribe. Guarded by mu.
 	screenKeywords []string
+
+	// extractorMu, screenExtractor, and screenExtractorKey cache the
+	// screen-context Cleaner built by screenctx.NewExtractor (see
+	// screenExtractorFor in screenctx_export.go), so
+	// howl_extract_keywords doesn't build a fresh provider — and, for
+	// Ollama/LM Studio with no model configured, make a fresh /api/tags
+	// auto-detect round trip — on every window focus change.
+	//
+	// A SEPARATE lock from mu, deliberately: building an extractor can
+	// itself make a network call (that same auto-detect path), which
+	// must run unlocked — mirroring why extractKeywordsJSON already
+	// snapshots cfg under mu and releases it before its own network
+	// call.
+	extractorMu        sync.Mutex
+	screenExtractor    llm.Cleaner
+	screenExtractorKey extractorCacheKey
 }
 
 // event is the JSON payload emitted via howl_poll_event. Kind values:

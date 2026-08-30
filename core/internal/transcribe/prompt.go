@@ -14,9 +14,10 @@ import (
 const MaxInitialPromptLen = 896
 
 // MaxScreenPromptLen is a loose byte pre-filter on the screen-derived
-// portion of the prompt, applied where no whisper context is available
-// (composition, tests, howl-cli). The authoritative bound is
-// MaxScreenPromptTokens, enforced in WhisperCpp.SetContextPrompt.
+// portion of the prompt, applied in ContextPrompt (whose only
+// production caller is WhisperCpp.SetContextPrompt; no howl-cli
+// consumer exists). The authoritative bound is MaxScreenPromptTokens,
+// enforced afterward in WhisperCpp.SetContextPrompt itself.
 const MaxScreenPromptLen = 384
 
 // MaxScreenPromptTokens caps the screen-derived portion of whisper's
@@ -107,12 +108,18 @@ func DictionaryPrompt(terms []string) string {
 //
 // Screen terms are deduped case-insensitively against the dictionary
 // (and against each other) and bounded to MaxScreenPromptLen; the whole
-// result is bounded to MaxInitialPromptLen.
+// result is bounded to MaxInitialPromptLen. Both are byte bounds, and
+// deliberately loose — a cheap pre-filter, not the authoritative one.
 //
-// Returns the prompt plus the screen terms that actually survived
-// truncation — the latter is what callers record in the session
-// manifest, so the manifest reflects what whisper saw rather than what
-// was offered.
+// The returned PROMPT STRING is not what governs what whisper actually
+// sees, and not what production uses: WhisperCpp.SetContextPrompt, the
+// only production caller, discards it outright
+// (`_, screen := ContextPrompt(...)`) and re-trims the returned screen
+// SLICE against whisper's real token window (MaxScreenPromptTokens,
+// then MaxPromptTokens) — that token-based pass is what actually
+// governs the prompt whisper sees and what ends up in the session
+// manifest. This function's tests exercise the string return directly
+// (its normal Go contract), but no caller does.
 func ContextPrompt(dictTerms, screenTerms []string) (string, []string) {
 	dict := cleanTerms(dictTerms)
 	screen := cleanTerms(screenTerms)

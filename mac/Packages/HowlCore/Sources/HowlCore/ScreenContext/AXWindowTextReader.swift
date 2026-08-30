@@ -45,7 +45,8 @@ public struct AXWindowTextReader: WindowTextReader {
         let title = copyString(window, kAXTitleAttribute) ?? ""
         var collected = ""
         var visited = 0
-        walk(window, into: &collected, visited: &visited)
+        var charCount = 0
+        walk(window, into: &collected, charCount: &charCount, visited: &visited)
 
         let text = collected.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
@@ -53,8 +54,30 @@ public struct AXWindowTextReader: WindowTextReader {
     }
 
     /// Depth-first walk accumulating AXValue and AXTitle strings.
-    private func walk(_ element: AXUIElement, into out: inout String, visited: inout Int) {
-        if visited >= maxNodes || out.count >= maxChars { return }
+    ///
+    /// `charCount` is a running total maintained incrementally rather
+    /// than re-deriving it from `out.count` on every check. `String.count`
+    /// is an O(length) grapheme-cluster scan, not O(1) — calling it up
+    /// to 3 times per node (entry, post-attribute, post-child) across up
+    /// to `maxNodes` (3000) nodes on a string growing toward `maxChars`
+    /// (8192) made the whole walk O(n²) in the accumulated text length.
+    ///
+    /// The running total preserves IDENTICAL `maxChars` semantics to
+    /// the original `out.count` check — not an approximation. Every
+    /// chunk this appends is immediately followed by a newline, and a
+    /// newline is always its own extended grapheme cluster (Unicode
+    /// never merges a line feed with a neighboring character), so every
+    /// append lands on a hard grapheme-boundary on both sides: what
+    /// precedes it (the newline from the previous append, or the empty
+    /// string at the very start) and what follows it (the newline this
+    /// append itself adds). Grapheme-cluster segmentation is local to a
+    /// small neighborhood around each boundary, so a chunk's own
+    /// `trimmed.count`, computed standalone, is unaffected by anything
+    /// outside those hard breaks — summing it in is exactly equivalent
+    /// to re-counting the whole accumulated string, not just close to
+    /// it.
+    private func walk(_ element: AXUIElement, into out: inout String, charCount: inout Int, visited: inout Int) {
+        if visited >= maxNodes || charCount >= maxChars { return }
         visited += 1
 
         for attr in [kAXValueAttribute, kAXTitleAttribute] {
@@ -62,7 +85,8 @@ public struct AXWindowTextReader: WindowTextReader {
                 let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     out += trimmed + "\n"
-                    if out.count >= maxChars { return }
+                    charCount += trimmed.count + 1 // +1 for the trailing "\n"
+                    if charCount >= maxChars { return }
                 }
             }
         }
@@ -71,8 +95,8 @@ public struct AXWindowTextReader: WindowTextReader {
         guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
               let children = childrenRef as? [AXUIElement] else { return }
         for child in children {
-            walk(child, into: &out, visited: &visited)
-            if visited >= maxNodes || out.count >= maxChars { return }
+            walk(child, into: &out, charCount: &charCount, visited: &visited)
+            if visited >= maxNodes || charCount >= maxChars { return }
         }
     }
 

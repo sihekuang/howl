@@ -51,7 +51,10 @@ func Extract(ctx context.Context, cleaner llm.Cleaner, windowText string, dictTe
 	if text == "" {
 		return nil, nil
 	}
-	raw, err := cleaner.Clean(ctx, text, dictTerms)
+	// Tagged so the provider's Clean implementation can tell this apart
+	// from an ordinary dictation-cleanup call and adjust its own
+	// logging — see llm.WithScreenContextSource's doc comment.
+	raw, err := cleaner.Clean(llm.WithScreenContextSource(ctx), text, dictTerms)
 	if err != nil {
 		return nil, err
 	}

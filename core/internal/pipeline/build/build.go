@@ -129,12 +129,23 @@ func (n nonClosingTranscriber) Close() error { return nil }
 
 // SetContextPrompt forwards to the wrapped transcriber when it supports
 // re-biasing, returning what the wrapped call returns — the screen
-// terms that actually survived trimming. Without this the embedded
-// interface hides the method and the PromptSetter assertion in libhowl
-// silently no-ops for shared transcribers. Returns nil when the wrapped
+// terms that actually survived trimming. Returns nil when the wrapped
 // transcriber does not implement PromptSetter, so a caller stamping the
 // return value into a session manifest never records terms as applied
 // when nothing was actually re-biased.
+//
+// Unreachable today — not fixing a live bug. nonClosingTranscriber is
+// only constructed on the replay path (replay.Run, via
+// SharedTranscriber), and nothing on that path calls SetContextPrompt.
+// The only caller of SetContextPrompt is howl_start_capture, which
+// always operates on the live, unwrapped pipeline (buildPipeline never
+// sets SharedTranscriber). Kept anyway as defensive plumbing: without
+// this override, embedding transcribe.Transcriber (an interface) only
+// promotes methods THAT interface declares, so a future
+// pipe.Transcriber.(transcribe.PromptSetter) assertion on a
+// replay-built pipeline would silently fail even when the WRAPPED
+// concrete transcriber implements PromptSetter. This method exists so
+// that trap isn't waiting for whoever adds such a caller later.
 func (n nonClosingTranscriber) SetContextPrompt(dictTerms, screenTerms []string) []string {
 	if ps, ok := n.Transcriber.(transcribe.PromptSetter); ok {
 		return ps.SetContextPrompt(dictTerms, screenTerms)

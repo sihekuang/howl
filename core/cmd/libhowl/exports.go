@@ -744,10 +744,14 @@ func howl_clear_sessions() C.int {
 //   - minor: a new function is added (additive, back-compat)
 //   - patch: a fix that doesn't change the surface (rare)
 //
-// The Mac app reads this via howl_abi_version() at startup and asserts
-// it matches the major version it was built against. This catches
-// dev-build vs. shipped-dylib mismatches that would otherwise crash
-// at first call to the new function.
+// No Swift consumer reads howl_abi_version() today — a grep of mac/
+// for "abi_version"/"abiVersion" finds nothing (see docs/decisions.md's
+// 2026-08-29 ABI-bump entry, which records the same finding). This is
+// a version marker for a startup dev-build-vs-shipped-dylib mismatch
+// check that does not exist yet, not a description of one that does.
+// Bumping the minor digit is safe precisely because nothing currently
+// reads it; if a Swift-side check is added later, it should assert on
+// the major version only, per the bump policy above.
 const abiVersion = "1.1.0"
 
 // howl_abi_version returns the libhowl ABI semver. Caller frees via

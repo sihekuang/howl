@@ -154,7 +154,13 @@ func (a *Anthropic) Clean(ctx context.Context, raw string, preserveTerms []strin
 	prompt := RenderPrompt(promptTpl, raw, preserveTerms)
 
 	t0 := time.Now()
-	log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
+	// See the matching comment in ollama.go's Clean: suppressed for
+	// screen-context extraction so cleanup's Clean: lines stay
+	// one-to-one with dictations and the log doesn't record every
+	// focused window's text size on every focus change.
+	if !IsScreenContextSource(ctx) {
+		log.Printf("[howl] anthropic.Clean: sending model=%s rawLen=%d termCount=%d", a.model, len(raw), len(preserveTerms))
+	}
 	msg, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: 1024,

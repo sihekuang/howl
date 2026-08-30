@@ -160,7 +160,13 @@ func (o *OpenAI) Clean(ctx context.Context, raw string, preserveTerms []string) 
 		MaxTokens: 1024,
 	})
 	t0 := time.Now()
-	log.Printf("[howl] openai.Clean: sending model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
+	// See the matching comment in ollama.go's Clean: suppressed for
+	// screen-context extraction so cleanup's Clean: lines stay
+	// one-to-one with dictations and the log doesn't record every
+	// focused window's text size on every focus change.
+	if !IsScreenContextSource(ctx) {
+		log.Printf("[howl] openai.Clean: sending model=%s rawLen=%d termCount=%d", o.model, len(raw), len(preserveTerms))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {

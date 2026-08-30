@@ -177,7 +177,7 @@ func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, 
 // jargon and CamelCase identifiers tokenize far denser than prose.
 //
 // mu is held across the nil-check and the whisper_token_count call so
-// a concurrent Close cannot free w.ctx between the two: whisper_free
+// a concurrent Close cannot free w.ctx between the two: whisper_token_count
 // runs on a freed *C.struct_whisper_context otherwise -- a hard crash
 // with no Go-level signal. The call itself is short and non-blocking
 // (unlike run_whisper_full), so holding the lock across it is fine.
@@ -274,11 +274,20 @@ func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string 
 
 func (w *WhisperCpp) Close() error {
 	// The nil-transition is guarded by mu so tokenCount's check-then-call
-	// against w.ctx can't race a concurrent Close: either tokenCount
+	// against w.ctx can't race THIS transition: either tokenCount
 	// completes its whisper_token_count call while ctx is still valid, or
 	// it observes ctx already nil and returns 0 -- never a call on a
-	// freed context. whisper_free itself runs outside the lock since
-	// nothing else touches ctx once the field is nil.
+	// freed context.
+	//
+	// That guarantee does NOT extend to Transcribe -- a known,
+	// pre-existing gap this comment previously asserted away. Transcribe
+	// reads w.ctx unlocked (its own nil-check, and again at the
+	// run_whisper_full and whisper_full_get_segment_text call sites), so
+	// it can still be holding and using the OLD pointer value after this
+	// method nils the field below: a Close() racing an in-flight
+	// Transcribe CAN free ctx out from under it. whisper_free is safe to
+	// run outside the lock with respect to tokenCount specifically; it
+	// is NOT safe with respect to a concurrent Transcribe.
 	w.mu.Lock()
 	ctx := w.ctx
 	w.ctx = nil
