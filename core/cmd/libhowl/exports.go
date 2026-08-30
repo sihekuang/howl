@@ -724,7 +724,7 @@ func howl_clear_sessions() C.int {
 // it matches the major version it was built against. This catches
 // dev-build vs. shipped-dylib mismatches that would otherwise crash
 // at first call to the new function.
-const abiVersion = "1.0.0"
+const abiVersion = "1.1.0"
 
 // howl_abi_version returns the libhowl ABI semver. Caller frees via
 // howl_free_string. Never returns NULL.

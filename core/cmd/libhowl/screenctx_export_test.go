@@ -5,6 +5,8 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/voice-keyboard/core/internal/config"
 )
 
 func TestSetScreenKeywords_StoresOnEngine(t *testing.T) {
@@ -81,6 +83,15 @@ func TestExtractKeywords_RejectsBadJSON(t *testing.T) {
 
 // resetEngineForTest gives each test a clean engine. howl_init is
 // idempotent on the C side; this mirrors it for Go-level tests.
+//
+// gEngine is a package-level singleton shared by every test in this
+// binary (howl_init no-ops once it exists), so without resetting cfg
+// here a mutation like TestExtractKeywords_UnknownProviderReturnsErrorJSON's
+// e.cfg.LLMProvider = "nope" would leak into every test that runs
+// afterward, in this file and others. Zeroing e.cfg restores the same
+// zero-value config.Config{} that a fresh engine starts with (no test
+// in this package calls howl_configure, so there are no defaults to
+// preserve).
 func resetEngineForTest(t *testing.T) {
 	t.Helper()
 	if rc := howl_init(); rc != 0 {
@@ -89,5 +100,6 @@ func resetEngineForTest(t *testing.T) {
 	e := getEngine()
 	e.mu.Lock()
 	e.screenKeywords = nil
+	e.cfg = config.Config{}
 	e.mu.Unlock()
 }

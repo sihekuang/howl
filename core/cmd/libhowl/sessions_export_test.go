@@ -137,8 +137,8 @@ func TestExport_AbiVersion_ReturnsExpectedSemver(t *testing.T) {
 	// howl_init not required for the version probe — versioning is a
 	// library-level constant.
 	got := abiVersionGo()
-	if got != "1.0.0" {
-		t.Errorf("version = %q, want 1.0.0", got)
+	if got != "1.1.0" {
+		t.Errorf("version = %q, want 1.1.0", got)
 	}
 }
 
