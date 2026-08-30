@@ -37,6 +37,11 @@ public final class ScreenContextCache: @unchecked Sendable {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Looks up a cached result, evicting it first if it has expired.
+    ///
+    /// TTL boundary is inclusive: an entry is still valid when exactly
+    /// `ttl` seconds old (`now - storedAt == ttl`), and only expires once
+    /// strictly older than that (`>`, not `>=`).
     public func value(for key: String, now: Date) -> [String]? {
         lock.lock()
         defer { lock.unlock() }

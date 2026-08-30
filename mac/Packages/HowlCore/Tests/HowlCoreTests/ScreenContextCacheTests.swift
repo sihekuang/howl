@@ -40,12 +40,28 @@ struct ScreenContextCacheTests {
         #expect(a != b)
     }
 
+    @Test func changed_window_title_produces_different_key() {
+        let c = ScreenContextCache()
+        let a = c.key(bundleID: "com.a", windowTitle: "Doc", text: "hello")
+        let b = c.key(bundleID: "com.a", windowTitle: "Other Doc", text: "hello")
+        #expect(a != b)
+    }
+
     @Test func entry_expires_after_ttl() {
         let c = ScreenContextCache(limit: 32, ttl: 600)
         let k = c.key(bundleID: "com.a", windowTitle: "Doc", text: "hello")
         c.store(["MCP"], for: k, now: t0)
         #expect(c.value(for: k, now: t0.addingTimeInterval(599)) == ["MCP"])
         #expect(c.value(for: k, now: t0.addingTimeInterval(601)) == nil)
+    }
+
+    @Test func entry_exactly_at_ttl_boundary_is_still_valid() {
+        // TTL is inclusive: expiry uses strict `>`, not `>=`, so an entry
+        // exactly `ttl` seconds old has not yet expired.
+        let c = ScreenContextCache(limit: 32, ttl: 600)
+        let k = c.key(bundleID: "com.a", windowTitle: "Doc", text: "hello")
+        c.store(["MCP"], for: k, now: t0)
+        #expect(c.value(for: k, now: t0.addingTimeInterval(600)) == ["MCP"])
     }
 
     @Test func evicts_least_recently_used_past_limit() {

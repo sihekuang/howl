@@ -14,6 +14,10 @@ public struct ScreenContextDenylist: Sendable {
         "com.apple.keychainaccess",
         "com.bitwarden.desktop",
         "com.lastpass.lastpassmacdesktop",
+        "com.dashlane.Dashlane",
+        // Legacy Dashlane bundle ID (from its older iOS-extension-derived
+        // macOS build). Kept deliberately alongside the current one above
+        // so older installs stay covered — do not remove.
         "com.dashlane.dashlanephonefinal",
         "in.sinew.Enpass-Desktop",
         "com.apple.Passwords",

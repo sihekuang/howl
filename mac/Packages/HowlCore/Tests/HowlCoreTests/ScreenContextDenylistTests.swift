@@ -11,6 +11,14 @@ struct ScreenContextDenylistTests {
         #expect(d.shouldSkip(bundleID: "com.apple.keychainaccess") == true)
     }
 
+    @Test func built_in_list_covers_both_dashlane_bundle_ids() {
+        // Current macOS bundle ID and the legacy (iOS-extension-derived)
+        // one, kept side by side so older installs stay covered.
+        let d = ScreenContextDenylist(userAdditions: [])
+        #expect(d.shouldSkip(bundleID: "com.dashlane.Dashlane") == true)
+        #expect(d.shouldSkip(bundleID: "com.dashlane.dashlanephonefinal") == true)
+    }
+
     @Test func ordinary_apps_are_not_skipped() {
         let d = ScreenContextDenylist(userAdditions: [])
         #expect(d.shouldSkip(bundleID: "com.microsoft.VSCode") == false)
