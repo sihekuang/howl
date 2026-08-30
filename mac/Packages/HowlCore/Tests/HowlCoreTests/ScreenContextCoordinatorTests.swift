@@ -94,6 +94,12 @@ private actor Signal {
 private final class SlowExtractEngine: @unchecked Sendable {
     let started = Signal()
     let proceed = Signal()
+    // Fires every time `set` (the coordinator's `apply` closure) is
+    // called — lets a test deterministically know a refresh actually
+    // applied, without a fixed sleep. One-shot per `Signal`, so it
+    // only usefully pins the FIRST apply; that's exactly the one these
+    // tests need to wait for (the winning window's).
+    let applied = Signal()
 
     private let lock = NSLock()
     private var _setCalls: [[String]] = []
@@ -110,6 +116,7 @@ private final class SlowExtractEngine: @unchecked Sendable {
     }
     func set(_ keywords: [String]) async {
         withLock { _setCalls.append(keywords) }
+        await applied.set()
     }
     private func withLock<T>(_ body: () -> T) -> T {
         lock.lock()
@@ -315,14 +322,75 @@ struct ScreenContextCoordinatorTests {
         await engine.started.wait()           // deterministic: X's refresh() has now stamped its generation
         await coordinator.scheduleRefresh()   // starts Y: read -> cache hit -> applies almost immediately
 
-        // Y's path does no real I/O (cache hit), so it completes on
-        // the order of microseconds; this wait is a safety margin,
-        // not a load-bearing ordering assumption — the ordering
-        // itself is already pinned by `engine.started.wait()` above.
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Deterministic, not a sleep: waits for Y's OWN `apply` call,
+        // which cannot happen until Y's refresh() has itself stamped a
+        // newer generation than X's (that stamp is the first thing
+        // `refresh()` does, strictly before the cache lookup that
+        // leads here). By the time this returns, X's later generation
+        // check is therefore GUARANTEED to already see a newer
+        // `generation` than the one it captured — releasing X below
+        // can no longer race with Y's generation stamp.
+        await engine.applied.wait()
 
-        await engine.proceed.set()            // let X's (now-stale) extraction finish
-        try await Task.sleep(nanoseconds: 100_000_000)   // let X's refresh() resume and attempt to apply
+        await engine.proceed.set()            // let X's (already-losing) extraction finish
+        // X's tail after `extract` returns (cache.store, then the
+        // generation check inside applyIfCurrent) is pure synchronous
+        // Swift with no further `await` on the losing path — but this
+        // wait is still a genuine, not-fully-eliminated race: nothing
+        // pins the exact moment X's resumed continuation actually runs
+        // that tail relative to this line. It's a real (if low-risk)
+        // sleep-based assumption, called out honestly rather than
+        // papered over: on an extremely loaded machine, checking too
+        // early could observe `setCalls` before X's tail has run,
+        // which would only produce a false PASS on a regression, never
+        // a false failure on correct code (X can only ever append a
+        // second entry, never replace or remove Y's).
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(engine.setCalls == [["Y"]])
+    }
+
+    @Test func overlapping_direct_refresh_calls_are_ordered_by_generation_not_cancellation() async throws {
+        // Same scenario as `scheduleRefresh_supersedes_a_slower_earlier_extraction`,
+        // but drives `refresh()` DIRECTLY instead of through
+        // `scheduleRefresh()`, so neither Task is ever `.cancel()`ed —
+        // `Task.isCancelled` stays false for both throughout. This
+        // isolates the generation-counter half of `applyIfCurrent`'s
+        // guard: deleting only the `myGeneration == generation` clause
+        // (leaving `!Task.isCancelled` in place) must turn this RED,
+        // proving the counter itself is load-bearing rather than being
+        // covered incidentally by scheduleRefresh's own cancellation
+        // (see progress.md Ruling 26 / fix round 2 finding 2).
+        let engine = SlowExtractEngine()
+        let cache = ScreenContextCache()
+        let snapshotX = WindowSnapshot(bundleID: "com.x", windowTitle: "X", text: "x text")
+        let snapshotY = WindowSnapshot(bundleID: "com.y", windowTitle: "Y", text: "y text")
+
+        let yKey = cache.key(bundleID: snapshotY.bundleID, windowTitle: snapshotY.windowTitle, text: snapshotY.text)
+        cache.store(["Y"], for: yKey, now: Date())
+
+        let coordinator = ScreenContextCoordinator(
+            reader: SequenceReader([snapshotX, snapshotY]),
+            cache: cache,
+            denylist: { ScreenContextDenylist(userAdditions: []) },
+            isEnabled: { true },
+            frontmostBundleID: { "com.test" },
+            extract: { await engine.extract($0) },
+            apply: { await engine.set($0) }
+        )
+
+        // Direct `refresh()` calls, each wrapped in a Task we hold and
+        // await ourselves — NOT `scheduleRefresh()`. Nothing ever
+        // calls `.cancel()` on either Task.
+        let xTask = Task { await coordinator.refresh() }
+        await engine.started.wait()             // X has stamped its generation and is blocked in extract()
+
+        let yTask = Task { await coordinator.refresh() }
+        await engine.applied.wait()             // Y has stamped a newer generation and applied
+
+        await engine.proceed.set()              // let X's (already-losing-by-generation) extraction finish
+        await xTask.value                        // deterministic: X's refresh() has now fully returned
+        await yTask.value
 
         #expect(engine.setCalls == [["Y"]])
     }
