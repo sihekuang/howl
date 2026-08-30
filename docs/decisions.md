@@ -73,3 +73,35 @@ moving the minor digit cannot break the host.
 **Sources:**
 - `core/cmd/libhowl/exports.go:718-727` — the bump policy and the constant
 - `mac/Packages/HowlCore/Sources/HowlCore/Bridge/` — no consumer of `howl_abi_version`
+
+## 2026-08-30 — Screen-context denylist: keep BOTH Dashlane bundle IDs
+
+**Decision:** Add `com.dashlane.Dashlane` to `ScreenContextDenylist.builtIn` and KEEP the
+existing `com.dashlane.dashlanephonefinal` rather than replacing it.
+
+**Trigger:** A task review flagged that `com.dashlane.dashlanephonefinal` — taken verbatim
+from the implementation plan — looks like a legacy iOS-era identifier rather than the
+current macOS app's. In a denylist whose job is keeping Howl out of password-manager
+windows, a wrong identifier means the vault gets read.
+
+**Basis:** Two independent lines of evidence converge on `com.dashlane.Dashlane` as the
+current macOS bundle identifier: the reviewer's research (a bundle-ID extraction site plus
+Dashlane's own ~2014 iOS-extension code, which is where the `dashlanephonefinal` string
+traces back to) and an independent web search of the same question. Dashlane is not
+installed on this machine, so neither could be confirmed against a live `Info.plist` —
+confidence is high, not certain.
+
+Keeping both is not a hedge between two candidate answers; it is the correct engineering
+choice regardless of which is current. A denylist is additive and matched case-insensitively
+by exact bundle ID, so an extra entry costs one string comparison and cannot produce a false
+positive against any other app. Users on older installs stay protected either way. The
+asymmetry is stark: a redundant entry costs nothing, a missing one leaks a password vault.
+
+**Sources:**
+- Does It ARM, Dashlane app entry (bundle ID extracted from the shipped app) — https://doesitarm.com/app/dashlane
+- Apple, "Get the bundle ID for a Mac app" (how the identifier is defined) — https://support.apple.com/guide/deployment/get-the-bundle-id-for-a-mac-app-dep0af2cd611/web
+- Independent web search corroborating `com.dashlane.Dashlane` as the current macOS identifier
+
+**Residual risk, surfaced to the user:** an exact-bundle-ID denylist is inherently
+incomplete — it cannot cover password managers nobody listed, nor a banking site in a
+browser tab. The spec accepted that trade-off; it is not a defect introduced here.
