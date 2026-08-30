@@ -1711,7 +1711,7 @@ struct WindowTextReaderTests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd mac/Packages/HowlCore && swift test --filter FallbackWindowTextReader`
+Run: `cd mac/Packages/HowlCore && swift test --filter WindowTextReaderTests`
 Expected: compile FAILURE — `cannot find 'WindowSnapshot' in scope`.
 
 - [ ] **Step 3: Write the protocol and composite**
@@ -1785,7 +1785,7 @@ public struct FallbackWindowTextReader: WindowTextReader {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd mac/Packages/HowlCore && swift test --filter FallbackWindowTextReader`
+Run: `cd mac/Packages/HowlCore && swift test --filter WindowTextReaderTests`
 Expected: PASS.
 
 - [ ] **Step 5: Write the AX reader**
@@ -2517,7 +2517,7 @@ struct ScreenContextSettingsTests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd mac/Packages/HowlCore && swift test --filter "ScreenContext settings"`
+Run: `cd mac/Packages/HowlCore && swift test --filter ScreenContextSettingsTests`
 Expected: compile FAILURE — `value of type 'UserSettings' has no member 'screenContextEnabled'`.
 
 - [ ] **Step 3: Add the settings fields**
