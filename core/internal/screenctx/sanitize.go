@@ -35,10 +35,19 @@ func Sanitize(raw string) []string {
 	out := make([]string, 0, len(fields))
 	seen := make(map[string]struct{}, len(fields))
 	for _, f := range fields {
-		t := listPrefix.ReplaceAllString(f, "")
-		t = strings.TrimSpace(t)
-		t = strings.Trim(t, "\"'`")
-		t = strings.TrimSpace(t)
+		t := strings.TrimSpace(f)
+		// Fixed-point loop to strip nested bullets/numbering and quotes.
+		// Handles both "- MCP" (quote-then-bullet) and - "MCP" (bullet-then-quote).
+		for {
+			oldT := t
+			t = listPrefix.ReplaceAllString(t, "")
+			t = strings.TrimSpace(t)
+			t = strings.Trim(t, "\"'`")
+			t = strings.TrimSpace(t)
+			if t == oldT {
+				break // Fixed point reached
+			}
+		}
 
 		if t == "" || len(t) > MaxKeywordBytes || isNumeric(t) {
 			continue

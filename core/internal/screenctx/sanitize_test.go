@@ -26,6 +26,10 @@ func TestSanitize(t *testing.T) {
 		{"dedupes case-insensitively keeping first", "MCP, mcp, MCp", []string{"MCP"}},
 		{"drops numeric-only tokens", "MCP, 12345, 3.14, WebRTC", []string{"MCP", "WebRTC"}},
 		{"keeps alphanumeric mixes", "MCP, ggml-tiny, v0.10.2rc", []string{"MCP", "ggml-tiny", "v0.10.2rc"}},
+		{"strips quote-wrapped bullet", `"- MCP"`, []string{"MCP"}},
+		{"strips quote-wrapped numbering", `"1. MCP"`, []string{"MCP"}},
+		{"realistic LLM response with quoted bullets", `"- MCP", "- WebRTC"`, []string{"MCP", "WebRTC"}},
+		{"strips doubled bullet markers", "- - MCP", []string{"MCP"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
