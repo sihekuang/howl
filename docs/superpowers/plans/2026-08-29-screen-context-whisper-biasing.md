@@ -2694,6 +2694,17 @@ Add these next to the other `lazy var` collaborators (after `conflictChecker`, l
         isEnabled: { [settings] in
             (try? settings.get())?.screenContextEnabled ?? true
         },
+        // MUST hop to the main actor. Every other
+        // NSWorkspace.frontmostApplication access in this feature does
+        // (see AXWindowTextReader, whose comment explicitly says not to
+        // remove the hop as "redundant"), and `refresh()` runs on the
+        // coordinator's own actor, not main. Do NOT "simplify" this to a
+        // bare synchronous NSWorkspace read — it would compile, every
+        // unit test would still pass, and it would silently violate the
+        // invariant the readers depend on.
+        frontmostBundleID: {
+            await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+        },
         extract: { [engine] text in await engine.extractScreenKeywords(text: text) },
         apply: { [engine] keywords in await engine.setScreenKeywords(keywords) }
     )
@@ -2705,6 +2716,21 @@ Add these next to the other `lazy var` collaborators (after `conflictChecker`, l
         await screenContextCoordinator.scheduleRefresh()
     }
 ```
+
+**Ownership constraint — read before wiring.** `ScreenContextObserver` is
+`@MainActor`, but its `deinit` is nonisolated (Swift makes every `deinit`
+nonisolated, even on a `@MainActor` class). Its teardown releases the callback
+context that a live C callback dereferences through a raw `refcon` pointer, so
+that teardown is only safe if the observer's LAST release happens on the main
+actor. Today that holds trivially because nothing owns the object; wiring it
+into `CompositionRoot` is what makes it real.
+
+So: `CompositionRoot` must itself be created and released on the main actor, and
+`screenContextObserver` must not be captured by any escaping closure or task
+that could outlive it and drop the final reference off-main. Prefer calling
+`stop()` explicitly in `EngineCoordinator.stop()` — as the next step does —
+rather than relying on `deinit` to do the teardown, so the ordering is
+deterministic rather than dependent on where the last release lands.
 
 In `mac/Howl/Engine/EngineCoordinator.swift`, add `composition.screenContextObserver.start()` at the end of `public func start()` (line 185), alongside the other listener registrations, and `composition.screenContextObserver.stop()` in `public func stop()` (line 233).
 
