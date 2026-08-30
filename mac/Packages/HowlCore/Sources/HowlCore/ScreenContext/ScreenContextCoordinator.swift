@@ -15,6 +15,13 @@ public actor ScreenContextCoordinator {
     private let extract: @Sendable (String) async -> [String]?
     private let apply: @Sendable ([String]) async -> Void
 
+    // `.notice` and above persist in the unified log; `.debug`/`.info` do
+    // not survive past the live stream. These four lines are the entire
+    // diagnostic trail for "is screen context working, and if not why",
+    // so they must be readable after the fact from a user's machine:
+    //   /usr/bin/log show --predicate 'subsystem == "com.howl.app"' --last 10m
+    // They carry only counts and fixed strings — never window text, never a
+    // provider error body. Anything below is internals and stays at .debug.
     private let log = Logger(subsystem: "com.howl.app", category: "screencontext")
     private var inFlight: Task<Void, Never>?
 
@@ -76,7 +83,7 @@ public actor ScreenContextCoordinator {
         // even when this call was synchronous. The authoritative check
         // is the post-read gate on the snapshot's own bundle ID.
         if denylist().shouldSkip(bundleID: await frontmostBundleID()) {
-            log.debug("screen context skipped for denylisted app")
+            log.notice("screen context skipped for denylisted app")
             await applyIfCurrent([], myGeneration: myGeneration)
             return
         }
@@ -93,7 +100,7 @@ public actor ScreenContextCoordinator {
         // with each other, so re-check against the ID the text
         // actually came from — defence in depth, not redundant.
         if denylist().shouldSkip(bundleID: snapshot.bundleID) {
-            log.debug("screen context skipped for denylisted app")
+            log.notice("screen context skipped for denylisted app")
             await applyIfCurrent([], myGeneration: myGeneration)
             return
         }
@@ -116,14 +123,14 @@ public actor ScreenContextCoordinator {
             // content for the full cache TTL over one transient blip.
             // Still clear rather than leave a stale window's keywords
             // armed for the next dictation.
-            log.debug("screen context extraction failed")
+            log.notice("screen context extraction failed")
             await applyIfCurrent([], myGeneration: myGeneration)
             return
         }
         cache.store(keywords, for: key, now: now)
         if await applyIfCurrent(keywords, myGeneration: myGeneration) {
             // Deliberately logs the COUNT, never the terms or window text.
-            log.debug("screen context applied \(keywords.count, privacy: .public) keyword(s)")
+            log.notice("screen context applied \(keywords.count, privacy: .public) keyword(s)")
         }
     }
 

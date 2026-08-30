@@ -2800,7 +2800,26 @@ Expected: BUILD SUCCEEDED. Fix any strict-concurrency diagnostics before continu
 11. Confirm no raw window text appears anywhere in `/tmp/howl.log`, and no provider error
     body either — grep for a distinctive string from the focused window and confirm no hit.
 
-Use `/usr/bin/log` (not bare `log`) if you need the unified log; `.notice` and above persist.
+**How to read these log lines.** The screen-context lines are Swift
+`Logger` output with subsystem `com.howl.app`, which goes to the macOS
+unified log — NOT to `/tmp/howl.log`, which only mirrors Go-core output.
+Read them with:
+
+```bash
+/usr/bin/log show --predicate 'subsystem == "com.howl.app"' --last 10m
+```
+
+Use `/usr/bin/log`, not bare `log` — `log` is shadowed in this shell. The
+four screen-context lines are emitted at `.notice` precisely so they
+persist and can be read after the fact; `.debug` and `.info` do not
+survive past a live stream. To watch live instead:
+
+```bash
+/usr/bin/log stream --predicate 'subsystem == "com.howl.app"'
+```
+
+`/tmp/howl.log` is still the right place to check constraint 8 (no raw
+window text), since that is where the Go core writes.
 
 - [ ] **Step 9: Commit**
 
