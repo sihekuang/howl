@@ -2674,6 +2674,10 @@ commit. Never hand-edit the pbxproj.
 
 - [ ] **Step 6: Wire it up in the composition root**
 
+`CompositionRoot` currently imports only `Foundation` and `HowlCore`. The
+`frontmostBundleID` closure below uses `NSWorkspace`, so **add `import AppKit`**
+at the top of the file or it will not compile.
+
 `CompositionRoot` is a `public final class` (line 5) holding `public let engine: any CoreEngine` (line 7) and `public let settings: any SettingsStore` (line 14), with `public lazy var` collaborators from line 53. `SettingsStore` is declared `: Sendable`, so capturing it in the `@Sendable` closures below is legal under strict concurrency.
 
 Add these next to the other `lazy var` collaborators (after `conflictChecker`, line 62):
