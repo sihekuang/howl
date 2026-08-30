@@ -11,7 +11,7 @@ public actor ScreenContextCoordinator {
     private let cache: ScreenContextCache
     private let denylist: @Sendable () -> ScreenContextDenylist
     private let isEnabled: @Sendable () -> Bool
-    private let frontmostBundleID: @Sendable () -> String?
+    private let frontmostBundleID: @Sendable () async -> String?
     private let extract: @Sendable (String) async -> [String]?
     private let apply: @Sendable ([String]) async -> Void
 
@@ -34,7 +34,7 @@ public actor ScreenContextCoordinator {
         cache: ScreenContextCache,
         denylist: @escaping @Sendable () -> ScreenContextDenylist,
         isEnabled: @escaping @Sendable () -> Bool,
-        frontmostBundleID: @escaping @Sendable () -> String?,
+        frontmostBundleID: @escaping @Sendable () async -> String?,
         extract: @escaping @Sendable (String) async -> [String]?,
         apply: @escaping @Sendable ([String]) async -> Void
     ) {
@@ -61,7 +61,21 @@ public actor ScreenContextCoordinator {
         // denylisted app's window is never touched at all — not by AX,
         // and never falls through to OCR. `shouldSkip` fails closed on
         // nil, so "we don't know what's focused" also skips.
-        if denylist().shouldSkip(bundleID: frontmostBundleID()) {
+        //
+        // `async` because `NSWorkspace.frontmostApplication` has to be
+        // read on the main actor (see `AXWindowTextReader.read()`, whose
+        // hop is documented as NOT removable), and `refresh` runs on
+        // this actor rather than the main one — so the caller needs
+        // somewhere to put that hop. A synchronous closure would leave
+        // the wiring no option but a bare off-main `NSWorkspace` read.
+        //
+        // The suspension means the frontmost app can change before the
+        // read below, so this gate is a best-effort early-out, not the
+        // authoritative one. It always was: the reader performs its own
+        // frontmost lookup, so the two observations were never atomic
+        // even when this call was synchronous. The authoritative check
+        // is the post-read gate on the snapshot's own bundle ID.
+        if denylist().shouldSkip(bundleID: await frontmostBundleID()) {
             log.debug("screen context skipped for denylisted app")
             await applyIfCurrent([], myGeneration: myGeneration)
             return
