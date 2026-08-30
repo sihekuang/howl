@@ -14,7 +14,11 @@ const MaxPromptTokens = 224
 type PromptSetter interface {
 	// SetContextPrompt recomposes the initial prompt from the custom
 	// dictionary and screen-derived keywords, trimming to whisper's
-	// real token window. Must not be called while a Transcribe is in
-	// flight on the same instance.
-	SetContextPrompt(dictTerms, screenTerms []string)
+	// real token window. Returns the screen-derived terms that actually
+	// survived trimming and made it into the prompt — NOT the input
+	// screenTerms. Callers must record the returned slice (not the
+	// input) in the session manifest, so the manifest reflects what
+	// biased whisper rather than what was merely offered. Must not be
+	// called while a Transcribe is in flight on the same instance.
+	SetContextPrompt(dictTerms, screenTerms []string) []string
 }

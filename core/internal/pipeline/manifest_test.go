@@ -17,14 +17,14 @@ import (
 // Optionally exposes LastSimilarity to exercise the TSE similarity
 // branch in WriteSessionManifest.
 type fakeChunkStage struct {
-	name        string
-	outputRate  int
-	withSim     bool
-	simValue    float32
+	name       string
+	outputRate int
+	withSim    bool
+	simValue   float32
 }
 
-func (f *fakeChunkStage) Name() string                                       { return f.name }
-func (f *fakeChunkStage) OutputRate() int                                    { return f.outputRate }
+func (f *fakeChunkStage) Name() string    { return f.name }
+func (f *fakeChunkStage) OutputRate() int { return f.outputRate }
 func (f *fakeChunkStage) Process(_ context.Context, in []float32) ([]float32, error) {
 	return in, nil
 }
@@ -109,6 +109,31 @@ func TestWriteSessionManifest_NoChunkStages_OmitsThem(t *testing.T) {
 	_ = json.Unmarshal(data, &m)
 	if len(m.Stages) != 1 {
 		t.Errorf("len(Stages) = %d, want 1", len(m.Stages))
+	}
+}
+
+func TestWriteSessionManifest_RoundTripsScreenKeywords(t *testing.T) {
+	// Guards pipeline/manifest.go's ScreenKeywords: p.ScreenKeywords ->
+	// sessions.Manifest.ScreenKeywords wiring — previously untested
+	// (a grep for ScreenKeywords across the repo found no test file).
+	dir := t.TempDir()
+	p := New(nil, nil, nil)
+	p.ScreenKeywords = []string{"SpeakerGate", "DeepFilterNet"}
+
+	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
+		t.Fatalf("WriteSessionManifest: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatalf("read session.json: %v", err)
+	}
+	var m sessions.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(m.ScreenKeywords) != 2 || m.ScreenKeywords[0] != "SpeakerGate" || m.ScreenKeywords[1] != "DeepFilterNet" {
+		t.Errorf("ScreenKeywords = %v, want [SpeakerGate DeepFilterNet]", m.ScreenKeywords)
 	}
 }
 

@@ -195,6 +195,59 @@ func TestWhisperCpp_SetContextPrompt_ScreenSubCapInTokens(t *testing.T) {
 	}
 }
 
+// TestWhisperCpp_SetContextPrompt_ReturnsSurvivingScreenTerms is the
+// regression test for the manifest-lies defect found in review:
+// howl_start_capture records SetContextPrompt's RETURN value (not the
+// input screenTerms) in the session manifest, so the return value must
+// be the terms that actually survived trimming, not what was offered.
+//
+// A broken "fix" that returns the input unchanged (or only applies
+// ContextPrompt's byte-level pre-filter without the token-based stages
+// below it) would make len(got) == len(screen) here and fail this test
+// — that's the case this test exists to catch.
+//
+// dict is nil for the same reason as the sibling ScreenSubCap test
+// above: with dict absent, stage 2 (MaxPromptTokens) is a no-op once
+// stage 1 (MaxScreenPromptTokens) has already trimmed screen below it,
+// isolating stage 1's effect on the return value cleanly.
+func TestWhisperCpp_SetContextPrompt_ReturnsSurvivingScreenTerms(t *testing.T) {
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	defer w.Close()
+
+	screen := make([]string, 40)
+	for i := range screen {
+		screen[i] = fmt.Sprintf("PmnxSurviveScreen%02d", i)
+	}
+
+	got := w.SetContextPrompt(nil, screen)
+
+	if len(got) == 0 {
+		t.Fatalf("expected some screen terms to survive trimming, got none")
+	}
+	if len(got) >= len(screen) {
+		t.Fatalf("got %d survivors, want fewer than the %d offered — 40 dense identifiers must exceed MaxScreenPromptTokens (%d) and get trimmed", len(got), len(screen), MaxScreenPromptTokens)
+	}
+	// Both trim stages drop from the tail, so survivors must be an
+	// exact prefix of what was offered, in the same order.
+	for i, term := range got {
+		if term != screen[i] {
+			t.Errorf("survivor[%d] = %q, want %q — trimming must drop from the tail, preserving order", i, term, screen[i])
+		}
+	}
+	// The returned slice must be exactly what ended up in the prompt
+	// whisper actually sees — this is the whole point of returning it.
+	if joined := strings.Join(got, ", "); joined != w.initialPrompt {
+		t.Errorf("returned survivors %q don't match initialPrompt %q", joined, w.initialPrompt)
+	}
+}
+
 func TestWhisperCpp_SetContextPrompt_EmptyClearsPrompt(t *testing.T) {
 	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	if _, err := os.Stat(modelPath); err != nil {

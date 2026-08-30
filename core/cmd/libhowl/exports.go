@@ -184,12 +184,18 @@ func howl_start_capture() C.int {
 	// Re-bias whisper for this capture. Safe here and only here: no
 	// capture is in flight, so this cannot race an in-flight Transcribe.
 	// A transcriber that doesn't implement PromptSetter keeps whatever
-	// prompt it was constructed with.
+	// prompt it was constructed with — and pipe.ScreenKeywords is left
+	// unset in that case, so the manifest never claims keywords were
+	// applied when nothing was actually re-biased.
+	//
+	// pipe.ScreenKeywords is stamped from SetContextPrompt's RETURN
+	// value, not e.screenKeywords (the offered list) — the return value
+	// is what actually survived whisper's token-budget trimming, which
+	// is what the session manifest must reflect.
 	if ps, ok := pipe.Transcriber.(transcribe.PromptSetter); ok {
-		ps.SetContextPrompt(e.cfg.CustomDict, e.screenKeywords)
-		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s)", len(e.screenKeywords))
+		pipe.ScreenKeywords = ps.SetContextPrompt(e.cfg.CustomDict, e.screenKeywords)
+		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s)", len(pipe.ScreenKeywords))
 	}
-	pipe.ScreenKeywords = e.screenKeywords
 	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
 	// non-fatal; we proceed without recording in that case. Safe under

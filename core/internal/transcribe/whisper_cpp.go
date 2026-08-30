@@ -204,9 +204,17 @@ func (w *WhisperCpp) tokenCount(text string) int {
 //  1. screen keywords alone must fit MaxScreenPromptTokens
 //  2. the whole prompt must fit MaxPromptTokens
 //
+// Returns the screen-derived terms that survived BOTH stages — i.e.
+// what actually ended up in the prompt whisper sees, not what was
+// offered. Callers (howl_start_capture) record this return value, not
+// the input screenTerms, in the session manifest: the manifest exists
+// so a developer can trust what biased recognition, and a diagnostic
+// that reports terms that were silently dropped for token-budget
+// reasons is worse than no diagnostic at all.
+//
 // Must not be called while Transcribe is running on this instance; the
 // engine calls it from howl_start_capture, where no capture is in flight.
-func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) {
+func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string {
 	_, screen := ContextPrompt(dictTerms, screenTerms)
 	dict := cleanTerms(dictTerms)
 
@@ -224,6 +232,15 @@ func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) {
 	w.mu.Lock()
 	w.initialPrompt = strings.Join(all, ", ")
 	w.mu.Unlock()
+
+	// dict is always the head of all and screen the tail (see the
+	// append order above), and both trim loops only ever shrink from
+	// the tail — so whatever remains of all past len(dict) is exactly
+	// the screen terms that survived both stages, in original order.
+	if len(all) <= len(dict) {
+		return nil
+	}
+	return all[len(dict):]
 }
 
 func (w *WhisperCpp) Close() error {

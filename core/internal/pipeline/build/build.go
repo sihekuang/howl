@@ -128,11 +128,16 @@ type nonClosingTranscriber struct {
 func (n nonClosingTranscriber) Close() error { return nil }
 
 // SetContextPrompt forwards to the wrapped transcriber when it supports
-// re-biasing. Without this the embedded interface hides the method and
-// the PromptSetter assertion in libhowl silently no-ops for shared
-// transcribers.
-func (n nonClosingTranscriber) SetContextPrompt(dictTerms, screenTerms []string) {
+// re-biasing, returning what the wrapped call returns — the screen
+// terms that actually survived trimming. Without this the embedded
+// interface hides the method and the PromptSetter assertion in libhowl
+// silently no-ops for shared transcribers. Returns nil when the wrapped
+// transcriber does not implement PromptSetter, so a caller stamping the
+// return value into a session manifest never records terms as applied
+// when nothing was actually re-biased.
+func (n nonClosingTranscriber) SetContextPrompt(dictTerms, screenTerms []string) []string {
 	if ps, ok := n.Transcriber.(transcribe.PromptSetter); ok {
-		ps.SetContextPrompt(dictTerms, screenTerms)
+		return ps.SetContextPrompt(dictTerms, screenTerms)
 	}
+	return nil
 }
