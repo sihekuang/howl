@@ -2685,16 +2685,23 @@ Add these next to the other `lazy var` collaborators (after `conflictChecker`, l
 ```swift
     let screenContextCache = ScreenContextCache()
 
+    // One denylist source, shared by the readers AND the coordinator.
+    // The readers need their own copy because the guarantee is enforced
+    // at the point of reading — a reader that refuses a denylisted app is
+    // safe by construction, whereas a check only in the coordinator can be
+    // outrun when the user switches apps between the gate and the read.
+    lazy var screenContextDenylistProvider: @Sendable () -> ScreenContextDenylist = { [settings] in
+        let userAdditions = (try? settings.get())?.screenContextDenylist ?? []
+        return ScreenContextDenylist(userAdditions: userAdditions)
+    }
+
     lazy var screenContextCoordinator = ScreenContextCoordinator(
         reader: FallbackWindowTextReader(
-            primary: AXWindowTextReader(),
-            fallback: OCRWindowTextReader()
+            primary: AXWindowTextReader(denylist: screenContextDenylistProvider),
+            fallback: OCRWindowTextReader(denylist: screenContextDenylistProvider)
         ),
         cache: screenContextCache,
-        denylist: { [settings] in
-            let userAdditions = (try? settings.get())?.screenContextDenylist ?? []
-            return ScreenContextDenylist(userAdditions: userAdditions)
-        },
+        denylist: screenContextDenylistProvider,
         isEnabled: { [settings] in
             (try? settings.get())?.screenContextEnabled ?? true
         },
