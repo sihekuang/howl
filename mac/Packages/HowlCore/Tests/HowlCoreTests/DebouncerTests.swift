@@ -26,12 +26,17 @@ struct DebouncerTests {
 
     @Test func rapid_schedules_collapse_to_one_run() async throws {
         let c = Counter()
-        let d = Debouncer(interval: 0.05)
+        // Interval widened to 0.2s (was 0.05s) against a 5ms
+        // inter-schedule gap: a 10x margin between the gap and the
+        // interval is too tight on a loaded CI box, where the sleep
+        // can overshoot and let an intermediate fire slip through.
+        // 0.2s keeps the 5ms gap but gives a much wider margin.
+        let d = Debouncer(interval: 0.2)
         for _ in 0..<5 {
             d.schedule { c.increment() }
             try await Task.sleep(nanoseconds: 5_000_000)   // faster than the interval
         }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await Task.sleep(nanoseconds: 800_000_000)
         #expect(c.count == 1)
     }
 

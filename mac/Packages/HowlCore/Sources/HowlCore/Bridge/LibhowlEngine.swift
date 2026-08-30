@@ -210,24 +210,61 @@ public actor LibhowlEngine: CoreEngine {
         return String(cString: cstr)
     }
 
-    public func extractScreenKeywords(text: String) async -> [String] {
+    // Dedicated queue for the blocking `howl_extract_keywords` C call.
+    // See extractScreenKeywords's doc comment for why this bypasses the
+    // actor's serialized executor.
+    private static let screenContextQueue = DispatchQueue(
+        label: "com.howl.app.screencontext-extract", qos: .userInitiated
+    )
+
+    /// `nonisolated`, unlike every other C call on this actor. The Go
+    /// export is explicitly documented as blocking on a network call
+    /// bounded by `screenctx.ExtractTimeout` (5s) and as NOT touching
+    /// engine state — see `core/cmd/libhowl/screenctx_export.go`'s doc
+    /// comment on `howl_extract_keywords`: "BLOCKING... Callers MUST
+    /// invoke it off the main thread... does not hold e.mu across the
+    /// network call." That contract is exactly what makes it safe to
+    /// exempt from this type's normal "all C calls go through the
+    /// actor's serialized executor" invariant (see the type header
+    /// comment): nothing here can race with another engine call.
+    ///
+    /// `nonisolated` alone would still park a Swift-concurrency
+    /// cooperative-pool thread for up to 5s (that pool is small and
+    /// shared across the whole process), which is its own hazard, so
+    /// the actual blocking call runs on a dedicated background
+    /// `DispatchQueue` instead, resumed via a continuation. This keeps
+    /// `startCapture()` (and everything else on the actor) from ever
+    /// waiting behind an in-flight extraction.
+    public nonisolated func extractScreenKeywords(text: String) async -> [String]? {
         struct Request: Encodable { let text: String }
         struct Response: Decodable {
             let keywords: [String]?
             let error: String?
         }
         guard let json = try? JSONEncoder().encode(Request(text: text)),
-              let jsonString = String(data: json, encoding: .utf8) else { return [] }
+              let jsonString = String(data: json, encoding: .utf8) else { return nil }
 
-        let raw: String? = jsonString.withCString { cstr in
-            guard let out = howl_extract_keywords(UnsafeMutablePointer(mutating: cstr)) else { return nil }
-            defer { howl_free_string(out) }
-            return String(cString: out)
+        let raw: String? = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            LibhowlEngine.screenContextQueue.async {
+                let result = jsonString.withCString { cstr -> String? in
+                    guard let out = howl_extract_keywords(UnsafeMutablePointer(mutating: cstr)) else { return nil }
+                    defer { howl_free_string(out) }
+                    return String(cString: out)
+                }
+                continuation.resume(returning: result)
+            }
         }
+
         guard let raw,
               let data = raw.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return [] }
-        // An error response degrades to "no screen context" by design.
+              let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return nil }
+        // A non-nil `error` is a FAILURE signal (provider/network
+        // problem), not "no keywords found" — the caller must treat
+        // this as nil, not []. Never log `decoded.error` itself: it
+        // can embed an arbitrary HTTP response body from the LLM
+        // provider (core/internal/llm/ollama.go:219, openai.go:307,
+        // lmstudio.go:110).
+        if decoded.error != nil { return nil }
         return decoded.keywords ?? []
     }
 

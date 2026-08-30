@@ -53,7 +53,7 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
         return stubTSEExtractRC
     }
 
-    func extractScreenKeywords(text: String) async -> [String] { [] }
+    func extractScreenKeywords(text: String) async -> [String]? { [] }
     func setScreenKeywords(_ keywords: [String]) async {}
 }
 

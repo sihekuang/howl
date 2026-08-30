@@ -53,5 +53,6 @@ public final class ScreenContextObserver {
         if let observer = token.value {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+        debouncer.cancel()
     }
 }

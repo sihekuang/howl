@@ -100,8 +100,15 @@ public protocol CoreEngine: Sendable {
     /// Derive whisper biasing keywords from focused-window text via the
     /// configured LLM provider. Blocking on the C side, so the actor
     /// hop matters: never call this from a latency-sensitive path.
-    /// Returns [] on any failure — screen context is best-effort.
-    func extractScreenKeywords(text: String) async -> [String]
+    ///
+    /// Returns nil when the extraction itself FAILED (provider
+    /// unreachable, rate-limited, timed out, malformed response) —
+    /// distinct from a successful call that found nothing ([]).
+    /// Callers must not cache a nil result: caching it would silently
+    /// disable screen context for that window's content for a whole
+    /// cache TTL over one transient blip. Either way this is
+    /// best-effort — never throws, never blocks the dictation path.
+    func extractScreenKeywords(text: String) async -> [String]?
 
     /// Store the keyword list applied at the next startCapture.
     /// Instant; no network.
