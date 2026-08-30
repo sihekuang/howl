@@ -175,8 +175,19 @@ func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, 
 // tokenCount returns how many whisper tokens text occupies in THIS
 // model's vocabulary. Byte-length heuristics are not a substitute:
 // jargon and CamelCase identifiers tokenize far denser than prose.
+//
+// mu is held across the nil-check and the whisper_token_count call so
+// a concurrent Close cannot free w.ctx between the two: whisper_free
+// runs on a freed *C.struct_whisper_context otherwise -- a hard crash
+// with no Go-level signal. The call itself is short and non-blocking
+// (unlike run_whisper_full), so holding the lock across it is fine.
 func (w *WhisperCpp) tokenCount(text string) int {
-	if text == "" || w.ctx == nil {
+	if text == "" {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ctx == nil {
 		return 0
 	}
 	cText := C.CString(text)
@@ -216,9 +227,18 @@ func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) {
 }
 
 func (w *WhisperCpp) Close() error {
-	if w.ctx != nil {
-		C.whisper_free(w.ctx)
-		w.ctx = nil
+	// The nil-transition is guarded by mu so tokenCount's check-then-call
+	// against w.ctx can't race a concurrent Close: either tokenCount
+	// completes its whisper_token_count call while ctx is still valid, or
+	// it observes ctx already nil and returns 0 -- never a call on a
+	// freed context. whisper_free itself runs outside the lock since
+	// nothing else touches ctx once the field is nil.
+	w.mu.Lock()
+	ctx := w.ctx
+	w.ctx = nil
+	w.mu.Unlock()
+	if ctx != nil {
+		C.whisper_free(ctx)
 	}
 	return nil
 }

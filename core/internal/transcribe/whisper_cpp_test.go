@@ -85,6 +85,18 @@ func readWavMono16k(path string) ([]float32, error) {
 // passes the 896-byte pre-filter can still exceed whisper's 224-token
 // window — where whisper would silently drop the HEAD, i.e. the user's
 // dictionary.
+//
+// Sizes are chosen (verified empirically against ggml-tiny.en, see
+// task-2-report.md) so stage 2 actually has to trim:
+//   - 20 dict terms tokenize to ~159 tokens, comfortably under both the
+//     896-byte prompt cap and MaxPromptTokens alone, so dict survives
+//     the byte-level pre-filter in ContextPrompt intact.
+//   - 60 screen terms survive ContextPrompt's byte pre-filter as ~18
+//     terms, which stage 1 (the MaxScreenPromptTokens loop) then trims
+//     to ~8-9 terms (~90-96 tokens).
+//   - dict (~159 tokens) + that screen remainder (~90-96 tokens) totals
+//     ~250-255 tokens, over MaxPromptTokens (224), so stage 2's loop
+//     body must actually execute and trim further.
 func TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow(t *testing.T) {
 	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	if _, err := os.Stat(modelPath); err != nil {
@@ -96,12 +108,15 @@ func TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow(t *testing.T) {
 	}
 	defer w.Close()
 
+	dict := make([]string, 20)
+	for i := range dict {
+		dict[i] = fmt.Sprintf("QvxDictTerm%02d", i)
+	}
 	// 60 dense CamelCase identifiers: byte-legal, token-illegal.
 	screen := make([]string, 60)
 	for i := range screen {
 		screen[i] = fmt.Sprintf("XqzGlyphWarpNode%02d", i)
 	}
-	dict := []string{"MCP", "WebRTC", "DeepFilterNet"}
 
 	w.SetContextPrompt(dict, screen)
 	got := w.initialPrompt
@@ -109,13 +124,55 @@ func TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow(t *testing.T) {
 	if n := w.tokenCount(got); n > MaxPromptTokens {
 		t.Errorf("prompt is %d tokens, want <= %d", n, MaxPromptTokens)
 	}
+
+	survivors := strings.Split(got, ", ")
+	present := make(map[string]bool, len(survivors))
+	for _, term := range survivors {
+		present[term] = true
+	}
+	dictPresent, screenPresent := 0, 0
 	for _, term := range dict {
-		if !strings.Contains(got, term) {
-			t.Errorf("dictionary term %q was evicted; screen keywords must be dropped first", term)
+		if present[term] {
+			dictPresent++
 		}
+	}
+	for _, term := range screen {
+		if present[term] {
+			screenPresent++
+		}
+	}
+	if dictPresent == 0 {
+		t.Fatalf("no dictionary terms survived at all; test fixture sizes need rebalancing")
+	}
+
+	// The ordering invariant this whole feature exists to guarantee:
+	// stage 2 drops from the tail of dict++screen, so screen keywords
+	// must be fully evicted before a single dictionary term is touched.
+	// Concretely: if any dictionary term was evicted, no screen term may
+	// have survived. This fails if the append order in SetContextPrompt
+	// is ever inverted (screen appended before dict) -- verified by
+	// temporarily reversing that order locally and confirming this
+	// assertion goes red (see task-2-report.md).
+	if dictPresent < len(dict) && screenPresent > 0 {
+		t.Errorf("ordering inversion: only %d/%d dict terms survived while %d/%d screen terms also survived; screen keywords must be evicted before any dictionary term is dropped", dictPresent, len(dict), screenPresent, len(screen))
 	}
 }
 
+// TestWhisperCpp_SetContextPrompt_ScreenSubCapInTokens verifies stage 1
+// (the MaxScreenPromptTokens sub-cap) independently of stage 2.
+//
+// dict is deliberately nil here rather than "given a dict and asserting
+// what's observable with one": whisper's BPE tokenizer is not additive
+// across concatenation (joining dict and screen segments can merge or
+// split tokens at the boundary, per the deferred BPE-isolation finding
+// on stage 1 itself), so with a dict present there is no way to recover
+// the screen segment's token count from tokenCount(w.initialPrompt) --
+// the combined figure is not "dict tokens + screen tokens". With dict
+// nil, w.initialPrompt IS the screen segment (stage 2 is a no-op
+// because dict-less input can't exceed MaxPromptTokens once it's
+// already under MaxScreenPromptTokens < MaxPromptTokens), so this is
+// the only way to observe the stage-1 bound directly through the
+// public field.
 func TestWhisperCpp_SetContextPrompt_ScreenSubCapInTokens(t *testing.T) {
 	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
 	if _, err := os.Stat(modelPath); err != nil {
