@@ -17,7 +17,11 @@ private final class ObserverToken: @unchecked Sendable {
 /// Swift closures. Holds exactly what the callback needs to do its
 /// (trivial) job. `@unchecked Sendable` because it's only ever
 /// touched from the main run loop — both by AppKit, which delivers AX
-/// notifications there, and by `ScreenContextObserver` itself.
+/// notifications there, and by `ScreenContextObserver` itself, which
+/// is `@MainActor` and therefore only ever deinitialized from the
+/// main actor too — so the callback (main run loop) and `deinit`
+/// (main actor) can never interleave; there is no thread on which
+/// this could race.
 private final class AXCallbackContext: @unchecked Sendable {
     let debouncer: Debouncer
     let action: @Sendable () async -> Void
@@ -38,6 +42,38 @@ private final class AXObserverToken: @unchecked Sendable {
     var context: AXCallbackContext?
 }
 
+/// Bundles the CF/AX references an in-flight attach attempt needs to
+/// carry across the hop off the main actor. `AXObserver`/`AXUIElement`
+/// aren't declared `Sendable` by the SDK, but the AX APIs are
+/// documented as callable from any thread (that's the entire premise
+/// of moving `AXObserverAddNotification` off main below) — `@unchecked`
+/// reflects that the framework itself guarantees the safety the
+/// compiler can't see.
+///
+/// Holds `context` strongly for the attempt's own lifetime — NOT via
+/// `axToken.context` — so a concurrent, unrelated `reattachAXObserver()`
+/// call for a different pid (which clears `axToken.context` as part of
+/// tearing down whatever the token currently holds) can never drop the
+/// only strong reference to `context` while THIS attempt's
+/// `AXObserverAddNotification` calls are still using `refcon` (a raw
+/// pointer into it). `axToken.context` is only assigned once this
+/// specific attempt has actually succeeded and is confirmed still
+/// relevant (see the completion block below).
+private final class PendingAXAttach: @unchecked Sendable {
+    let observer: AXObserver
+    let appElement: AXUIElement
+    let refcon: UnsafeMutableRawPointer
+    let pid: pid_t
+    let context: AXCallbackContext
+    init(observer: AXObserver, appElement: AXUIElement, refcon: UnsafeMutableRawPointer, pid: pid_t, context: AXCallbackContext) {
+        self.observer = observer
+        self.appElement = appElement
+        self.refcon = refcon
+        self.pid = pid
+        self.context = context
+    }
+}
+
 /// Removes `token`'s AX observer from the main run loop and clears
 /// it. A free function (not a method) so it can be called both from
 /// `ScreenContextObserver`'s (actor-isolated) `stop()`/`teardownAXObserver()`
@@ -47,7 +83,7 @@ private final class AXObserverToken: @unchecked Sendable {
 /// exactly like the NSWorkspace removal a few lines below.
 private func detachAXObserver(_ token: AXObserverToken) {
     if let observer = token.observer {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
     }
     token.observer = nil
     token.pid = nil
@@ -85,9 +121,9 @@ private func axScreenContextCallback(
 ///   browsers, and terminals all keep one window and swap documents
 ///   by tab, and update the window title when they do so;
 ///   focused-window-changed alone never fires for that case). Being
-///   chatty here is safe: the debounce collapses bursts, and the
-///   content-hash cache means an unchanged window costs a hash and no
-///   LLM call.
+///   chatty here is safe: `Debouncer` has its own maxDelay backstop
+///   against a sustained retitling stream, and the content-hash cache
+///   means an unchanged window costs a hash and no LLM call.
 ///
 /// Thin AppKit/AX shim — the timing lives in `Debouncer` and the
 /// policy in `ScreenContextCoordinator`, which is where the tests are;
@@ -149,6 +185,12 @@ public final class ScreenContextObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         debouncer.cancel()
+        // Safe without extra synchronization: `ScreenContextObserver`
+        // is `@MainActor`, so it is only ever deallocated from the
+        // main actor, on the main thread — the same thread the AX
+        // callback (`axScreenContextCallback`) and the run loop
+        // deliver on. deinit and the callback can never run
+        // concurrently with each other; there is nothing to race.
         detachAXObserver(axToken)
     }
 
@@ -157,6 +199,15 @@ public final class ScreenContextObserver {
     /// failure (most commonly: no Accessibility permission) — the
     /// existing `NSWorkspace` path keeps working either way, just
     /// without within-app tab/document granularity.
+    ///
+    /// The local setup (frontmost lookup, tearing down the previous
+    /// observer, `AXObserverCreate`) stays synchronous on the main
+    /// actor — none of it is IPC into another process. Only
+    /// `AXObserverAddNotification` — genuine Mach IPC into the
+    /// just-activated app's own accessibility server, with no
+    /// messaging timeout otherwise bounding it — is moved off the
+    /// main actor below, so a hung, beachballing, or mid-launch app
+    /// can never block Howl's UI thread on activation.
     private func reattachAXObserver() {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             detachAXObserver(axToken)
@@ -182,26 +233,56 @@ public final class ScreenContextObserver {
         let refcon = Unmanaged.passUnretained(context).toOpaque()
         let appElement = AXUIElementCreateApplication(pid)
 
-        let addedFocusedWindow = AXObserverAddNotification(
-            observer, appElement, kAXFocusedWindowChangedNotification as CFString, refcon
-        ) == .success
-        let addedTitle = AXObserverAddNotification(
-            observer, appElement, kAXTitleChangedNotification as CFString, refcon
-        ) == .success
+        // Bounds AXObserverAddNotification below: without this, a
+        // hung/beachballing/mid-launch target app can block the
+        // calling thread for the full (unbounded-feeling) AX default
+        // timeout. This call itself is local/synchronous — it just
+        // configures the timeout used by future calls through
+        // `appElement` — so it's fine to leave on the main actor.
+        AXUIElementSetMessagingTimeout(appElement, 0.25)
 
-        guard addedFocusedWindow || addedTitle else {
-            // Neither notification could be registered — nothing to
-            // observe on this app. Degrade silently; `observer` (and
-            // its unregistered run-loop source) simply falls out of
-            // scope here and is released by ARC.
-            log.debug("screen context AX add-notification failed")
-            return
+        let attach = PendingAXAttach(observer: observer, appElement: appElement, refcon: refcon, pid: pid, context: context)
+
+        Task.detached { [weak self] in
+            let addedFocusedWindow = AXObserverAddNotification(
+                attach.observer, attach.appElement,
+                kAXFocusedWindowChangedNotification as CFString, attach.refcon
+            ) == .success
+            let addedTitle = AXObserverAddNotification(
+                attach.observer, attach.appElement,
+                kAXTitleChangedNotification as CFString, attach.refcon
+            ) == .success
+
+            await MainActor.run {
+                guard let self else { return }
+                // The frontmost app may have changed again while this
+                // was in flight (another activation dispatched its own
+                // reattachAXObserver, which may already have attached
+                // a newer observer, or none at all). Only finish
+                // attaching if this attempt's target is STILL
+                // frontmost — otherwise this result is stale and must
+                // be discarded. A wrongly-discarded attach still
+                // self-heals: the next activation (or this same app
+                // regaining focus) attempts again.
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == attach.pid else {
+                    return
+                }
+                guard addedFocusedWindow || addedTitle else {
+                    // Neither notification could be registered —
+                    // nothing to observe on this app. Degrade silently;
+                    // `context` set above is cleared by the next
+                    // `reattachAXObserver()` call (or `stop()`/`deinit`).
+                    self.log.debug("screen context AX add-notification failed")
+                    return
+                }
+                CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(attach.observer), .commonModes)
+                self.axToken.observer = attach.observer
+                self.axToken.pid = attach.pid
+                // Ownership of `context` transfers to the token now
+                // that registration has actually succeeded — `detachAXObserver`
+                // will release it on the next teardown.
+                self.axToken.context = attach.context
+            }
         }
-
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
-
-        axToken.observer = observer
-        axToken.pid = pid
-        axToken.context = context   // keeps `refcon`'s target alive
     }
 }

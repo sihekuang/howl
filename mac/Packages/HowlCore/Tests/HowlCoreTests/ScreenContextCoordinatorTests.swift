@@ -333,15 +333,17 @@ struct ScreenContextCoordinatorTests {
         await engine.applied.wait()
 
         await engine.proceed.set()            // let X's (already-losing) extraction finish
-        // X's tail after `extract` returns (cache.store, then the
-        // generation check inside applyIfCurrent) is pure synchronous
-        // Swift with no further `await` on the losing path — but this
-        // wait is still a genuine, not-fully-eliminated race: nothing
-        // pins the exact moment X's resumed continuation actually runs
-        // that tail relative to this line. It's a real (if low-risk)
-        // sleep-based assumption, called out honestly rather than
-        // papered over: on an extremely loaded machine, checking too
-        // early could observe `setCalls` before X's tail has run,
+        // X's tail after `extract` returns is cache.store (sync) then
+        // `await applyIfCurrent(...)` (ScreenContextCoordinator.swift)
+        // — that IS an await, but on the losing path it's a same-actor
+        // call whose guard fails immediately, with no real suspension
+        // inside it. So this wait is still a genuine, not-fully-
+        // eliminated race: nothing pins the exact moment X's resumed
+        // continuation actually reaches and finishes that awaited (if
+        // non-suspending) call relative to this line. It's a real (if
+        // low-risk) sleep-based assumption, called out honestly rather
+        // than papered over: on an extremely loaded machine, checking
+        // too early could observe `setCalls` before X's tail has run,
         // which would only produce a false PASS on a regression, never
         // a false failure on correct code (X can only ever append a
         // second entry, never replace or remove Y's).

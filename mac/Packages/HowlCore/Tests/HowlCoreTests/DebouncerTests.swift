@@ -13,6 +13,24 @@ private final class Counter: @unchecked Sendable {
     }
 }
 
+/// One-shot signal so a test can deterministically know an action
+/// actually ran, instead of guessing via a fixed sleep-then-check.
+private actor Signal {
+    private var isSet = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isSet { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func set() {
+        isSet = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
 @Suite("Debouncer")
 struct DebouncerTests {
 
@@ -57,5 +75,43 @@ struct DebouncerTests {
         d.schedule { c.increment() }
         try await Task.sleep(nanoseconds: 200_000_000)
         #expect(c.count == 2)
+    }
+
+    @Test func sustained_rapid_schedules_still_fire_via_max_delay() async throws {
+        // A pure trailing debounce would be starved forever by a
+        // stream that never pauses for a full `interval` — exactly
+        // what a retitling-every-keystroke terminal or a media
+        // player's live timecode does. `maxDelay` is the backstop:
+        // the action must fire no later than `maxDelay` seconds after
+        // the FIRST schedule of the run, even while rescheduling
+        // keeps happening faster than `interval`.
+        //
+        // interval (0.1s) < maxDelay (0.3s) < the reschedule loop's
+        // own duration (25 * 20ms = 500ms), so if the cap works the
+        // action fires mid-burst, well before the burst naturally
+        // ends — and if the cap is broken, it can only fire AFTER the
+        // burst ends (once real quiet finally occurs), which the
+        // elapsed-time assertion below distinguishes.
+        let fired = Signal()
+        let d = Debouncer(interval: 0.1, maxDelay: 0.3)
+        let start = Date()
+
+        let burst = Task {
+            for _ in 0..<25 {
+                d.schedule { await fired.set() }
+                try? await Task.sleep(nanoseconds: 20_000_000)   // faster than `interval`
+            }
+        }
+
+        // Deterministic: returns exactly when the action has actually
+        // run, not after a guessed sleep. If `maxDelay` regressed to
+        // "no cap", this would only return once the burst above
+        // finishes and a genuine `interval`-long gap occurs — i.e.
+        // around 500ms+, not ~300ms.
+        await fired.wait()
+        let elapsed = Date().timeIntervalSince(start)
+        burst.cancel()
+
+        #expect(elapsed < 0.45)   // comfortably before the burst's own ~500ms natural end
     }
 }
