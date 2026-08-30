@@ -10,22 +10,26 @@ import Vision
 /// Screen Recording TCC prompt appears on the first actual `read()`.
 /// Pixel buffers are never written to disk.
 public struct OCRWindowTextReader: WindowTextReader {
-    public init() {}
+    /// No default, for the same reason as `AXWindowTextReader` — and
+    /// more sharply here, because this is the reader that takes the
+    /// screenshot.
+    private let denylist: @Sendable () -> ScreenContextDenylist
+    private let frontmostApp: FrontmostAppLookup
+
+    public init(denylist: @escaping @Sendable () -> ScreenContextDenylist,
+                frontmostApp: @escaping FrontmostAppLookup = defaultFrontmostApp) {
+        self.denylist = denylist
+        self.frontmostApp = frontmostApp
+    }
 
     public func read() async -> WindowSnapshot? {
-        // See AXWindowTextReader.read(): `NSWorkspace.frontmostApplication`'s
-        // thread affinity is undocumented by Apple (AppKit is documented
-        // as run-loop-dependent and not daemon-safe, but nothing states
-        // this specific accessor is safe off the main thread — and
-        // nothing in the Swift 6 checker would catch a mistake here
-        // either, since NSWorkspace carries no actor-isolation
-        // annotation). Hop explicitly rather than lean on the
-        // compiler's silence; do not remove this as "redundant".
-        guard let (bundleID, pid) = await MainActor.run(body: { () -> (String, pid_t)? in
-            guard let app = NSWorkspace.shared.frontmostApplication,
-                  let bundleID = app.bundleIdentifier else { return nil }
-            return (bundleID, app.processIdentifier)
-        }) else { return nil }
+        // Identity resolved and denylist-checked in one main-actor hop.
+        // This guard precedes every ScreenCaptureKit call, so a
+        // denylisted app is never captured — and never triggers the
+        // Screen Recording TCC prompt either.
+        guard let (bundleID, pid) = await resolveReadableFrontmostApp(
+            denylist: denylist, lookup: frontmostApp
+        ) else { return nil }
 
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(

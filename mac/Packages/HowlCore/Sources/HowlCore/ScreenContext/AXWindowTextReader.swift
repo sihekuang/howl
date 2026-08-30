@@ -9,34 +9,35 @@ import Foundation
 /// text (Electron without AXManualAccessibility, Canvas apps, most
 /// terminals); the caller falls back to OCR.
 public struct AXWindowTextReader: WindowTextReader {
+    /// Never construct this without a denylist. There is deliberately
+    /// no default: a reader that silently reads everything is the
+    /// failure this parameter exists to prevent, so the type refuses to
+    /// be built rather than defaulting to a weaker guarantee.
+    private let denylist: @Sendable () -> ScreenContextDenylist
+    private let frontmostApp: FrontmostAppLookup
     /// Caps the AX tree walk so a pathological hierarchy can't stall
     /// the extraction path.
     private let maxNodes: Int
     private let maxChars: Int
 
-    public init(maxNodes: Int = 3000, maxChars: Int = 8192) {
+    public init(denylist: @escaping @Sendable () -> ScreenContextDenylist,
+                maxNodes: Int = 3000,
+                maxChars: Int = 8192,
+                frontmostApp: @escaping FrontmostAppLookup = defaultFrontmostApp) {
+        self.denylist = denylist
+        self.frontmostApp = frontmostApp
         self.maxNodes = maxNodes
         self.maxChars = maxChars
     }
 
     public func read() async -> WindowSnapshot? {
-        // `NSWorkspace.frontmostApplication`'s thread affinity is not
-        // documented by Apple. AppKit is documented as requiring a run
-        // loop and not being daemon-safe; `NSRunningApplication`'s
-        // properties are documented as atomic, but that guarantees the
-        // returned object's consistency, not which thread may call the
-        // accessor. Nothing certifies this is safe off the main thread
-        // — and nothing in the Swift 6 checker enforces it either,
-        // since NSWorkspace carries no actor-isolation annotation for
-        // the compiler to catch a mistake against. A clean `swift
-        // build` here is not a safety certificate. Hop explicitly
-        // rather than lean on that silence; do not remove this as
-        // "redundant" without documented evidence to the contrary.
-        guard let (bundleID, pid) = await MainActor.run(body: { () -> (String, pid_t)? in
-            guard let app = NSWorkspace.shared.frontmostApplication,
-                  let bundleID = app.bundleIdentifier else { return nil }
-            return (bundleID, app.processIdentifier)
-        }) else { return nil }
+        // Identity resolved and denylist-checked in one main-actor hop,
+        // so the pid walked below is the pid that was cleared. See
+        // `resolveReadableFrontmostApp` for why the check lives there
+        // and not only in the coordinator.
+        guard let (bundleID, pid) = await resolveReadableFrontmostApp(
+            denylist: denylist, lookup: frontmostApp
+        ) else { return nil }
 
         let appElement = AXUIElementCreateApplication(pid)
         guard let window = copyElement(appElement, kAXFocusedWindowAttribute) else { return nil }
