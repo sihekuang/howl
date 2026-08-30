@@ -5,6 +5,7 @@ package transcribe
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -76,4 +77,81 @@ func readWavMono16k(path string) ([]float32, error) {
 		i = next
 	}
 	return nil, os.ErrInvalid
+}
+
+// TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow is the
+// regression test for the reason this feature needed a token-based
+// bound. Dense jargon tokenizes at ~1.5-3 bytes/token, so a prompt that
+// passes the 896-byte pre-filter can still exceed whisper's 224-token
+// window — where whisper would silently drop the HEAD, i.e. the user's
+// dictionary.
+func TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow(t *testing.T) {
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	defer w.Close()
+
+	// 60 dense CamelCase identifiers: byte-legal, token-illegal.
+	screen := make([]string, 60)
+	for i := range screen {
+		screen[i] = fmt.Sprintf("XqzGlyphWarpNode%02d", i)
+	}
+	dict := []string{"MCP", "WebRTC", "DeepFilterNet"}
+
+	w.SetContextPrompt(dict, screen)
+	got := w.initialPrompt
+
+	if n := w.tokenCount(got); n > MaxPromptTokens {
+		t.Errorf("prompt is %d tokens, want <= %d", n, MaxPromptTokens)
+	}
+	for _, term := range dict {
+		if !strings.Contains(got, term) {
+			t.Errorf("dictionary term %q was evicted; screen keywords must be dropped first", term)
+		}
+	}
+}
+
+func TestWhisperCpp_SetContextPrompt_ScreenSubCapInTokens(t *testing.T) {
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	defer w.Close()
+
+	screen := make([]string, 40)
+	for i := range screen {
+		screen[i] = fmt.Sprintf("ZzyxKernBlob%02d", i)
+	}
+	w.SetContextPrompt(nil, screen)
+
+	if n := w.tokenCount(w.initialPrompt); n > MaxScreenPromptTokens {
+		t.Errorf("screen-only prompt is %d tokens, want <= %d", n, MaxScreenPromptTokens)
+	}
+}
+
+func TestWhisperCpp_SetContextPrompt_EmptyClearsPrompt(t *testing.T) {
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	defer w.Close()
+
+	w.SetContextPrompt([]string{"MCP"}, nil)
+	w.SetContextPrompt(nil, nil)
+	if w.initialPrompt != "" {
+		t.Errorf("initialPrompt = %q, want empty after clearing", w.initialPrompt)
+	}
 }

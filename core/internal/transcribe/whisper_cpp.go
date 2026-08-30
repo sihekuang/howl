@@ -63,9 +63,13 @@ func loadBackends() {
 // WhisperCpp wraps a whisper.cpp context. NOT safe for concurrent calls
 // to Transcribe on the same instance.
 type WhisperCpp struct {
-	ctx           *C.struct_whisper_context
-	lang          string
-	threads       int
+	ctx     *C.struct_whisper_context
+	lang    string
+	threads int
+
+	// mu guards initialPrompt, which SetContextPrompt rewrites between
+	// captures while Transcribe reads it.
+	mu            sync.Mutex
 	initialPrompt string
 }
 
@@ -82,8 +86,9 @@ type WhisperOptions struct {
 	InitialPrompt string
 }
 
-// Compile-time interface assertion
+// Compile-time interface assertions
 var _ Transcriber = (*WhisperCpp)(nil)
+var _ PromptSetter = (*WhisperCpp)(nil)
 
 func NewWhisperCpp(opts WhisperOptions) (*WhisperCpp, error) {
 	if opts.ModelPath == "" {
@@ -139,9 +144,13 @@ func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, 
 	params.language = cLang
 
 	// Optional custom-vocabulary prompt. Left nil (whisper's default)
-	// when no prompt was configured.
-	if w.initialPrompt != "" {
-		cPrompt := C.CString(w.initialPrompt)
+	// when no prompt was configured. Read under the lock because
+	// SetContextPrompt can rewrite initialPrompt between captures.
+	w.mu.Lock()
+	prompt := w.initialPrompt
+	w.mu.Unlock()
+	if prompt != "" {
+		cPrompt := C.CString(prompt)
 		defer C.free(unsafe.Pointer(cPrompt))
 		params.initial_prompt = cPrompt
 	}
@@ -161,6 +170,49 @@ func (w *WhisperCpp) Transcribe(ctx context.Context, pcm16k []float32) (string, 
 		b.WriteString(C.GoString(cstr))
 	}
 	return strings.TrimSpace(b.String()), nil
+}
+
+// tokenCount returns how many whisper tokens text occupies in THIS
+// model's vocabulary. Byte-length heuristics are not a substitute:
+// jargon and CamelCase identifiers tokenize far denser than prose.
+func (w *WhisperCpp) tokenCount(text string) int {
+	if text == "" || w.ctx == nil {
+		return 0
+	}
+	cText := C.CString(text)
+	defer C.free(unsafe.Pointer(cText))
+	return int(C.whisper_token_count(w.ctx, cText))
+}
+
+// SetContextPrompt recomposes the initial prompt from the custom
+// dictionary and screen-derived keywords, then trims it to whisper's
+// real token window by dropping whole terms from the tail.
+//
+// Two stages, both dropping from the tail so screen keywords are always
+// sacrificed before dictionary terms:
+//  1. screen keywords alone must fit MaxScreenPromptTokens
+//  2. the whole prompt must fit MaxPromptTokens
+//
+// Must not be called while Transcribe is running on this instance; the
+// engine calls it from howl_start_capture, where no capture is in flight.
+func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) {
+	_, screen := ContextPrompt(dictTerms, screenTerms)
+	dict := cleanTerms(dictTerms)
+
+	for len(screen) > 0 && w.tokenCount(strings.Join(screen, ", ")) > MaxScreenPromptTokens {
+		screen = screen[:len(screen)-1]
+	}
+
+	all := make([]string, 0, len(dict)+len(screen))
+	all = append(all, dict...)
+	all = append(all, screen...)
+	for len(all) > 0 && w.tokenCount(strings.Join(all, ", ")) > MaxPromptTokens {
+		all = all[:len(all)-1]
+	}
+
+	w.mu.Lock()
+	w.initialPrompt = strings.Join(all, ", ")
+	w.mu.Unlock()
 }
 
 func (w *WhisperCpp) Close() error {
