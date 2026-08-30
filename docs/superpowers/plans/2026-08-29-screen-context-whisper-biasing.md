@@ -49,7 +49,7 @@ Composes dictionary + screen terms with dictionary-first ordering, case-insensit
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `core/internal/transcribe/prompt_test.go`:
+Add `"fmt"` to `prompt_test.go`'s import block (it currently imports `strings`, `testing`, `unicode/utf8`), then append:
 
 ```go
 func TestContextPrompt_DictionaryComesFirst(t *testing.T) {
@@ -93,7 +93,7 @@ func TestContextPrompt_ScreenTermsBoundedByScreenSubCap(t *testing.T) {
 	// Largest k with 22k-2 <= 384 is 17 (372 bytes).
 	screenIn := make([]string, 30)
 	for i := range screenIn {
-		screenIn[i] = "abcdefghij" + string(rune('a'+i)) + "bcdefghi" // 20 bytes, unique
+		screenIn[i] = fmt.Sprintf("term%016d", i) // exactly 20 bytes, unique
 	}
 	_, screen := ContextPrompt(nil, screenIn)
 	if len(screen) != 17 {
@@ -765,6 +765,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/voice-keyboard/core/internal/config"
 )
@@ -857,7 +858,7 @@ func TestExtract_TruncationDoesNotSplitRune(t *testing.T) {
 	if _, err := Extract(context.Background(), f, huge, nil); err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if !utf8ValidString(f.gotRaw) {
+	if !utf8.ValidString(f.gotRaw) {
 		t.Error("truncated window text is not valid UTF-8")
 	}
 }
@@ -879,19 +880,6 @@ func TestNewExtractor_UnknownProviderErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewExtractor() error = nil, want unknown-provider error")
 	}
-}
-```
-
-Add this helper at the bottom of the same test file:
-
-```go
-func utf8ValidString(s string) bool {
-	for _, r := range s {
-		if r == '�' {
-			return false
-		}
-	}
-	return true
 }
 ```
 
