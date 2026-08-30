@@ -105,3 +105,30 @@ asymmetry is stark: a redundant entry costs nothing, a missing one leaks a passw
 **Residual risk, surfaced to the user:** an exact-bundle-ID denylist is inherently
 incomplete — it cannot cover password managers nobody listed, nor a banking site in a
 browser tab. The spec accepted that trade-off; it is not a defect introduced here.
+
+## 2026-08-30 — OCR capture must convert points to pixels (Retina scale)
+
+**Decision:** In `OCRWindowTextReader`, set `SCStreamConfiguration.width/height` from the
+window's size multiplied by the content filter's `pointPixelScale`, rather than from
+`window.frame.width/height` directly. Also set `captureResolution = .best` (macOS 14+).
+
+**Trigger:** A task review flagged, as a Minor, that the capture config was fed point
+dimensions. Research upgraded it: on every Retina Mac this halves linear capture
+resolution, and the text this feature exists to read is small-glyph code identifiers.
+
+**Basis:** Unanimous across Apple's own documentation, Apple's sample code, and developer
+forum guidance: `SCWindow.frame` / `SCDisplay` sizes are in POINTS, while
+`SCStreamConfiguration.width/height` are in PIXELS. Apple's "Capturing screen content in
+macOS" sample multiplies display dimensions by a scale factor for exactly this reason, and
+ScreenCaptureKit exposes `SCContentFilter.pointPixelScale` as the supported way to make the
+conversion for a window filter. No source suggested passing points directly is correct.
+
+**Why this is not cosmetic:** at 2x, passing points yields an image with half the linear
+resolution — a quarter of the pixels. Vision's accuracy on small glyphs degrades sharply
+under downsampling, and the OCR path exists precisely for the apps AX cannot read
+(Electron editors, terminals) where the target vocabulary is dense identifiers.
+
+**Sources:**
+- Apple, "Capturing screen content in macOS" (sample multiplies by scale factor) — https://developer.apple.com/documentation/ScreenCaptureKit/capturing-screen-content-in-macos
+- Apple Developer Forums, "Take correctly sized screenshots with ScreenCaptureKit" (`SCContentFilter.pointPixelScale`) — https://developer.apple.com/forums/thread/765360
+- Apple Developer Forums, "Why is the image captured by SCScreenshotManager.captureImage so blurry?" (same points/pixels root cause) — https://developer.apple.com/forums/thread/739593
