@@ -2719,10 +2719,34 @@ Expected: BUILD SUCCEEDED. Fix any strict-concurrency diagnostics before continu
 2. Focus a code editor showing distinctive identifiers (e.g. `SpeakerGate`, `DeepFilterNet`). Wait ~1 s.
 3. Confirm in `/tmp/howl.log`: `applied N screen keyword(s)` with `N > 0`.
 4. Dictate a sentence containing one of those identifiers; confirm the spelling survives into the injected text.
-5. Focus 1Password, wait, then dictate. Confirm the log shows `applied 0 screen keyword(s)` and no extraction ran.
-6. Alt-tab rapidly through five windows. Confirm at most one extraction fires.
-7. Toggle the setting off, focus a new window, dictate. Confirm no extraction occurs.
-8. Confirm no raw window text appears anywhere in `/tmp/howl.log`.
+5. **The privacy gate (most important check).** Focus 1Password, wait ~2 s, then dictate.
+   - Confirm the log shows `screen context skipped for denylisted app`. That specific line
+     proves the PRE-READ gate fired. Seeing only `applied 0 screen keyword(s)` is NOT
+     sufficient — that is also what a read-then-discard would print, which is exactly the
+     bug this gate was added to fix.
+   - Confirm **no macOS Screen Recording permission prompt appears** on focusing 1Password.
+     A prompt here means the OCR fallback ran against the vault window.
+   - If Howl already holds Screen Recording permission (so no prompt would appear either
+     way), instead confirm no `screencapture`/OCR activity: the skip line must appear
+     BEFORE any read, and no `applied` line should follow for that window at all.
+6. **Same-app window switch (AX focused-window observer).** With two windows of the SAME
+   app open (two terminal windows, or two editor windows), focus one, wait for keywords,
+   then focus the other. Confirm a NEW extraction fires with different keywords. Before the
+   AX observers existed this did nothing, because app activation never fired.
+7. **Tab switch (settles the kAXTitleChangedNotification assumption).** In a tabbed app —
+   a browser is the clearest case, since a tabbed browser's window title IS the active
+   tab's title — switch tabs without leaving the app. Confirm a new extraction fires.
+   If it does NOT fire, record which app in the report: the notification is additive, so a
+   non-firing app simply gets the old app-activation-only behaviour and nothing breaks.
+   Also try a terminal that rewrites its title per command and confirm it does NOT cause
+   runaway extraction — the 800 ms debounce plus the content-hash cache should absorb it.
+8. Alt-tab rapidly through five windows. Confirm at most one extraction fires.
+9. Toggle the setting off, focus a new window, dictate. Confirm no extraction occurs.
+10. **Dictation is never blocked.** Focus a large, text-heavy window to start an extraction,
+    then press PTT within ~1 s — before the extraction could have finished. Confirm dictation
+    starts immediately and does not stall waiting on the LLM call.
+11. Confirm no raw window text appears anywhere in `/tmp/howl.log`, and no provider error
+    body either — grep for a distinctive string from the focused window and confirm no hit.
 
 Use `/usr/bin/log` (not bare `log`) if you need the unified log; `.notice` and above persist.
 
