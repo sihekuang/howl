@@ -162,6 +162,60 @@ struct DebouncerTests {
         #expect(later.count == 0)
     }
 
+    @Test func begin_run_gates_a_superseded_run_and_retires_its_epoch() async throws {
+        // The lost-fire guard, and the one assertion in this file that
+        // does NOT depend on timing. `beginRun` is a pure function of
+        // (id, runID, runStartedAt, epoch), so both of its arms can be
+        // pinned by calling it directly.
+        //
+        // Why this test rather than leaning on the burst tests: those
+        // cannot reach the false branch. In
+        // `rapid_schedules_collapse_to_one_run` every superseded task
+        // is still inside `Task.sleep` when the next `schedule`
+        // cancels it, so all of them die at `Task.isCancelled` and
+        // never call `beginRun` at all; and
+        // `sustained_rapid_schedules_still_fire_via_max_delay` uses an
+        // idempotent `Signal`, so it cannot tell one fire from two.
+        //
+        // Intervals long enough that nothing fires while the test
+        // runs — every transition below is driven by hand.
+        let d = Debouncer(interval: 30, maxDelay: 30)
+
+        d.schedule { }
+        #expect(d.currentRunID == 1)
+        let epoch = try #require(d.currentRunEpoch)
+
+        // Run 2 supersedes run 1 and, because run 1 has not fired yet,
+        // legitimately inherits its maxDelay epoch.
+        d.schedule { }
+        #expect(d.currentRunID == 2)
+        #expect(d.currentRunEpoch == epoch)
+
+        // Run 1 now reaches `beginRun` anyway — the race this guards.
+        // It must report itself superseded, so the call site gates its
+        // action off instead of double-firing...
+        #expect(d.beginRun(1, epoch: epoch) == false)
+        // ...and it must still retire the epoch it was scheduled
+        // against, so the next `schedule` starts a fresh maxDelay
+        // window instead of inheriting a cap deadline that is already
+        // in the past and firing with no debounce.
+        #expect(d.currentRunEpoch == nil)
+
+        // The current run reports itself current and fires.
+        #expect(d.beginRun(2, epoch: epoch) == true)
+
+        // A superseded run holding a DIFFERENT epoch must leave the
+        // live one alone — the epoch arm keys on identity, not on
+        // "some run finished".
+        d.schedule { }
+        let fresh = try #require(d.currentRunEpoch)
+        #expect(fresh != epoch)
+        #expect(d.beginRun(1, epoch: epoch) == false)
+        #expect(d.currentRunEpoch == fresh)
+
+        d.cancel()
+    }
+
     @Test func a_schedule_during_a_long_action_still_gets_a_full_interval() async throws {
         // The maxDelay epoch belongs to the run that is waiting to
         // fire, not to the run that is already executing. If the epoch

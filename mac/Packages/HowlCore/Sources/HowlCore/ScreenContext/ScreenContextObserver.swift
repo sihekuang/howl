@@ -15,20 +15,19 @@ private final class ObserverToken: @unchecked Sendable {
 /// Context handed to the AX callback via `refcon`, since
 /// `AXObserverCallback` is a C function pointer and cannot capture
 /// Swift closures. Holds exactly what the callback needs to do its
-/// (trivial) job. `@unchecked Sendable` because it's only ever
-/// touched from the main actor — by AppKit, which delivers AX
-/// notifications on the main run loop, and by the attach/teardown
-/// paths, which are all main-actor-isolated. The callback and a
-/// teardown therefore can never interleave.
+/// (trivial) job.
 ///
-/// Note what this does NOT rest on: `ScreenContextObserver` being
-/// `@MainActor` does not mean it is *deallocated* on the main actor.
-/// `deinit` is nonisolated and runs on whichever thread drops the last
-/// reference, which is exactly why `deinit` hands its teardown to the
-/// main actor instead of doing it inline — see `deinit` below. Were it
-/// to release this object off-main, it could free the very memory the
-/// main run loop was mid-callout dereferencing through `refcon`.
-private final class AXCallbackContext: @unchecked Sendable {
+/// Checked `Sendable`, deliberately: both stored properties are `let`
+/// and of Sendable type, which is the whole conformance requirement
+/// for a final class, so the compiler verifies this rather than a
+/// comment asserting it. That matters here specifically — the
+/// hand-written `@unchecked` rationale this replaces was *wrong*, and
+/// wrong in a way that took a round to find: it argued this type was
+/// safe because `ScreenContextObserver` is `@MainActor` and so is
+/// "only ever deinitialized from the main actor", which `deinit`
+/// being nonisolated makes false. Prose can rot back into that; a
+/// conformance cannot.
+private final class AXCallbackContext: Sendable {
     let debouncer: Debouncer
     let action: @Sendable () async -> Void
     init(debouncer: Debouncer, action: @escaping @Sendable () async -> Void) {

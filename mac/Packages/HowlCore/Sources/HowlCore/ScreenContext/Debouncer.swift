@@ -90,6 +90,19 @@ public final class Debouncer: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Read-only views of the run state, for the `beginRun` transition
+    /// test. Both take the lock, so a test never reads a torn value;
+    /// the underlying storage stays `private`.
+    var currentRunEpoch: Date? {
+        lock.lock(); defer { lock.unlock() }
+        return runStartedAt
+    }
+
+    var currentRunID: UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        return runID
+    }
+
     public func cancel() {
         lock.lock()
         pending?.cancel()
@@ -133,7 +146,16 @@ public final class Debouncer: @unchecked Sendable {
     ///
     /// Returns whether this run is still the current one — see the
     /// call site for why that gates the action.
-    private func beginRun(_ id: UInt64, epoch: Date) -> Bool {
+    ///
+    /// `internal` rather than `private` as a deliberate test seam. The
+    /// *race* this guards (a `schedule` landing between a task's
+    /// cancellation check and this call) cannot be reproduced
+    /// deterministically, but the state transition can: this is a pure
+    /// function of `(id, runID, runStartedAt, epoch)`, so calling it
+    /// directly pins both arms without a clock or an interleaving.
+    /// Not public, and not called anywhere in `HowlCore` but the task
+    /// body above.
+    func beginRun(_ id: UInt64, epoch: Date) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let isCurrent = (id == runID)
