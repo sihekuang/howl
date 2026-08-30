@@ -2717,6 +2717,21 @@ Add these next to the other `lazy var` collaborators (after `conflictChecker`, l
     }
 ```
 
+**Wiring rule — `stop()` is not a hard barrier.** `ScreenContextObserver.stop()`
+cannot un-start an action already inside `await onFocusSettled()`, so exactly one
+refresh can complete after `stop()` returns. The coordinator already has two
+independent late-result defences (its `isEnabled` gate, and `applyIfCurrent`'s
+generation + cancellation check), so this is bounded to one refresh of the whisper
+bias terms and is safe as wired below.
+
+The rule that keeps it safe: **whatever condition causes `stop()` to be called MUST
+also be visible to the `isEnabled` closure the coordinator reads.** Today both are
+driven by the same settings flag, so a late refresh sees `isEnabled() == false` and
+applies nothing. If a future `stop()` trigger is something `isEnabled` cannot see —
+app teardown, a privacy or pause mode on a different flag — then a late
+`onFocusSettled` can apply one window's keywords after stop. Add such a trigger to
+`isEnabled` at the same time you add it to `stop()`.
+
 **Ownership constraint — read before wiring.** `ScreenContextObserver` is
 `@MainActor`, but its `deinit` is nonisolated (Swift makes every `deinit`
 nonisolated, even on a `@MainActor` class). Its teardown releases the callback
