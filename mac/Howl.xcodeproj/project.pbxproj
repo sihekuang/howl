@@ -33,6 +33,7 @@
 		50A43871D999741C65AB727C /* SaveAsPresetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F5C4B22DE9F69EDA5E7AA8 /* SaveAsPresetSheet.swift */; };
 		55B63CA458D56967C9AD669B /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E92B8A651A352D9AA4CF02 /* EditorView.swift */; };
 		58970FD1991F3929712228D9 /* PipelineEditorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BE9E423BFFA43B7964D59C5 /* PipelineEditorState.swift */; };
+		5AA3C260FBC69B6290B3E379 /* ScreenContextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 716F51CB7870D820EC957567 /* ScreenContextSection.swift */; };
 		5CA59F85C70FDBB57CF1F856 /* HowlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E09796499424206A294D0B /* HowlApp.swift */; };
 		604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB6EBA0ED5CC4C29BAF817 /* RecordingOverlayController.swift */; };
 		63DD3FAC24B973737175F166 /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */; };
@@ -93,6 +94,7 @@
 		6B15CA05B53A88BBF54B03CB /* AboutTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutTab.swift; sourceTree = "<group>"; };
 		6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		6D794B258F72EFD8EF74C73B /* LLMProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTab.swift; sourceTree = "<group>"; };
+		716F51CB7870D820EC957567 /* ScreenContextSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenContextSection.swift; sourceTree = "<group>"; };
 		724D229C9524B15ABED3630B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		73A1F8DB6683A17BA69FC54C /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		7BD54519ED2E278EB40092A3 /* SessionPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPreview.swift; sourceTree = "<group>"; };
@@ -301,6 +303,7 @@
 				E5CA7CC77217D20E3DB636FA /* PlaygroundTab.swift */,
 				18BCBC4C5752A8C10E5EC6C0 /* PresetBanner.swift */,
 				C8C4ED33724163E314CF5D88 /* PromptTab.swift */,
+				716F51CB7870D820EC957567 /* ScreenContextSection.swift */,
 				4645AD4550A9165E3D88094E /* SettingsComponents.swift */,
 				5D6FA7659981634693F0DBA7 /* SettingsView.swift */,
 				CEF5C65AF9893251E66B0AC8 /* VoiceTab.swift */,
@@ -532,6 +535,7 @@
 				604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */,
 				0B306B954E6F7D3FDAD70E72 /* RecordingOverlayView.swift in Sources */,
 				50A43871D999741C65AB727C /* SaveAsPresetSheet.swift in Sources */,
+				5AA3C260FBC69B6290B3E379 /* ScreenContextSection.swift in Sources */,
 				2662BA697C2C4C8B5BDD7E88 /* SessionDetail.swift in Sources */,
 				3E8FF60BF6D2472A02692F2E /* SessionList.swift in Sources */,
 				78E5C3E0A2E29E851F941F53 /* SessionPaths.swift in Sources */,

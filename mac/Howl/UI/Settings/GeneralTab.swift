@@ -78,6 +78,10 @@ struct GeneralTab: View {
                     launchAtLoginEnabled = LaunchAtLogin.isEnabled
                 }
             ))
+            ScreenContextSection(
+                enabled: $settings.screenContextEnabled,
+                denylist: $settings.screenContextDenylist
+            )
         }
         .onChange(of: settings) { _, new in onSave(new) }
         .task {

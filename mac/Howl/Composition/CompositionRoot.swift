@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import HowlCore
 
@@ -60,4 +61,67 @@ public final class CompositionRoot {
     lazy var pipelineEditorState = PipelineEditorState()
 
     public lazy var conflictChecker: any SymbolicHotkeyChecker = DefaultSymbolicHotkeyChecker()
+
+    let screenContextCache = ScreenContextCache()
+
+    // One denylist source, shared by the readers AND the coordinator.
+    // The readers need their own copy because the guarantee is enforced
+    // at the point of reading — a reader that refuses a denylisted app is
+    // safe by construction, whereas a check only in the coordinator can be
+    // outrun when the user switches apps between the gate and the read.
+    lazy var screenContextDenylistProvider: @Sendable () -> ScreenContextDenylist = { [settings] in
+        let userAdditions = (try? settings.get())?.screenContextDenylist ?? []
+        return ScreenContextDenylist(userAdditions: userAdditions)
+    }
+
+    lazy var screenContextCoordinator = ScreenContextCoordinator(
+        reader: FallbackWindowTextReader(
+            primary: AXWindowTextReader(denylist: screenContextDenylistProvider),
+            fallback: OCRWindowTextReader(denylist: screenContextDenylistProvider)
+        ),
+        cache: screenContextCache,
+        denylist: screenContextDenylistProvider,
+        isEnabled: { [settings] in
+            (try? settings.get())?.screenContextEnabled ?? true
+        },
+        // MUST hop to the main actor. Every other
+        // NSWorkspace.frontmostApplication access in this feature does
+        // (see AXWindowTextReader, whose comment explicitly says not to
+        // remove the hop as "redundant"), and `refresh()` runs on the
+        // coordinator's own actor, not main. Do NOT "simplify" this to a
+        // bare synchronous NSWorkspace read — it would compile, every
+        // unit test would still pass, and it would silently violate the
+        // invariant the readers depend on.
+        frontmostBundleID: {
+            await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+        },
+        extract: { [engine] text in await engine.extractScreenKeywords(text: text) },
+        apply: { [engine] keywords in await engine.setScreenKeywords(keywords) }
+    )
+
+    lazy var screenContextObserver = ScreenContextObserver(onFocusSettled: makeScreenContextFocusSettledAction())
+
+    // Deliberately a method, not the `lazy var` initializer expression
+    // above, despite building the exact same closure `screenContextObserver`
+    // needs. A closure literal that captures an actor-typed value (here,
+    // `screenContextCoordinator`) cannot be written directly inside a
+    // `lazy var`'s initializer on a `@MainActor` type — the Swift 6.3
+    // compiler rejects it with "default argument cannot be both main
+    // actor-isolated and actor-isolated" (confirmed via a minimal repro:
+    // the same closure body compiles fine once it's built inside an
+    // ordinary method, and fails again the moment it's inlined back into
+    // any `lazy var =` initializer, `debounce` default present or not).
+    // Moving construction into a method body sidesteps the compiler
+    // limitation without changing behaviour — the capture still happens
+    // once, synchronously, on the main actor, at first access of
+    // `screenContextObserver`.
+    private func makeScreenContextFocusSettledAction() -> @Sendable () async -> Void {
+        let coordinator = screenContextCoordinator
+        return {
+            // scheduleRefresh, not refresh: it cancels a still-running
+            // extraction for a window the user has already left, so a newer
+            // window's context always wins.
+            await coordinator.scheduleRefresh()
+        }
+    }
 }

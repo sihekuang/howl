@@ -228,12 +228,14 @@ public final class EngineCoordinator {
         // Pre-warm Ollama if it's the active provider so the user's
         // first dictation isn't blocked by a 5–15 s cold model load.
         await prewarmOllamaIfActive()
+        composition.screenContextObserver.start()
     }
 
     public func stop() {
         composition.cancelKeyMonitor.stop()
         composition.hotkey.stop()
         composition.hidTrigger.stop()
+        composition.screenContextObserver.stop()
         pollTask?.cancel()
         pollTask = nil
     }
