@@ -51,3 +51,25 @@ conservative sub-budget rather than "fill the window."
 - openai/whisper Discussion #1824, "Prompt length (244 characters or tokens?)" — https://github.com/openai/whisper/discussions/1824
 - openai/whisper Discussion #1386, "Maximum number of 'initial_prompt' characters/tokens" — https://github.com/openai/whisper/discussions/1386
 - David Cochard, "Prompt Engineering in Whisper" (ailia Tech Blog) — https://medium.com/axinc-ai/prompt-engineering-in-whisper-6bb18003562d
+
+## 2026-08-29 — libhowl ABI version: bump to 1.1.0 for the two new exports
+
+**Decision:** Bump `abiVersion` in `core/cmd/libhowl/exports.go` from `1.0.0` to `1.1.0`
+as part of adding `howl_extract_keywords` and `howl_set_screen_keywords`.
+
+**Trigger:** Task 5 of the screen-context feature adds two new C-ABI exports. The
+implementer correctly declined to guess whether the ABI version should move and
+escalated it rather than picking one.
+
+**Basis:** Existing project convention — the rule is written directly above the
+constant it governs. `exports.go:718-721` states the bump policy verbatim: "major:
+a function signature changes, or one is removed / **minor: a new function is added
+(additive, back-compat)** / patch: a fix that doesn't change the surface (rare)."
+Two additive functions is exactly the minor case. Verified safe: the doc comment
+says the Mac app asserts only on the MAJOR version, and a grep of `mac/` for
+`abi_version` / `abiVersion` finds no Swift consumer reading it at all today, so
+moving the minor digit cannot break the host.
+
+**Sources:**
+- `core/cmd/libhowl/exports.go:718-727` — the bump policy and the constant
+- `mac/Packages/HowlCore/Sources/HowlCore/Bridge/` — no consumer of `howl_abi_version`
