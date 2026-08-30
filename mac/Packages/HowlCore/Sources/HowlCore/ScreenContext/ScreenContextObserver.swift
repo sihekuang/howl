@@ -136,6 +136,22 @@ public final class ScreenContextObserver {
     private let token = ObserverToken()
     private let axToken = AXObserverToken()
     private let log = Logger(subsystem: "com.howl.app", category: "screencontext")
+    /// Identifies the most recent attach attempt. Registration happens
+    /// off the main actor, so several attempts can be in flight at
+    /// once — including several for the SAME pid, because `axToken` is
+    /// still empty while the first one is in flight and so the
+    /// same-pid short-circuit in `reattachAXObserver` cannot fire.
+    /// Only the newest attempt may install its run-loop source: an
+    /// older one installing after a newer one has already written
+    /// `axToken` would overwrite the token's strong reference to the
+    /// newer `AXObserver` while that observer's source is still in the
+    /// run loop. `AXObserverGetRunLoopSource` is a *Get* — the
+    /// observer owns the source — so that leaves the run loop holding
+    /// a source whose owner has been freed, with a `refcon` aimed at a
+    /// context freed on the next line. `stop()` bumps this too, so an
+    /// in-flight attempt cannot repopulate the token after stop.
+    /// Compared only for equality, so `&+` wraparound is harmless.
+    private var attachGeneration: UInt64 = 0
 
     public init(debounce: TimeInterval = 0.8,
                 onFocusSettled: @escaping @Sendable () async -> Void) {
@@ -177,6 +193,14 @@ public final class ScreenContextObserver {
         }
         token.value = nil
         debouncer.cancel()
+        // Invalidate any attach attempt still in flight BEFORE tearing
+        // the token down. Registration is asynchronous now, so an
+        // attempt whose pid is still frontmost would otherwise sail
+        // through its own guard, install a run-loop source, and
+        // repopulate `axToken` after stop() — leaving the observer
+        // firing (and its source installed) past the point the caller
+        // asked for it to be gone.
+        attachGeneration &+= 1
         detachAXObserver(axToken)
     }
 
@@ -209,6 +233,13 @@ public final class ScreenContextObserver {
     /// main actor below, so a hung, beachballing, or mid-launch app
     /// can never block Howl's UI thread on activation.
     private func reattachAXObserver() {
+        // Bumped at the very top, deliberately covering the two early
+        // returns below as well: both leave the observer state in a
+        // shape that no older in-flight attempt should be allowed to
+        // finish writing into.
+        attachGeneration &+= 1
+        let myAttach = attachGeneration
+
         guard let app = NSWorkspace.shared.frontmostApplication else {
             detachAXObserver(axToken)
             return
@@ -255,6 +286,23 @@ public final class ScreenContextObserver {
 
             await MainActor.run {
                 guard let self else { return }
+                // Is this still the newest attach attempt? Checked
+                // BEFORE the frontmost-app test, because the pid test
+                // cannot catch the dangerous case: two attempts for
+                // the SAME pid both see that pid frontmost and both
+                // pass it. That happens on ordinary alt-tabbing
+                // (A -> B -> A), and on an activation arriving just
+                // after `start()`'s own priming call — the in-flight
+                // window is up to ~0.5s for exactly the hung or
+                // mid-launch apps the messaging timeout exists for.
+                // It also catches `stop()`, which bumps the
+                // generation. Discarding here is safe and self-healing
+                // in every case: nothing was added to the run loop, so
+                // releasing `attach` releases the observer, its
+                // (uninstalled) source, and `context` together, and
+                // `axToken.pid` stays nil so the next activation
+                // retries.
+                guard myAttach == self.attachGeneration else { return }
                 // The frontmost app may have changed again while this
                 // was in flight (another activation dispatched its own
                 // reattachAXObserver, which may already have attached
@@ -269,12 +317,25 @@ public final class ScreenContextObserver {
                 }
                 guard addedFocusedWindow || addedTitle else {
                     // Neither notification could be registered —
-                    // nothing to observe on this app. Degrade silently;
-                    // `context` set above is cleared by the next
-                    // `reattachAXObserver()` call (or `stop()`/`deinit`).
+                    // nothing to observe on this app. Degrade
+                    // silently. `context` is owned by `attach` and is
+                    // released when this attempt ends; nothing was
+                    // registered and no source was installed, so the
+                    // `refcon` can never be dereferenced.
                     self.log.debug("screen context AX add-notification failed")
                     return
                 }
+                // Belt-and-braces: never install a second source while
+                // the token still holds one. The generation guard
+                // above already makes this unreachable (the token is
+                // emptied synchronously before each attempt is
+                // dispatched, and only the newest attempt gets here),
+                // but installing over a live token is precisely the
+                // use-after-free this fix removes, so refuse to do it
+                // structurally rather than by argument. NOT a
+                // replacement for the generation guard: on its own it
+                // would still allow a post-`stop()` install.
+                detachAXObserver(self.axToken)
                 CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(attach.observer), .commonModes)
                 self.axToken.observer = attach.observer
                 self.axToken.pid = attach.pid

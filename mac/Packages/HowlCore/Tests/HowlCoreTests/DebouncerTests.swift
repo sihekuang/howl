@@ -31,6 +31,18 @@ private actor Signal {
     }
 }
 
+/// Hands the cooperative executor over repeatedly, so a task that has
+/// already been *resumed* (its continuation enqueued) gets to run to
+/// completion before the caller continues.
+///
+/// Deliberately not `Task.sleep`: this waits on scheduler progress,
+/// not on wall-clock time, so it can't be starved by a loaded CI box
+/// the way a fixed sleep can. Used only where the thing being waited
+/// for is already runnable and needs no further suspension.
+private func handOffScheduler(_ times: Int = 100) async {
+    for _ in 0..<times { await Task.yield() }
+}
+
 @Suite("Debouncer")
 struct DebouncerTests {
 
@@ -113,5 +125,78 @@ struct DebouncerTests {
         burst.cancel()
 
         #expect(elapsed < 0.45)   // comfortably before the burst's own ~500ms natural end
+    }
+
+    @Test func a_finishing_run_does_not_orphan_a_newer_scheduled_run() async throws {
+        // A run's completion bookkeeping happens AFTER `await action()`
+        // — a real suspension point. A `schedule` arriving during that
+        // suspension becomes the new pending run, and the finishing
+        // (older) run must not clear the reference to it. If it does,
+        // the newer task is orphaned: `cancel()` can no longer reach
+        // it, so the action fires after the caller cancelled — which
+        // for `ScreenContextObserver` means firing after `stop()`.
+        let started = Signal()   // action A has begun and is about to suspend
+        let gate = Signal()      // released by the test to let action A return
+        let later = Counter()    // incremented by the run that must be cancellable
+        let d = Debouncer(interval: 0.1)
+
+        d.schedule {
+            await started.set()
+            await gate.wait()
+        }
+        await started.wait()
+
+        // Arrives while A is suspended inside `await action()`. This
+        // must become — and stay — the debouncer's pending run.
+        d.schedule { later.increment() }
+
+        // Let A return, so its run-completion bookkeeping executes
+        // before we cancel. `handOffScheduler` (not a sleep) is what
+        // makes that ordering deterministic.
+        await gate.set()
+        await handOffScheduler()
+
+        d.cancel()
+
+        try await Task.sleep(nanoseconds: 400_000_000)   // well past the 0.1s interval
+        #expect(later.count == 0)
+    }
+
+    @Test func a_schedule_during_a_long_action_still_gets_a_full_interval() async throws {
+        // The maxDelay epoch belongs to the run that is waiting to
+        // fire, not to the run that is already executing. If the epoch
+        // survives into the action's own (potentially long) execution,
+        // a `schedule` arriving while the action is still running
+        // inherits it — and once the action has outlived `maxDelay`,
+        // the cap deadline is already in the past, the computed delay
+        // collapses to 0, and the next schedule fires immediately with
+        // no debounce at all. An LLM-backed refresh outliving the
+        // default 5s maxDelay is entirely ordinary.
+        let started = Signal()
+        let gate = Signal()
+        let nextFired = Signal()
+        // maxDelay (0.3s) deliberately far shorter than the action's
+        // own runtime below, so a stale epoch puts the cap in the past.
+        let d = Debouncer(interval: 0.2, maxDelay: 0.3)
+
+        d.schedule {
+            await started.set()
+            await gate.wait()
+        }
+        await started.wait()
+
+        // Not event ordering — this IS the scenario: the action itself
+        // runs longer than maxDelay.
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        let scheduledAt = Date()
+        d.schedule { await nextFired.set() }
+        await nextFired.wait()
+        let delay = Date().timeIntervalSince(scheduledAt)
+
+        await gate.set()   // let the long action finish before the test ends
+
+        // A real debounce interval, not an immediate fire.
+        #expect(delay > 0.1)
     }
 }

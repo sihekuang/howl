@@ -20,10 +20,22 @@ public final class Debouncer: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: Task<Void, Never>?
     // When the current run's FIRST `schedule` call arrived. Reset to
-    // nil once the action actually fires (or is cancelled), so the
-    // next `schedule` call starts a fresh maxDelay window rather than
-    // inheriting a stale one.
+    // nil once the action actually STARTS firing (not when it
+    // finishes) or is cancelled, so the next `schedule` call starts a
+    // fresh maxDelay window rather than inheriting a stale one. See
+    // `beginRun` for why fire time and not finish time.
     private var runStartedAt: Date?
+    // Identifies the current run. Every `schedule` (and `cancel`)
+    // stamps a new id, so a task that reaches its own bookkeeping
+    // AFTER a newer `schedule` has superseded it can tell that it is
+    // stale and leave the newer run's state alone. Without this, a
+    // finishing run nils out `pending` unconditionally and orphans the
+    // task that replaced it: `cancel()` can then no longer reach that
+    // task, and the action fires after the caller cancelled — which
+    // for `ScreenContextObserver` means firing after `stop()`.
+    // `&+=` wraps rather than traps; UInt64 will not wrap in practice,
+    // and equality (never ordering) is all that's compared.
+    private var runID: UInt64 = 0
 
     public init(interval: TimeInterval, maxDelay: TimeInterval = 5.0) {
         self.interval = interval
@@ -37,6 +49,9 @@ public final class Debouncer: @unchecked Sendable {
         lock.lock()
         pending?.cancel()
 
+        runID &+= 1
+        let myRun = runID
+
         let now = Date()
         let startedAt = runStartedAt ?? now
         runStartedAt = startedAt
@@ -49,8 +64,9 @@ public final class Debouncer: @unchecked Sendable {
         pending = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             if Task.isCancelled { return }
+            self?.beginRun(myRun)
             await action()
-            self?.finishRun()
+            self?.finishRun(myRun)
         }
         lock.unlock()
     }
@@ -60,13 +76,45 @@ public final class Debouncer: @unchecked Sendable {
         pending?.cancel()
         pending = nil
         runStartedAt = nil
+        // Supersede any run already past its cancellation check, so
+        // its bookkeeping can't resurrect state after this cancel.
+        runID &+= 1
         lock.unlock()
     }
 
-    private func finishRun() {
+    /// Closes the maxDelay window at FIRE time, not at finish time.
+    ///
+    /// The window belongs to the run that is *waiting* to fire; once
+    /// the action has started, the wait is over. Clearing it only
+    /// after `await action()` returns would let a `schedule` arriving
+    /// mid-action inherit this run's epoch — and once the action has
+    /// outlived `maxDelay` (5s by default; an LLM-backed refresh does
+    /// that routinely), the inherited cap deadline is already in the
+    /// past, `seconds` collapses to 0, and the next schedule fires
+    /// immediately with no debounce at all.
+    ///
+    /// Guarded on `runID` because a newer `schedule` may have landed
+    /// between this task's cancellation check and here; that newer run
+    /// owns `runStartedAt` now, and its fresh epoch must survive.
+    private func beginRun(_ id: UInt64) {
         lock.lock()
-        pending = nil
-        runStartedAt = nil
+        if id == runID { runStartedAt = nil }
+        lock.unlock()
+    }
+
+    /// Clears the run state only if this run is still the current one.
+    /// A `schedule` arriving during `await action()` supersedes this
+    /// run and installs its own task in `pending`; wiping that
+    /// unconditionally would orphan it (see `runID`). `pending` is
+    /// deliberately left pointing at this task for the duration of the
+    /// action, so a `cancel()` mid-action still propagates
+    /// cancellation into a cancellation-aware action.
+    private func finishRun(_ id: UInt64) {
+        lock.lock()
+        if id == runID {
+            pending = nil
+            runStartedAt = nil
+        }
         lock.unlock()
     }
 
