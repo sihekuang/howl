@@ -24,6 +24,7 @@ import (
 	"github.com/voice-keyboard/core/internal/presets"
 	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/sessions"
+	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 // openSessionRecorder constructs a recorder.Session for the next capture
@@ -180,6 +181,15 @@ func howl_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancelWithCause := context.WithCancelCause(context.Background())
 	pipe := e.pipeline
+	// Re-bias whisper for this capture. Safe here and only here: no
+	// capture is in flight, so this cannot race an in-flight Transcribe.
+	// A transcriber that doesn't implement PromptSetter keeps whatever
+	// prompt it was constructed with.
+	if ps, ok := pipe.Transcriber.(transcribe.PromptSetter); ok {
+		ps.SetContextPrompt(e.cfg.CustomDict, e.screenKeywords)
+		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s)", len(e.screenKeywords))
+	}
+	pipe.ScreenKeywords = e.screenKeywords
 	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
 	// non-fatal; we proceed without recording in that case. Safe under

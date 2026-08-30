@@ -73,6 +73,12 @@ type engine struct {
 	events chan event
 
 	lastErr string
+
+	// screenKeywords holds the keyword list derived from the user's
+	// focused window, set by howl_set_screen_keywords. Applied to the
+	// transcriber at howl_start_capture — never mid-capture, so there
+	// is no race against an in-flight Transcribe. Guarded by mu.
+	screenKeywords []string
 }
 
 // event is the JSON payload emitted via howl_poll_event. Kind values:

@@ -69,6 +69,12 @@ type Pipeline struct {
 	// a session artifact (prompt.txt).
 	Prompt string
 
+	// ScreenKeywords are the screen-derived biasing terms applied to
+	// the transcriber for this capture. Recorded in the session
+	// manifest so a captured session shows what biased recognition.
+	// The window TEXT they came from is deliberately never stored.
+	ScreenKeywords []string
+
 	ChunkerOpts ChunkerOpts
 }
 

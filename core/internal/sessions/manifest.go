@@ -40,15 +40,18 @@ type Manifest struct {
 	DurationSec float64           `json:"duration_sec"` // total dictation length
 	Stages      []StageEntry      `json:"stages"`
 	Transcripts TranscriptEntries `json:"transcripts"`
+	// ScreenKeywords are the screen-derived terms that reached whisper's
+	// initial prompt. omitempty so existing manifests are unaffected.
+	ScreenKeywords []string `json:"screen_keywords,omitempty"`
 }
 
 // StageEntry describes one captured stage. WavRel is the path of the
 // stage's WAV relative to the session folder (e.g. "denoise.wav").
 type StageEntry struct {
-	Name          string  `json:"name"`
-	Kind          string  `json:"kind"`                     // "frame" | "chunk"
-	WavRel        string  `json:"wav"`                      // relative path inside session folder
-	RateHz        int     `json:"rate_hz"`                  // output sample rate of this stage
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`    // "frame" | "chunk"
+	WavRel string `json:"wav"`     // relative path inside session folder
+	RateHz int    `json:"rate_hz"` // output sample rate of this stage
 	// TSESimilarity is the cosine similarity between the extracted
 	// source's ECAPA embedding and the enrolled reference, populated
 	// only for the TSE chunk stage. nil = stage didn't run / didn't
