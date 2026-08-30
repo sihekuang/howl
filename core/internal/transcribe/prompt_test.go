@@ -1,6 +1,7 @@
 package transcribe
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -79,5 +80,89 @@ func TestDictionaryPrompt_Bounded(t *testing.T) {
 	got := DictionaryPrompt(terms)
 	if len(got) > MaxInitialPromptLen {
 		t.Errorf("DictionaryPrompt not bounded: len %d > %d", len(got), MaxInitialPromptLen)
+	}
+}
+
+func TestContextPrompt_DictionaryComesFirst(t *testing.T) {
+	got, screen := ContextPrompt([]string{"MCP", "WebRTC"}, []string{"SpeakerGate"})
+	want := "MCP, WebRTC, SpeakerGate"
+	if got != want {
+		t.Errorf("ContextPrompt() = %q, want %q", got, want)
+	}
+	if len(screen) != 1 || screen[0] != "SpeakerGate" {
+		t.Errorf("surviving screen terms = %v, want [SpeakerGate]", screen)
+	}
+}
+
+func TestContextPrompt_DedupesScreenAgainstDictionary(t *testing.T) {
+	got, screen := ContextPrompt([]string{"WebRTC"}, []string{"webrtc", "SpeakerGate", "WEBRTC"})
+	want := "WebRTC, SpeakerGate"
+	if got != want {
+		t.Errorf("ContextPrompt() = %q, want %q", got, want)
+	}
+	if len(screen) != 1 || screen[0] != "SpeakerGate" {
+		t.Errorf("surviving screen terms = %v, want [SpeakerGate]", screen)
+	}
+}
+
+func TestContextPrompt_DedupesWithinScreenTerms(t *testing.T) {
+	got, _ := ContextPrompt(nil, []string{"Howl", "howl", "HOWL"})
+	if got != "Howl" {
+		t.Errorf("ContextPrompt() = %q, want %q", got, "Howl")
+	}
+}
+
+func TestContextPrompt_SkipsEmptyAndWhitespaceTerms(t *testing.T) {
+	got, _ := ContextPrompt([]string{"  MCP  ", "", "   "}, []string{"\tSpeakerGate\n", ""})
+	if got != "MCP, SpeakerGate" {
+		t.Errorf("ContextPrompt() = %q, want %q", got, "MCP, SpeakerGate")
+	}
+}
+
+func TestContextPrompt_ScreenTermsBoundedByScreenSubCap(t *testing.T) {
+	// 30 x 20-byte terms = 22*30-2 = 658 bytes joined, well over the 384 cap.
+	// Largest k with 22k-2 <= 384 is 17 (372 bytes).
+	screenIn := make([]string, 30)
+	for i := range screenIn {
+		screenIn[i] = fmt.Sprintf("term%016d", i) // exactly 20 bytes, unique
+	}
+	_, screen := ContextPrompt(nil, screenIn)
+	if len(screen) != 17 {
+		t.Errorf("surviving screen terms = %d, want 17 (screen sub-cap)", len(screen))
+	}
+}
+
+func TestContextPrompt_TotalBoundEvictsScreenTermsNotDictionary(t *testing.T) {
+	// Dictionary alone fills nearly the whole 896-byte budget.
+	dict := []string{strings.Repeat("d", MaxInitialPromptLen-10)}
+	got, screen := ContextPrompt(dict, []string{"SpeakerGate", "DeepFilterNet"})
+	if len(got) > MaxInitialPromptLen {
+		t.Fatalf("prompt len %d exceeds %d", len(got), MaxInitialPromptLen)
+	}
+	if !strings.HasPrefix(got, dict[0]) {
+		t.Error("dictionary term was truncated; screen terms must be evicted first")
+	}
+	if len(screen) != 0 {
+		t.Errorf("surviving screen terms = %v, want none", screen)
+	}
+}
+
+func TestContextPrompt_EmptyInputsYieldEmptyPrompt(t *testing.T) {
+	got, screen := ContextPrompt(nil, nil)
+	if got != "" {
+		t.Errorf("ContextPrompt(nil, nil) = %q, want empty", got)
+	}
+	if len(screen) != 0 {
+		t.Errorf("surviving screen terms = %v, want none", screen)
+	}
+}
+
+func TestContextPrompt_ScreenOnlyIsAllowed(t *testing.T) {
+	got, screen := ContextPrompt(nil, []string{"SpeakerGate"})
+	if got != "SpeakerGate" {
+		t.Errorf("ContextPrompt() = %q, want %q", got, "SpeakerGate")
+	}
+	if len(screen) != 1 {
+		t.Errorf("surviving screen terms = %v, want 1", screen)
 	}
 }
