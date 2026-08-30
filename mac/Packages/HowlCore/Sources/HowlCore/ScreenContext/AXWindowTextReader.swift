@@ -20,10 +20,25 @@ public struct AXWindowTextReader: WindowTextReader {
     }
 
     public func read() async -> WindowSnapshot? {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              let bundleID = app.bundleIdentifier else { return nil }
+        // `NSWorkspace.frontmostApplication`'s thread affinity is not
+        // documented by Apple. AppKit is documented as requiring a run
+        // loop and not being daemon-safe; `NSRunningApplication`'s
+        // properties are documented as atomic, but that guarantees the
+        // returned object's consistency, not which thread may call the
+        // accessor. Nothing certifies this is safe off the main thread
+        // — and nothing in the Swift 6 checker enforces it either,
+        // since NSWorkspace carries no actor-isolation annotation for
+        // the compiler to catch a mistake against. A clean `swift
+        // build` here is not a safety certificate. Hop explicitly
+        // rather than lean on that silence; do not remove this as
+        // "redundant" without documented evidence to the contrary.
+        guard let (bundleID, pid) = await MainActor.run(body: { () -> (String, pid_t)? in
+            guard let app = NSWorkspace.shared.frontmostApplication,
+                  let bundleID = app.bundleIdentifier else { return nil }
+            return (bundleID, app.processIdentifier)
+        }) else { return nil }
 
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        let appElement = AXUIElementCreateApplication(pid)
         guard let window = copyElement(appElement, kAXFocusedWindowAttribute) else { return nil }
 
         let title = copyString(window, kAXTitleAttribute) ?? ""
