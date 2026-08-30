@@ -2549,32 +2549,38 @@ and to the body:
         self.screenContextDenylist = screenContextDenylist
 ```
 
-Legacy configs decode without these keys, so add an explicit `Decodable` fallback below the struct's stored properties:
+`UserSettings` ALREADY has a hand-written `init(from decoder:) throws` (at
+`SettingsStore.swift:78`) and an explicit `enum CodingKeys` with a listed
+case for every field. Do NOT write a new `init(from decoder:)` — that is an
+invalid redeclaration, and replacing the existing one risks regressing the
+fields it already handles.
+
+Make exactly two edits.
+
+First, add the two new cases to the existing `enum CodingKeys` (required, or
+the new keys will not compile):
 
 ```swift
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.whisperModelSize = try c.decode(String.self, forKey: .whisperModelSize)
-        self.language = try c.decode(String.self, forKey: .language)
-        self.disableNoiseSuppression = try c.decode(Bool.self, forKey: .disableNoiseSuppression)
-        self.llmProvider = try c.decode(String.self, forKey: .llmProvider)
-        self.llmModel = try c.decode(String.self, forKey: .llmModel)
-        self.llmBaseURL = try c.decode(String.self, forKey: .llmBaseURL)
-        self.llmPrompt = try c.decodeIfPresent(String.self, forKey: .llmPrompt) ?? ""
-        self.customDict = try c.decode([String].self, forKey: .customDict)
-        self.hotkey = try c.decode(KeyboardShortcut.self, forKey: .hotkey)
-        self.hidBinding = try c.decodeIfPresent(HIDBinding.self, forKey: .hidBinding)
-        self.inputDeviceUID = try c.decodeIfPresent(String.self, forKey: .inputDeviceUID)
-        self.tseEnabled = try c.decode(Bool.self, forKey: .tseEnabled)
-        self.tseThreshold = try c.decodeIfPresent(Float.self, forKey: .tseThreshold)
-        self.tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
-        self.pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 10
-        self.selectedPresetName = try c.decodeIfPresent(String.self, forKey: .selectedPresetName)
-        // New in the screen-context feature; absent in existing installs.
-        self.screenContextEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenContextEnabled) ?? true
-        self.screenContextDenylist = try c.decodeIfPresent([String].self, forKey: .screenContextDenylist) ?? []
-    }
+        case screenContextEnabled, screenContextDenylist
 ```
+
+Second, append these two lines to the END of the existing
+`init(from decoder:)` body, immediately after the `selectedPresetName` line:
+
+```swift
+        // New in the screen-context feature; absent in existing installs.
+        screenContextEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenContextEnabled) ?? true
+        screenContextDenylist = try c.decodeIfPresent([String].self, forKey: .screenContextDenylist) ?? []
+```
+
+Leave every existing line in that initializer exactly as it is. In
+particular, every existing field uses the tolerant
+`decodeIfPresent(...) ?? <default>` form. That is deliberate and
+load-bearing: it is what lets a settings file written by an older build
+decode without throwing. Do not "tighten" any of them to `decode(...)` —
+doing so would make a missing key throw, which fails the whole
+`UserSettings` decode and silently resets ALL of the user's settings to
+defaults.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
