@@ -181,8 +181,26 @@ func howl_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancelWithCause := context.WithCancelCause(context.Background())
 	pipe := e.pipeline
-	// Re-bias whisper for this capture. Safe here and only here: no
-	// capture is in flight, so this cannot race an in-flight Transcribe.
+	// Re-bias whisper for this capture. The guarantee here is narrower
+	// than it looks: at this point `e.pushCh == nil`, i.e. no audio is
+	// currently being accepted for a NEW capture — NOT "no capture
+	// pipeline is running". `howl_stop_capture` nils `pushCh` the
+	// instant PTT is released, while the PREVIOUS capture's goroutine
+	// keeps running for seconds after that (whisper drain + LLM
+	// cleanup), and nothing on the Swift side prevents the next
+	// `onPress` from firing during that window (`EngineCoordinator.onPress`
+	// only guards on `engineLoading`, not `engineState == .processing`).
+	// So this call and a still-in-flight Transcribe on the SAME
+	// `*WhisperCpp` CAN overlap in time; see `WhisperCpp.Transcribe`'s
+	// own `w.mu`-guarded snapshot of `initialPrompt` for why that's
+	// memory-safe. What is NOT protected is `pipe.ScreenKeywords` below:
+	// it's a field on the long-lived `*pipeline.Pipeline` the engine
+	// reuses across captures, so if capture N+1's `howl_start_capture`
+	// reaches this line before capture N's goroutine has read
+	// `pipe.ScreenKeywords` for `WriteSessionManifest`, capture N's
+	// `session.json` can end up recording capture N+1's keywords
+	// instead of its own.
+	//
 	// A transcriber that doesn't implement PromptSetter keeps whatever
 	// prompt it was constructed with — and pipe.ScreenKeywords is left
 	// unset in that case, so the manifest never claims keywords were

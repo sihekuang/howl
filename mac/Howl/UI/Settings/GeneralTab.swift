@@ -78,6 +78,9 @@ struct GeneralTab: View {
                     launchAtLoginEnabled = LaunchAtLogin.isEnabled
                 }
             ))
+
+            Divider()
+
             ScreenContextSection(
                 enabled: $settings.screenContextEnabled,
                 denylist: $settings.screenContextDenylist

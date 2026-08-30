@@ -265,3 +265,87 @@ func TestWhisperCpp_SetContextPrompt_EmptyClearsPrompt(t *testing.T) {
 		t.Errorf("initialPrompt = %q, want empty after clearing", w.initialPrompt)
 	}
 }
+
+// TestWhisperCpp_SetContextPrompt_LargeDictionaryStaysOrdered is the
+// regression test for the O(n²) prompt-trim fix (review round A, item
+// 6): before SetContextPrompt byte-bounded `dict` with
+// boundTermsByBytes, the stage-2 token-count loop started from the
+// UNBOUNDED cleanTerms(dictTerms) — a few hundred custom-dictionary
+// terms made that loop re-join and re-tokenise the whole remaining
+// prompt roughly once per term to drop, synchronously on the PTT path
+// (howl_start_capture, under e.mu), for every user, regardless of
+// whether screen context is even enabled.
+//
+// This asserts the pre-filter didn't change correctness: with a
+// dictionary large enough (300 terms, same dense-identifier shape as
+// TrimsToRealTokenWindow above, ~159 tokens per 20 terms empirically)
+// to exceed MaxPromptTokens on its own even after the 896-byte
+// pre-filter, the dictionary-first eviction ordering must still hold —
+// screen keywords fully evicted before any dictionary term, and the
+// final prompt still within whisper's real token window.
+func TestWhisperCpp_SetContextPrompt_LargeDictionaryStaysOrdered(t *testing.T) {
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	defer w.Close()
+
+	dict := make([]string, 300)
+	for i := range dict {
+		dict[i] = fmt.Sprintf("QvxDictTerm%03d", i)
+	}
+	screen := make([]string, 60)
+	for i := range screen {
+		screen[i] = fmt.Sprintf("XqzGlyphWarpNode%02d", i)
+	}
+
+	got := w.SetContextPrompt(dict, screen)
+
+	if n := w.tokenCount(w.initialPrompt); n > MaxPromptTokens {
+		t.Errorf("prompt is %d tokens, want <= %d", n, MaxPromptTokens)
+	}
+
+	survivors := strings.Split(w.initialPrompt, ", ")
+	present := make(map[string]bool, len(survivors))
+	for _, term := range survivors {
+		present[term] = true
+	}
+	dictPresent, screenPresent := 0, 0
+	for _, term := range dict {
+		if present[term] {
+			dictPresent++
+		}
+	}
+	for _, term := range screen {
+		if present[term] {
+			screenPresent++
+		}
+	}
+
+	if dictPresent == 0 {
+		t.Fatalf("no dictionary terms survived at all; test fixture sizes need rebalancing")
+	}
+	if dictPresent >= len(dict) {
+		t.Fatalf("expected the 300-term dictionary to be trimmed (token budget is only %d), but all %d terms survived — test fixture sizes need rebalancing", MaxPromptTokens, len(dict))
+	}
+	// The ordering invariant this feature exists to guarantee, same as
+	// TrimsToRealTokenWindow above: any dictionary term evicted means
+	// every screen term must already be gone.
+	if screenPresent > 0 {
+		t.Errorf("ordering inversion: %d/%d dict terms survived (dropped %d) while %d/%d screen terms also survived; screen keywords must be evicted before any dictionary term is dropped", dictPresent, len(dict), len(dict)-dictPresent, screenPresent, len(screen))
+	}
+	// Survivors must be an exact prefix of dict, in order — both trim
+	// stages only ever drop from the tail.
+	for i := 0; i < dictPresent; i++ {
+		if survivors[i] != dict[i] {
+			t.Errorf("survivor[%d] = %q, want %q — trimming must drop from the tail, preserving order", i, survivors[i], dict[i])
+		}
+	}
+	if len(got) != 0 {
+		t.Errorf("SetContextPrompt returned %d surviving screen term(s), want 0 — a 300-term dictionary already exceeds the token budget on its own", len(got))
+	}
+}

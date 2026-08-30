@@ -169,6 +169,12 @@ struct ScreenContextCoordinatorTests {
     }
 
     @Test func does_nothing_when_disabled() async {
+        // Disabled must clear any previously-applied keywords, not just
+        // skip reapplying new ones — otherwise turning the feature off
+        // stops the READING but not the biasing: whatever was applied
+        // before the toggle flip keeps affecting every dictation until
+        // the app relaunches. `setCalls == [[]]` (an explicit clear),
+        // not `.isEmpty` (no call at all).
         let engine = SpyEngine()
         let (c, _) = makeCoordinator(
             engine: engine,
@@ -178,7 +184,7 @@ struct ScreenContextCoordinatorTests {
         )
         await c.refresh(now: t0)
         #expect(engine.extractCalls == 0)
-        #expect(engine.setCalls.isEmpty)
+        #expect(engine.setCalls == [[]])
     }
 
     @Test func denylisted_app_is_never_read_or_extracted() async {

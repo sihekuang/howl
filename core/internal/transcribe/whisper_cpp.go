@@ -212,8 +212,19 @@ func (w *WhisperCpp) tokenCount(text string) int {
 // that reports terms that were silently dropped for token-budget
 // reasons is worse than no diagnostic at all.
 //
-// Must not be called while Transcribe is running on this instance; the
-// engine calls it from howl_start_capture, where no capture is in flight.
+// Safe to call while a PREVIOUS Transcribe is still running on this
+// instance: both sides take `w.mu` around their access to
+// `initialPrompt` (Transcribe snapshots it at the start of a run, this
+// rewrites it under the same lock), so there's no data race. What that
+// does NOT prevent is a logical race one level up: the engine calls
+// this from howl_start_capture, whose only guarantee is "no audio is
+// currently being pushed for a new capture" — not "no capture is in
+// flight". A prior capture's pipeline goroutine (whisper drain + LLM
+// cleanup) can still be mid-flight when the next one calls this, so
+// the returned screen-keyword slice — which the caller stamps onto a
+// pipeline object shared across captures for the session manifest —
+// can end up recorded against the wrong capture. See the comment at
+// the howl_start_capture call site.
 func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string {
 	_, screen := ContextPrompt(dictTerms, screenTerms)
 	dict := cleanTerms(dictTerms)
@@ -221,6 +232,24 @@ func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string 
 	for len(screen) > 0 && w.tokenCount(strings.Join(screen, ", ")) > MaxScreenPromptTokens {
 		screen = screen[:len(screen)-1]
 	}
+
+	// Byte-bound `dict` before the token-count loop below, unlike
+	// `dict` above which is otherwise unbounded (cleanTerms alone,
+	// not DictionaryPrompt's boundInitialPrompt). Without this, a
+	// large custom dictionary (a few hundred terms) makes that loop
+	// O(n²): every iteration re-joins and re-tokenises the WHOLE
+	// remaining prompt just to drop one term — synchronously on the
+	// PTT path, holding e.mu in howl_start_capture, for every user
+	// regardless of whether screen context is even enabled.
+	// MaxInitialPromptLen (896 bytes) is a generous upper bound for
+	// MaxPromptTokens (224 tokens) at whisper's typical ~4 bytes/token
+	// — the same relationship DictionaryPrompt already relies on — so
+	// this narrows the loop below to at most a few dozen candidate
+	// terms to refine, not hundreds. It's a pre-filter, not a
+	// replacement for the token-count loop: byte length and token
+	// count aren't identical, so the loop below remains the
+	// authoritative bound.
+	dict = boundTermsByBytes(dict, MaxInitialPromptLen)
 
 	all := make([]string, 0, len(dict)+len(screen))
 	all = append(all, dict...)

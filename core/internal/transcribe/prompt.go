@@ -54,6 +54,35 @@ func cleanTerms(terms []string) []string {
 	return out
 }
 
+// boundTermsByBytes keeps terms from the front of `terms` whose
+// comma-joined byte length (including ", " separators) fits within
+// maxBytes, dropping the tail once it would not. A cheap byte-length
+// pre-filter over a term LIST — distinct from (and coarser than) a
+// token-count bound, and distinct from boundInitialPrompt (which
+// operates on an already-joined string and can truncate mid-term,
+// which is fine for free text but would corrupt a comma-separated
+// term list). Existing callers needing the authoritative token bound
+// still apply it afterward; this exists to make that check cheap by
+// bounding how many terms it ever has to consider. Mirrors the
+// accumulation loop ContextPrompt already uses for its screen-term
+// byte cap.
+func boundTermsByBytes(terms []string, maxBytes int) []string {
+	kept := make([]string, 0, len(terms))
+	used := 0
+	for _, t := range terms {
+		add := len(t)
+		if len(kept) > 0 {
+			add += 2 // ", " separator
+		}
+		if used+add > maxBytes {
+			break
+		}
+		used += add
+		kept = append(kept, t)
+	}
+	return kept
+}
+
 // DictionaryPrompt builds a whisper initial prompt from a list of custom
 // vocabulary terms (names, jargon, acronyms). The terms are joined into
 // a comma-separated glossary that biases whisper toward the spellings

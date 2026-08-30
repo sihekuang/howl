@@ -44,4 +44,15 @@ struct ScreenContextDenylistTests {
         let d = ScreenContextDenylist(userAdditions: ["", "   "])
         #expect(d.shouldSkip(bundleID: "com.microsoft.VSCode") == false)
     }
+
+    @Test func skipEverything_skips_ordinary_apps_too() {
+        // The fail-closed fallback for "settings unreadable": unlike
+        // ScreenContextDenylist(userAdditions: []), which only covers
+        // the built-in password-manager list, this must refuse every
+        // window, including ones that would otherwise be fine to read.
+        let d = ScreenContextDenylist.skipEverything
+        #expect(d.shouldSkip(bundleID: "com.microsoft.VSCode") == true)
+        #expect(d.shouldSkip(bundleID: "com.1password.1password") == true)
+        #expect(d.shouldSkip(bundleID: nil) == true)
+    }
 }

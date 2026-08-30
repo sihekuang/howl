@@ -61,7 +61,18 @@ public actor ScreenContextCoordinator {
         generation &+= 1
         let myGeneration = generation
 
-        guard isEnabled() else { return }
+        // Disabled must CLEAR any previously-applied keywords, not just
+        // skip applying new ones — mirroring the denylist path four
+        // lines below. Returning bare here would stop the reading but
+        // not the effect: whatever was applied before the user unticked
+        // the setting would keep biasing whisper on every subsequent
+        // dictation until the app relaunches, since `howl_start_capture`
+        // applies the engine's last-set `screenKeywords` unconditionally
+        // on every capture and nothing else ever clears them.
+        guard isEnabled() else {
+            await applyIfCurrent([], myGeneration: myGeneration)
+            return
+        }
 
         // Gate BEFORE any read happens. `frontmostBundleID` is queried
         // from the OS directly (no AX walk, no screenshot) so a

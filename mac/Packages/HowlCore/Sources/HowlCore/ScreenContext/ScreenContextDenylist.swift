@@ -24,6 +24,7 @@ public struct ScreenContextDenylist: Sendable {
     ]
 
     private let entries: Set<String>
+    private let skipAll: Bool
 
     public init(userAdditions: [String]) {
         var all = Set(ScreenContextDenylist.builtIn.map { $0.lowercased() })
@@ -32,11 +33,27 @@ public struct ScreenContextDenylist: Sendable {
             if !trimmed.isEmpty { all.insert(trimmed) }
         }
         self.entries = all
+        self.skipAll = false
     }
+
+    private init(skipAll: Bool) {
+        self.entries = []
+        self.skipAll = skipAll
+    }
+
+    /// A denylist that refuses every window, unconditionally. For use
+    /// when the caller cannot determine the user's actual denylist
+    /// configuration (e.g. the settings store threw on decode) — the
+    /// safe failure mode is "read nothing" rather than silently
+    /// falling back to `ScreenContextDenylist(userAdditions: [])`,
+    /// which would only cover the built-in password-manager list and
+    /// drop protection for any app the user explicitly added.
+    public static let skipEverything = ScreenContextDenylist(skipAll: true)
 
     /// Whether the focused window's owning app must not be read.
     /// A nil bundle ID (unidentifiable window) is skipped.
     public func shouldSkip(bundleID: String?) -> Bool {
+        if skipAll { return true }
         guard let id = bundleID?.lowercased(), !id.isEmpty else { return true }
         return entries.contains(id)
     }

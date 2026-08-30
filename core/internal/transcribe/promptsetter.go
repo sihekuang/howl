@@ -18,7 +18,19 @@ type PromptSetter interface {
 	// survived trimming and made it into the prompt — NOT the input
 	// screenTerms. Callers must record the returned slice (not the
 	// input) in the session manifest, so the manifest reflects what
-	// biased whisper rather than what was merely offered. Must not be
-	// called while a Transcribe is in flight on the same instance.
+	// biased whisper rather than what was merely offered.
+	//
+	// The only guarantee callers actually get is "no audio is currently
+	// being pushed for a new capture" (`howl_start_capture`'s `pushCh
+	// == nil` check) — NOT "no Transcribe is in flight" on this
+	// instance. The previous capture's pipeline goroutine (whisper
+	// drain + LLM cleanup) can still be running when this is called
+	// for the next one; implementations must guard their own mutable
+	// state accordingly (see WhisperCpp.initialPrompt's `w.mu`). Note
+	// too that the caller's own bookkeeping of this call's return value
+	// (`pipe.ScreenKeywords`, used for the session manifest) lives on
+	// an object shared across captures, so a still-running previous
+	// capture can have its manifest overwritten by this one's result —
+	// see the comment at the `howl_start_capture` call site.
 	SetContextPrompt(dictTerms, screenTerms []string) []string
 }

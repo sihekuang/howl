@@ -69,9 +69,30 @@ public final class CompositionRoot {
     // at the point of reading — a reader that refuses a denylisted app is
     // safe by construction, whereas a check only in the coordinator can be
     // outrun when the user switches apps between the gate and the read.
+    //
+    // Fail-closed on a settings read failure — deliberately NOT the same
+    // `(try? settings.get())?.… ?? default` shape `isEnabled` below uses.
+    // `UserDefaultsSettingsStore.get()` does NOT throw for "no settings
+    // file yet" (a fresh install): it returns `UserSettings()` directly,
+    // which already carries the correct spec default (`screenContextDenylist
+    // == []`, i.e. built-ins only). `get()` throwing means something more
+    // specific went wrong — the stored bytes exist but failed to decode
+    // (corrupted data, a future/incompatible format) — and at that point
+    // we genuinely don't know what the user's denylist additions were.
+    // Falling back to `ScreenContextDenylist(userAdditions: [])` in that
+    // case would silently drop protection for any app the user explicitly
+    // added, while still reading everything else. `.skipEverything` is
+    // the safe failure mode: go quiet rather than read under an unknown
+    // configuration. `isEnabled` below is intentionally left fail-open —
+    // it's a plain on/off, and failing it closed wouldn't add any privacy
+    // protection beyond what this provider's fail-closed default already
+    // gives (the denylist itself refuses every window in that state, so
+    // whether `isEnabled` says true or false, nothing gets read).
     lazy var screenContextDenylistProvider: @Sendable () -> ScreenContextDenylist = { [settings] in
-        let userAdditions = (try? settings.get())?.screenContextDenylist ?? []
-        return ScreenContextDenylist(userAdditions: userAdditions)
+        guard let stored = try? settings.get() else {
+            return .skipEverything
+        }
+        return ScreenContextDenylist(userAdditions: stored.screenContextDenylist)
     }
 
     lazy var screenContextCoordinator = ScreenContextCoordinator(
