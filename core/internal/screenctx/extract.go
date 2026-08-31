@@ -82,8 +82,17 @@ func Extract(ctx context.Context, cleaner llm.Cleaner, windowText string, dictTe
 	if err != nil {
 		return ExtractResult{}, err
 	}
+	return extractResult(raw), nil
+}
+
+// extractResult turns a provider response into an ExtractResult. It is
+// the convergence point of the text path and the image path (see
+// ExtractImage): both call it immediately after the model responds, so
+// there is exactly one implementation of "what happens to the model's
+// answer" and the two paths cannot drift.
+func extractResult(raw string) ExtractResult {
 	kept, dropped := SanitizeWithDrops(raw)
-	return ExtractResult{Raw: raw, Keywords: kept, Dropped: dropped}, nil
+	return ExtractResult{Raw: raw, Keywords: kept, Dropped: dropped}
 }
 
 // NewExtractor builds a keyword-extraction Cleaner from the configured
@@ -92,6 +101,14 @@ func Extract(ctx context.Context, cleaner llm.Cleaner, windowText string, dictTe
 // client, or key handling is needed. The LLM cleanup stage is entirely
 // unaffected — this is a separate Cleaner instance.
 func NewExtractor(cfg config.Config) (llm.Cleaner, error) {
+	return newExtractor(cfg, ExtractPrompt, ExtractTimeout)
+}
+
+// newExtractor is the shared body of NewExtractor and
+// NewImageExtractor. The two differ only in prompt template and
+// timeout; everything about how the provider is selected and
+// credentialed is identical, and stays that way by construction.
+func newExtractor(cfg config.Config, prompt string, timeout time.Duration) (llm.Cleaner, error) {
 	provider, err := llm.ProviderByName(cfg.LLMProvider)
 	if err != nil {
 		return nil, err
@@ -99,8 +116,8 @@ func NewExtractor(cfg config.Config) (llm.Cleaner, error) {
 	opts := llm.Options{
 		Model:   cfg.LLMModel,
 		BaseURL: cfg.LLMBaseURL,
-		Prompt:  ExtractPrompt,
-		Timeout: ExtractTimeout,
+		Prompt:  prompt,
+		Timeout: timeout,
 	}
 	if provider.NeedsAPIKey {
 		opts.APIKey = cfg.LLMAPIKey

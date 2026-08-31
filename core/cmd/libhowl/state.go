@@ -96,6 +96,17 @@ type engine struct {
 	extractorMu        sync.Mutex
 	screenExtractor    llm.Cleaner
 	screenExtractorKey extractorCacheKey
+
+	// screenImageExtractor / screenImageExtractorKey are the same
+	// cache for the vision path (howl_extract_keywords_image). A
+	// SECOND slot rather than a prompt-keyed shared one: the two
+	// extractors differ only in prompt template and timeout, but a
+	// single slot would rebuild — and, on Ollama/LM Studio with no
+	// model configured, re-run auto-detect — every time a session
+	// alternated between the image path and the text fallback.
+	// Guarded by extractorMu, like the pair above.
+	screenImageExtractor    llm.Cleaner
+	screenImageExtractorKey extractorCacheKey
 }
 
 // event is the JSON payload emitted via howl_poll_event. Kind values:

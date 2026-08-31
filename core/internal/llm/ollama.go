@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -170,6 +171,10 @@ const ollamaKeepAlive = "30m"
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Images carries bare base64-encoded images — no `data:` prefix,
+	// unlike OpenAI. omitempty keeps the text path's request body byte
+	// -identical to what it has always sent.
+	Images []string `json:"images,omitempty"`
 }
 
 // chatResponse is one frame of the response. For non-streaming responses
@@ -320,4 +325,91 @@ func (o *Ollama) CleanStream(
 		return "", errors.New("ollama: empty stream")
 	}
 	return final, nil
+}
+
+// CleanImage is the vision counterpart of Clean. Ollama keeps `content`
+// a plain string and carries the image in a sibling `images` array of
+// bare base64 strings on the same message — neither OpenAI's parts
+// array nor Anthropic's typed content blocks.
+//
+// Known limitation, unfixable from here: some Ollama versions silently
+// IGNORE `images` for a text-only model rather than returning an error.
+// That produces a 200 with a plausible-looking answer invented from the
+// prompt alone, which no caller can distinguish from a real reading of
+// the screenshot. Only the explicit-rejection case is detectable, and
+// that is what ErrNoVision reports.
+func (o *Ollama) CleanImage(ctx context.Context, img Image, preserveTerms []string) (string, error) {
+	if o == nil || o.client == nil {
+		return "", errors.New("ollama: not initialized")
+	}
+	if err := validateImage("ollama", img); err != nil {
+		return "", err
+	}
+	promptTpl := o.prompt
+	if promptTpl == "" {
+		promptTpl = DefaultPrompt
+	}
+	prompt := RenderImagePrompt(promptTpl, preserveTerms)
+	body, _ := json.Marshal(chatRequest{
+		Model: o.model,
+		Messages: []chatMessage{{
+			Role:    "user",
+			Content: prompt,
+			Images:  []string{base64.StdEncoding.EncodeToString(img.Data)},
+		}},
+		Stream:    false,
+		KeepAlive: ollamaKeepAlive,
+	})
+	t0 := time.Now()
+	// Same suppression rule as Clean — see its comment.
+	if !IsScreenContextSource(ctx) {
+		log.Printf("[howl] ollama.CleanImage: sending model=%s baseURL=%s imageBytes=%d termCount=%d", o.model, o.baseURL, len(img.Data), len(preserveTerms))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("ollama: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.client.Do(req)
+	if err != nil {
+		// No status code on a transport error, so this can never be
+		// classified as a no-vision verdict.
+		log.Printf("[howl] ollama.CleanImage: FAILED after %v: %v", time.Since(t0), err)
+		return "", fmt.Errorf("ollama: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		msg := ollamaErrorMessage(snippet)
+		if isNoVisionRejection(resp.StatusCode, msg) {
+			return "", fmt.Errorf("ollama: HTTP %d: %w: %s", resp.StatusCode, ErrNoVision, msg)
+		}
+		return "", fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	var cr chatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+		return "", fmt.Errorf("ollama: decode response: %w", err)
+	}
+	log.Printf("[howl] ollama.CleanImage: response in %v done=%v", time.Since(t0), cr.Done)
+	result := strings.TrimSpace(cr.Message.Content)
+	if result == "" {
+		return "", errors.New("ollama: empty response")
+	}
+	return result, nil
+}
+
+// ollamaErrorMessage lifts the message out of Ollama's {"error":"..."}
+// envelope, falling back to the trimmed body when it isn't one.
+func ollamaErrorMessage(body []byte) string {
+	var env struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &env); err == nil && env.Error != "" {
+		return env.Error
+	}
+	return strings.TrimSpace(string(body))
 }

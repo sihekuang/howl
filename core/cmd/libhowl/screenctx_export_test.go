@@ -151,6 +151,8 @@ func resetEngineForTest(t *testing.T) {
 	e.extractorMu.Lock()
 	e.screenExtractor = nil
 	e.screenExtractorKey = extractorCacheKey{}
+	e.screenImageExtractor = nil
+	e.screenImageExtractorKey = extractorCacheKey{}
 	e.extractorMu.Unlock()
 }
 

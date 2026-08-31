@@ -129,24 +129,42 @@ func extractorCacheKeyFor(cfg config.Config) extractorCacheKey {
 // on a cold cache can each build once and the second write wins — a
 // harmless, rare, self-correcting duplication, not a correctness issue.
 func (e *engine) screenExtractorFor(cfg config.Config) (llm.Cleaner, error) {
+	return e.extractorFor(cfg, &e.screenExtractor, &e.screenExtractorKey, screenctx.NewExtractor)
+}
+
+// screenImageExtractorFor is screenExtractorFor for the vision path.
+// Same cache discipline, its own slot — see the engine field comment.
+func (e *engine) screenImageExtractorFor(cfg config.Config) (llm.Cleaner, error) {
+	return e.extractorFor(cfg, &e.screenImageExtractor, &e.screenImageExtractorKey, screenctx.NewImageExtractor)
+}
+
+// extractorFor is the shared cache body. cached and cachedKey address
+// one slot on the engine; both are read and written only under
+// extractorMu, which build is deliberately NOT called under.
+func (e *engine) extractorFor(
+	cfg config.Config,
+	cached *llm.Cleaner,
+	cachedKey *extractorCacheKey,
+	build func(config.Config) (llm.Cleaner, error),
+) (llm.Cleaner, error) {
 	key := extractorCacheKeyFor(cfg)
 
 	e.extractorMu.Lock()
-	if e.screenExtractor != nil && e.screenExtractorKey == key {
-		cleaner := e.screenExtractor
+	if *cached != nil && *cachedKey == key {
+		cleaner := *cached
 		e.extractorMu.Unlock()
 		return cleaner, nil
 	}
 	e.extractorMu.Unlock()
 
-	cleaner, err := screenctx.NewExtractor(cfg)
+	cleaner, err := build(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	e.extractorMu.Lock()
-	e.screenExtractor = cleaner
-	e.screenExtractorKey = key
+	*cached = cleaner
+	*cachedKey = key
 	e.extractorMu.Unlock()
 	return cleaner, nil
 }

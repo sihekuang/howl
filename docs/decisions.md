@@ -152,3 +152,25 @@ the JSON payload, not on the C surface. Still no Swift consumer reads
 **Sources:**
 - `core/cmd/libhowl/exports.go` — the bump policy and the constant
 - `core/cmd/libhowl/screenctx_export.go` — the new export
+
+## 2026-08-30 — libhowl ABI version: bump to 1.3.0 for `howl_extract_keywords_image`
+
+**Decision:** Bump `abiVersion` in `core/cmd/libhowl/exports.go` from `1.2.0` to
+`1.3.0` as part of adding `howl_extract_keywords_image`.
+
+**Trigger:** The vision screen-context work adds one new C-ABI export so the Mac
+app can hand Go a screenshot and let a vision model read it, replacing the
+host-side OCR step.
+
+**Basis:** Same convention as the two entries above, applied unchanged: "minor: a
+new function is added (additive, back-compat)". No existing signature changed —
+`howl_extract_keywords` keeps its text-in/JSON-out shape as the fallback path for
+models that cannot accept images. The new export is the first to take a raw
+pointer + length rather than a JSON string, but that is a new signature, not a
+changed one. Still no Swift consumer reads `howl_abi_version`.
+
+**Sources:**
+- `core/cmd/libhowl/exports.go` — the bump policy and the constant
+- `core/cmd/libhowl/screenctx_image_export.go` — the new export
+- `docs/superpowers/specs/2026-08-30-vision-screen-context-design.md` — decision 2,
+  why the image crosses the ABI as bytes rather than base64 JSON

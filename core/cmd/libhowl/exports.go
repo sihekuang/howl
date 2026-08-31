@@ -773,7 +773,9 @@ func howl_clear_sessions() C.int {
 //
 // 1.1.0 -> 1.2.0: added howl_screen_context_preview. See
 // docs/decisions.md, 2026-08-30.
-const abiVersion = "1.2.0"
+// 1.2.0 -> 1.3.0: added howl_extract_keywords_image. Additive, like
+// every bump before it — no existing signature changed.
+const abiVersion = "1.3.0"
 
 // howl_abi_version returns the libhowl ABI semver. Caller frees via
 // howl_free_string. Never returns NULL.
