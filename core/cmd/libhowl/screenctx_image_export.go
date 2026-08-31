@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"unsafe"
 
 	"github.com/voice-keyboard/core/internal/llm"
@@ -23,21 +24,23 @@ import (
 // OCR step: the model does the reading.
 //
 // Input:  a pointer to the encoded image and its length in bytes. PNG,
-//         JPEG, GIF and WebP are accepted; the media type is sniffed
-//         from the bytes, so the host never has to declare it and can
-//         never mislabel it.
 //
-//         Raw bytes rather than base64-in-JSON deliberately: base64
-//         inflates the payload ~33% on something sent once per
-//         debounced focus change. The string-in/string-out shape of
-//         howl_extract_keywords is right for text and wrong for this.
+//	JPEG, GIF and WebP are accepted; the media type is sniffed
+//	from the bytes, so the host never has to declare it and can
+//	never mislabel it.
+//
+//	Raw bytes rather than base64-in-JSON deliberately: base64
+//	inflates the payload ~33% on something sent once per
+//	debounced focus change. The string-in/string-out shape of
+//	howl_extract_keywords is right for text and wrong for this.
 //
 // Output: the same envelope howl_extract_keywords returns, plus one
-//         additive key:
 //
-//	{"raw": "...", "keywords": [...],
-//	 "dropped": [{"term": "...", "reason": "..."}, ...],
-//	 "no_vision": false}
+//	        additive key:
+//
+//		{"raw": "...", "keywords": [...],
+//		 "dropped": [{"term": "...", "reason": "..."}, ...],
+//		 "no_vision": false}
 //
 // or, on failure:
 //
@@ -140,6 +143,19 @@ func extractKeywordsImageJSON(data []byte) string {
 	if err != nil {
 		if errors.Is(err, llm.ErrNoVision) {
 			screenctx.MarkTextOnly(key)
+			// Worth one line: this silently changes which path the
+			// host uses for the rest of the session, and the cache
+			// means it fires once per (provider, model), not once per
+			// focus change.
+			//
+			// Deliberately does NOT log err. On the provider-rejection
+			// branch err embeds the provider's HTTP response body,
+			// which can quote back the request — and therefore the
+			// user's screen. The provider and model are the whole
+			// diagnostic; the detail goes to the caller over the ABI,
+			// which is not the log.
+			log.Printf("[howl] screenctx: vision disabled for provider=%s model=%s; host should fall back to the text path",
+				key.Provider, key.Model)
 			return imageErrorJSON(err.Error(), true)
 		}
 		return imageErrorJSON(err.Error(), false)

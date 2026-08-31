@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/voice-keyboard/core/internal/config"
@@ -153,7 +154,10 @@ func mustJSON(t *testing.T, v any) []byte {
 // additive no_vision flag.
 func TestExtractKeywordsImage_SuccessEnvelopeMatchesTextExport(t *testing.T) {
 	resetEngineForTest(t)
-	srv := fakeVisionOllama(t, "SpeakerGate, DeepFilterNet, speakergate, 1234")
+	// The marker proves the model saw the image; it is stripped before
+	// anything downstream, so the assertions below — Raw included —
+	// are written as if it were never there.
+	srv := fakeVisionOllama(t, screenctx.VisionCanary+", SpeakerGate, DeepFilterNet, speakergate, 1234")
 	defer srv.Close()
 
 	e := getEngine()
@@ -286,5 +290,72 @@ func TestExtractKeywordsImage_TransientFailureIsNotCached(t *testing.T) {
 	}
 	if hits != 2 {
 		t.Errorf("provider was hit %d times, want 2 — a transient failure was cached", hits)
+	}
+}
+
+// A backend that accepts `images` and silently ignores them answers
+// from the prompt alone — plausible, term-shaped, and completely wrong.
+// That must reach the host as a no-vision verdict (so it falls back to
+// the AX text path) and must be cached like any other rejection, not
+// re-probed on every focus change.
+func TestExtractKeywordsImage_SilentImageDropIsReportedAndCached(t *testing.T) {
+	resetEngineForTest(t)
+	var hits int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		// No vision marker: the model never saw the screenshot, so it
+		// invented something from the instructions.
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"screenshot, window, dictation, recogniser"},"done":true}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	e := getEngine()
+	e.mu.Lock()
+	e.cfg = config.Config{LLMProvider: "ollama", LLMModel: "llava-silent-drop-fixture", LLMBaseURL: srv.URL}
+	e.mu.Unlock()
+
+	first := decodeImageResponse(t, extractKeywordsImageJSON(tinyPNG(t)))
+	if !first.NoVision {
+		t.Fatalf("a silently-dropped image was reported as success: %+v", first)
+	}
+	if len(first.Keywords) != 0 {
+		t.Errorf("invented keywords escaped to the host: %v", first.Keywords)
+	}
+	_ = decodeImageResponse(t, extractKeywordsImageJSON(tinyPNG(t)))
+	if hits != 1 {
+		t.Errorf("provider was hit %d times, want 1 — the verdict was not cached", hits)
+	}
+}
+
+// ...and the marker never reaches the keyword list that biases whisper.
+func TestExtractKeywordsImage_MarkerNeverReachesKeywords(t *testing.T) {
+	resetEngineForTest(t)
+	srv := fakeVisionOllama(t, screenctx.VisionCanary+", SpeakerGate, DeepFilterNet")
+	defer srv.Close()
+
+	e := getEngine()
+	e.mu.Lock()
+	e.cfg = config.Config{LLMProvider: "ollama", LLMModel: "llava-marker-fixture", LLMBaseURL: srv.URL}
+	e.mu.Unlock()
+
+	resp := decodeImageResponse(t, extractKeywordsImageJSON(tinyPNG(t)))
+	if resp.Error != "" {
+		t.Fatalf("unexpected error: %s", resp.Error)
+	}
+	if resp.NoVision {
+		t.Errorf("no_vision must be false when the marker is present")
+	}
+	for _, k := range resp.Keywords {
+		if strings.Contains(strings.ToLower(k), strings.ToLower(screenctx.VisionCanary)) {
+			t.Errorf("marker leaked into keywords: %q", k)
+		}
+	}
+	if strings.Contains(strings.ToLower(resp.Raw), strings.ToLower(screenctx.VisionCanary)) {
+		t.Errorf("marker leaked into raw: %q", resp.Raw)
+	}
+	if len(resp.Keywords) != 2 || resp.Keywords[0] != "SpeakerGate" {
+		t.Errorf("keywords = %v, want [SpeakerGate DeepFilterNet]", resp.Keywords)
 	}
 }

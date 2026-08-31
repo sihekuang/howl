@@ -3,6 +3,8 @@ package screenctx
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,18 +45,83 @@ const (
 // Unlike ExtractPrompt it must NOT contain {{transcription}}: there is
 // no transcription, and llm.RenderImagePrompt deliberately never
 // appends one. It must still contain {{dictionary}}.
+//
+// The marker instruction is concatenated from VisionCanary rather than
+// spelled out, so the prompt and the stripper can never disagree about
+// what the marker is. It is called a "marker" and never a "token" —
+// the skip-secrets rule below already uses "token", and a model told to
+// skip tokens may well skip the marker too.
 const ExtractImagePrompt = `You extract vocabulary hints for a speech-recognition system. The attached image is a screenshot of the user's focused window. The user is about to dictate while looking at it.
 
 Read the screenshot and list the words and phrases a speech recogniser is most likely to get wrong: proper nouns, people's names, product and project names, code identifiers, acronyms, filenames, and domain jargon. Use the layout to judge what matters — a filename in a tab bar, a symbol in code, a heading — not just any text that happens to be visible.
 
 Hard rules:
-- Return ONLY a comma-separated list. No preamble, no numbering, no explanation.
+- Begin your reply with the exact marker ` + VisionCanary + ` followed by a comma — but ONLY if an image is actually attached and you can see it. If no image is visible to you, omit the marker and say so instead.
+- After the marker, return ONLY a comma-separated list. No preamble, no numbering, no explanation.
 - At most 20 items, most useful first.
 - Every item must appear verbatim on the screen. Do not invent, translate, correct, or describe the image.
 - Skip ordinary English words a recogniser already handles.
 - Skip anything resembling a secret, password, API key, or token.
 - These terms are already covered — do NOT repeat them: {{dictionary}}
-- If nothing qualifies, return an empty string.`
+- If nothing qualifies, the list is an empty string: return the marker and nothing else.`
+
+// VisionCanary is a sentinel the model is instructed to emit first, and
+// ONLY if it can actually see the attached image.
+//
+// It exists because "the provider accepted the request" does not mean
+// "the model looked at the image". Some Ollama versions accept an
+// `images` array on a text-only model and silently DISCARD it, and any
+// OpenAI-compatible server is free to do the same. The model then sees
+// only a prompt asking it to read a screenshot, with no screenshot, and
+// answers from the instructions alone — a refusal, a hallucination, or
+// generic filler like "screenshot, window, dictation". Sanitize keeps
+// whatever of that is term-shaped, and those invented terms go on to
+// bias whisper's initial_prompt. The user gets silently worse dictation,
+// no_vision stays false so we never fall back, and the AX text path that
+// would have worked is never tried. That is strictly worse than a clean
+// failure, and it persists until they change models.
+//
+// The marker turns that silent corruption into a detectable one. It
+// catches ANY backend that drops the image, not just the Ollama
+// versions that prompted it, and costs one token per call.
+//
+// THE FAILURE DIRECTION IS DELIBERATE. A vision-capable model that
+// simply ignores the instruction and omits the marker is falsely marked
+// text-only, and we fall back to AX text: degraded but correct. The
+// opposite default — assume vision worked unless proven otherwise —
+// silently feeds whisper terms the model invented. Do not "fix" this by
+// defaulting the other way; being wrong towards the text path is the
+// point.
+//
+// The hex suffix is not decoration: it makes accidental occurrence in
+// real screen text or in a model's spontaneous output effectively
+// impossible. Do not tidy it away.
+const VisionCanary = "HOWL-VISION-OK-7F3A"
+
+// canaryPattern matches the marker case-insensitively along with the
+// separator debris models wrap it in — a leading newline or bullet, a
+// trailing comma, period, or colon. Models are sloppy about exact
+// formatting, so detection is deliberately tolerant; what must be exact
+// is that nothing resembling the marker survives into the keyword list.
+var canaryPattern = regexp.MustCompile(
+	`(?i)[\s,;]*(?:[-*\x{2022}]\s*)?` + regexp.QuoteMeta(VisionCanary) + `[\s.,;:!]*`,
+)
+
+// stripVisionCanary removes every occurrence of the marker and reports
+// whether there was at least one.
+//
+// Occurrences are replaced with a comma rather than deleted so a marker
+// a model puts mid-list cannot fuse its neighbours into one bogus term.
+// Every occurrence is stripped, not just the first: the instruction says
+// to emit it once, and a model that repeats it must not have the repeat
+// treated as a keyword.
+func stripVisionCanary(raw string) (string, bool) {
+	if !canaryPattern.MatchString(raw) {
+		return raw, false
+	}
+	out := canaryPattern.ReplaceAllString(raw, ", ")
+	return strings.Trim(out, " \t\r\n,;.:"), true
+}
 
 // VisionKey identifies a (provider, model) pair for the text-only
 // cache. It is deliberately the CONFIGURED pair, not a resolved one:
@@ -125,9 +192,13 @@ func MarkTextOnly(k VisionKey) {
 //
 // Returns a zero ExtractResult for an empty image without calling the
 // provider. Returns an error wrapping llm.ErrNoVision when the model
-// cannot accept images at all — either because the provider does not
-// implement llm.VisionCleaner, or because it rejected the request as
-// such.
+// did not read the image — because the provider does not implement
+// llm.VisionCleaner, because it rejected the request as such, or
+// because the response carried no VisionCanary and so cannot be trusted
+// to describe anything that was on screen.
+//
+// Raw on the returned result is the response with the marker removed;
+// see VisionCanary.
 func ExtractImage(ctx context.Context, cleaner llm.Cleaner, img llm.Image, dictTerms []string) (ExtractResult, error) {
 	if len(img.Data) == 0 {
 		return ExtractResult{}, nil
@@ -151,7 +222,24 @@ func ExtractImage(ctx context.Context, cleaner llm.Cleaner, img llm.Image, dictT
 	if err != nil {
 		return ExtractResult{}, err
 	}
-	return extractResult(raw), nil
+	// The marker is the proof the model actually saw the image. Absent
+	// it, the response is invented from the prompt alone and must never
+	// reach whisper — see VisionCanary for why this is reported as a
+	// capability verdict and why erring towards the text path is
+	// deliberate.
+	stripped, sawImage := stripVisionCanary(raw)
+	if !sawImage {
+		return ExtractResult{}, fmt.Errorf(
+			"screenctx: %w: response carried no vision marker, so the image was not read",
+			llm.ErrNoVision)
+	}
+	// Strip before extractResult, so the marker is a candidate for
+	// neither Keywords nor Dropped, and out of Raw too: Raw is the
+	// diagnostic "what did the model actually say", and the marker is
+	// protocol, not something the model saw on screen. That also keeps
+	// the image path byte-identical to the text path for the same
+	// content — see TestExtractImage_ConvergesWithTextPath.
+	return extractResult(stripped), nil
 }
 
 // NewImageExtractor is NewExtractor's counterpart for the image path:

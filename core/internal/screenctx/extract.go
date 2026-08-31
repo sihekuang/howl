@@ -52,7 +52,10 @@ Window text:
 // across the ABI for live display only; nothing writes it to disk or
 // to the log.
 type ExtractResult struct {
-	// Raw is the provider's response exactly as received.
+	// Raw is the provider's response exactly as received. The one
+	// exception is the image path, which removes the VisionCanary
+	// marker first — that marker is protocol between us and the model,
+	// not something the model read on screen.
 	Raw string `json:"raw"`
 	// Keywords are the sanitized terms, in order. nil when none
 	// survived — same contract as Sanitize.

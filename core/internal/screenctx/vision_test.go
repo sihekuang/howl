@@ -45,8 +45,12 @@ func TestExtractImage_ConvergesWithTextPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
+	// The vision marker is protocol, not content: it proves the model
+	// actually saw an image and is removed before anything downstream
+	// — including Raw — sees the response. So the same CONTENT must
+	// still produce a byte-identical result on both paths.
 	imgRes, err := ExtractImage(context.Background(),
-		&fakeVisionCleaner{fakeCleaner: fakeCleaner{out: modelOutput}},
+		&fakeVisionCleaner{fakeCleaner: fakeCleaner{out: VisionCanary + ", " + modelOutput}},
 		llm.Image{Data: []byte("\x89PNG\r\n\x1a\nfake"), MediaType: "image/png"}, []string{"MCP"})
 	if err != nil {
 		t.Fatalf("ExtractImage: %v", err)
@@ -60,7 +64,7 @@ func TestExtractImage_ConvergesWithTextPath(t *testing.T) {
 }
 
 func TestExtractImage_PassesImageAndDictionaryThrough(t *testing.T) {
-	f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{out: "MCP"}}
+	f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{out: VisionCanary + ", MCP"}}
 	data := []byte("\x89PNG\r\n\x1a\npayload")
 	if _, err := ExtractImage(context.Background(), f, llm.Image{Data: data, MediaType: "image/png"}, []string{"WebRTC", "DeepFilterNet"}); err != nil {
 		t.Fatalf("ExtractImage: %v", err)
@@ -196,5 +200,129 @@ func TestNewImageExtractor_BuildsAVisionCleanerWithTheImagePrompt(t *testing.T) 
 	}
 	if _, ok := c.(llm.VisionCleaner); !ok {
 		t.Fatalf("extractor (%T) does not implement llm.VisionCleaner", c)
+	}
+}
+
+// --- canary: catching a backend that silently drops the image ---
+
+// A provider that accepts `images` and ignores them returns a plausible
+// answer invented from the prompt alone. With the marker present we
+// know the model really saw the screenshot, and the marker itself must
+// never leak into the keyword list that biases whisper.
+func TestExtractImage_CanaryIsStrippedAndNeverReachesKeywords(t *testing.T) {
+	f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{
+		out: VisionCanary + ", SpeakerGate, DeepFilterNet",
+	}}
+	res, err := ExtractImage(context.Background(), f,
+		llm.Image{Data: []byte("\x89PNG"), MediaType: "image/png"}, nil)
+	if err != nil {
+		t.Fatalf("ExtractImage: %v", err)
+	}
+	want := []string{"SpeakerGate", "DeepFilterNet"}
+	if !reflect.DeepEqual(res.Keywords, want) {
+		t.Errorf("keywords = %v, want %v", res.Keywords, want)
+	}
+	assertNoCanary(t, res)
+}
+
+// The whole point: no marker means we cannot prove the model saw
+// anything, so it is reported as no-vision and the caller falls back to
+// the AX text path.
+func TestExtractImage_MissingCanaryReportsNoVision(t *testing.T) {
+	f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{
+		out: "I don't see any image attached. Please upload a screenshot.",
+	}}
+	_, err := ExtractImage(context.Background(), f,
+		llm.Image{Data: []byte("\x89PNG"), MediaType: "image/png"}, nil)
+	if !errors.Is(err, llm.ErrNoVision) {
+		t.Fatalf("err = %v, want ErrNoVision", err)
+	}
+}
+
+// A model that IS looking at the image but finds nothing worth
+// extracting emits the marker and nothing else. That is a successful
+// empty extraction, not a capability verdict.
+func TestExtractImage_CanaryAloneIsAnEmptyExtractionNotNoVision(t *testing.T) {
+	f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{out: VisionCanary}}
+	res, err := ExtractImage(context.Background(), f,
+		llm.Image{Data: []byte("\x89PNG"), MediaType: "image/png"}, nil)
+	if err != nil {
+		t.Fatalf("ExtractImage: %v", err)
+	}
+	if len(res.Keywords) != 0 {
+		t.Errorf("keywords = %v, want none", res.Keywords)
+	}
+	assertNoCanary(t, res)
+}
+
+// Models are sloppy about exact formatting. Whatever shape the marker
+// arrives in, it must be recognised AND must not survive into the
+// keyword list, and the real terms around it must be unharmed.
+func TestExtractImage_CanaryVariantsNeverSurviveIntoKeywords(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+	}{
+		{"comma separated", VisionCanary + ", SpeakerGate, DeepFilterNet"},
+		{"lowercase", strings.ToLower(VisionCanary) + ", SpeakerGate, DeepFilterNet"},
+		{"mixed case", strings.ToLower(VisionCanary[:6]) + VisionCanary[6:] + ", SpeakerGate, DeepFilterNet"},
+		{"trailing period", VisionCanary + ". SpeakerGate, DeepFilterNet"},
+		{"trailing colon", VisionCanary + ": SpeakerGate, DeepFilterNet"},
+		{"own line", VisionCanary + "\nSpeakerGate, DeepFilterNet"},
+		{"own line with blank", VisionCanary + "\n\nSpeakerGate, DeepFilterNet"},
+		{"bulleted", "- " + VisionCanary + "\n- SpeakerGate\n- DeepFilterNet"},
+		{"repeated mid list", "SpeakerGate, " + VisionCanary + ", DeepFilterNet"},
+		{"repeated twice", VisionCanary + ", SpeakerGate, " + VisionCanary + ", DeepFilterNet"},
+		{"trailing", "SpeakerGate, DeepFilterNet, " + VisionCanary},
+		{"leading whitespace", "  \n " + VisionCanary + " , SpeakerGate, DeepFilterNet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeVisionCleaner{fakeCleaner: fakeCleaner{out: tc.out}}
+			res, err := ExtractImage(context.Background(), f,
+				llm.Image{Data: []byte("\x89PNG"), MediaType: "image/png"}, nil)
+			if err != nil {
+				t.Fatalf("ExtractImage: %v", err)
+			}
+			assertNoCanary(t, res)
+			// The marker must not have eaten its neighbours either.
+			want := []string{"SpeakerGate", "DeepFilterNet"}
+			if !reflect.DeepEqual(res.Keywords, want) {
+				t.Errorf("keywords = %v, want %v", res.Keywords, want)
+			}
+		})
+	}
+}
+
+// assertNoCanary fails if the marker survived anywhere a human or
+// whisper would see it: the keyword list, the drop report, or Raw.
+func assertNoCanary(t *testing.T, res ExtractResult) {
+	t.Helper()
+	needle := strings.ToLower(VisionCanary)
+	for _, k := range res.Keywords {
+		if strings.Contains(strings.ToLower(k), needle) {
+			t.Errorf("marker leaked into keywords: %q", k)
+		}
+	}
+	for _, d := range res.Dropped {
+		if strings.Contains(strings.ToLower(d.Term), needle) {
+			t.Errorf("marker leaked into dropped: %q", d.Term)
+		}
+	}
+	if strings.Contains(strings.ToLower(res.Raw), needle) {
+		t.Errorf("marker leaked into raw: %q", res.Raw)
+	}
+}
+
+func TestExtractImagePrompt_InstructsTheCanary(t *testing.T) {
+	if !strings.Contains(ExtractImagePrompt, VisionCanary) {
+		t.Errorf("image prompt never tells the model to emit %q", VisionCanary)
+	}
+	// "token" is already used in the prompt's skip-secrets rule; the
+	// marker must not be described with that word or a model may skip
+	// it as a secret.
+	if strings.Contains(ExtractImagePrompt, "token "+VisionCanary) ||
+		strings.Contains(ExtractImagePrompt, "the exact token") {
+		t.Errorf("the marker must not be called a 'token' — it collides with the skip-secrets rule")
 	}
 }
