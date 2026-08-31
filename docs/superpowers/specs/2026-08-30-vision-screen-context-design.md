@@ -29,7 +29,7 @@ The reasons are architectural:
 |---|---|
 | `OCRWindowTextReader` | **deleted** — its job is now the model's |
 | `FallbackWindowTextReader`, `WindowTextReading.minimumUsefulChars` | **deleted** — no AX→OCR ladder |
-| `AXWindowTextReader` | **kept, demoted** — reachable only as the no-vision fallback |
+| `AXWindowTextReader` | **kept, demoted** — reachable whenever pixels are unavailable: no vision model, or no screenshot |
 | `resolveReadableFrontmostApp` | **kept and reused by the capturer** — see Privacy |
 | Screenshot capture | **new**, primary path |
 | Go `screenctx` | gains an image path beside the text path |

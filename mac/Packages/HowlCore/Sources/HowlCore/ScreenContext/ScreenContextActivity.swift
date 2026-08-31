@@ -19,10 +19,59 @@ public enum ScreenContextSource: String, Equatable, Sendable {
     /// The primary path: a PNG screenshot of the focused window went
     /// straight to the provider's vision model.
     case screenshot
-    /// The fallback path: the Accessibility API's text, used only
-    /// after the provider reported that this model cannot accept
-    /// images (`no_vision`). See `AXWindowTextReader`.
+    /// The fallback path: the Accessibility API's text, used whenever
+    /// pixels are unavailable — either the provider reported that this
+    /// model cannot accept images (`no_vision`), or no screenshot could
+    /// be taken at all. `ScreenContextFallbackReason` says which. See
+    /// `AXWindowTextReader`.
     case accessibility
+}
+
+/// Why a refresh took the Accessibility text path instead of the
+/// primary screenshot path.
+///
+/// Recorded ALONGSIDE the outcome, never instead of it: the outcome
+/// describes what the AX read then produced, and this describes why
+/// the image path was skipped before it. Both facts are needed and
+/// neither substitutes for the other — a record reading
+/// "no readable text" is a different diagnosis depending on whether
+/// the screenshot failed or the model simply cannot see, and the two
+/// call for opposite fixes (grant Screen Recording vs change model).
+///
+/// nil on the primary path: no fallback happened.
+public enum ScreenContextFallbackReason: String, Equatable, Sendable {
+    /// The configured provider+model rejected the image, or silently
+    /// dropped it (Go's canary catches that). Go caches the verdict
+    /// for the session, keyed on provider+model.
+    case noVision
+    /// No screenshot existed to send: Screen Recording denied, no
+    /// on-screen window, or the window vanished mid-capture.
+    ///
+    /// Falling through to AX here is deliberate. Screen Recording
+    /// denial is a statement about screenshots, not about the feature
+    /// — the feature's own toggle is what turns it off, and the user
+    /// left that on. Accessibility is a separate permission Howl
+    /// already holds for paste injection, and the image → text
+    /// direction is cheaper, not pricier. The alternative (clear and
+    /// return) silently and permanently kills screen context for
+    /// everyone who declines "a dictation app wants to record your
+    /// screen", which is a very likely path.
+    case screenshotUnavailable
+}
+
+/// Pixel dimensions of a captured screenshot.
+///
+/// Two integers, never the pixels themselves — see
+/// `ScreenContextActivity.capturedImageBytes` for why the image never
+/// travels into the record.
+public struct ScreenContextPixelSize: Equatable, Sendable {
+    public let width: Int
+    public let height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
 }
 
 /// One outcome of `ScreenContextCoordinator.refresh()`, captured for
@@ -75,6 +124,20 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// anywhere.
     public let capturedImageBytes: Int?
 
+    /// Dimensions of that same PNG, in pixels, after the long-edge
+    /// downscale — so the inspector can say whether the model was
+    /// shown something legible. Carried as two integers the capturer
+    /// already had; no pixel data moves to produce it. Populated
+    /// wherever `capturedImageBytes` is.
+    public let capturedImagePixelSize: ScreenContextPixelSize?
+
+    /// Why this refresh fell back to the Accessibility text path, when
+    /// it did. nil whenever the screenshot path ran to completion.
+    ///
+    /// Orthogonal to `outcome`, which reports what the fallback then
+    /// produced. See `ScreenContextFallbackReason`.
+    public let fallbackReason: ScreenContextFallbackReason?
+
     /// The LLM's raw response, verbatim. Populated only for
     /// `.extractionSucceeded` — the whole reason this field exists is
     /// telling "the model found nothing" apart from "the model found
@@ -104,10 +167,14 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         /// denylisted. Defense in depth, not redundant with the
         /// pre-read gate.
         case skippedPostReadDenylist
-        /// Nothing usable to send: the screenshot could not be taken
-        /// (no Screen Recording permission, no on-screen window, the
-        /// window vanished mid-capture), or — on the no-vision
-        /// fallback — the AX read came up empty.
+        /// The Accessibility read ran and came up empty — no AX text
+        /// at all, or nothing but whitespace.
+        ///
+        /// This means exactly that one fact. A failed screenshot is no
+        /// longer recorded here: it falls through to the AX path and
+        /// is reported by `fallbackReason` instead, so a record
+        /// carrying both says "the screenshot failed AND there was no
+        /// text either" rather than blurring the two into one case.
         case noReadableWindowText
         /// This window's content was already in cache; no LLM call.
         case cacheHit
@@ -133,6 +200,8 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         capturedText: String? = nil,
         capturedTextLength: Int? = nil,
         capturedImageBytes: Int? = nil,
+        capturedImagePixelSize: ScreenContextPixelSize? = nil,
+        fallbackReason: ScreenContextFallbackReason? = nil,
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = [],
         appliedKeywords: [String] = []
@@ -145,6 +214,8 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         self.capturedText = capturedText
         self.capturedTextLength = capturedTextLength
         self.capturedImageBytes = capturedImageBytes
+        self.capturedImagePixelSize = capturedImagePixelSize
+        self.fallbackReason = fallbackReason
         self.rawResponse = rawResponse
         self.dropped = dropped
         self.appliedKeywords = appliedKeywords

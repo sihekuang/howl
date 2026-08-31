@@ -176,8 +176,11 @@ private final class SlowExtractEngine: @unchecked Sendable {
 
 private func png(_ marker: String) -> Data { Data(marker.utf8) }
 
-private func shot(_ bundleID: String, _ title: String, _ marker: String) -> WindowImageCapture {
-    WindowImageCapture(bundleID: bundleID, windowTitle: title, pngData: png(marker))
+private func shot(
+    _ bundleID: String, _ title: String, _ marker: String,
+    pixels: ScreenContextPixelSize = ScreenContextPixelSize(width: 1568, height: 980)
+) -> WindowImageCapture {
+    WindowImageCapture(bundleID: bundleID, windowTitle: title, pngData: png(marker), pixelSize: pixels)
 }
 
 /// - Parameter frontmostBundleID: what the (fake) frontmost-app lookup
@@ -362,26 +365,69 @@ struct ScreenContextCoordinatorTests {
         #expect(engine.imageExtractCalls == 2)
     }
 
-    @Test func nil_capture_clears_keywords_without_extracting_or_falling_back_to_ax() async {
+    @Test func nil_capture_falls_back_to_the_accessibility_text_path() async {
         // frontmostBundleID reports a benign app so the pre-capture
         // gate passes and the capture genuinely happens (and genuinely
-        // returns nil) — no permission, no on-screen window, or the
-        // window vanished mid-capture.
+        // returns nil) — Screen Recording denied, no on-screen window,
+        // or the window vanished mid-capture.
         //
-        // Crucially this must NOT reach the AX text path: that path is
-        // for models that cannot see, not a second chance at capturing.
+        // No pixels means the AX path, not a dead end. An earlier rule
+        // cleared and returned here; that silently and permanently
+        // killed screen context for everyone who declines the Screen
+        // Recording prompt, while the feature's own toggle — the thing
+        // that actually says "off" — was still on.
         let engine = SpyEngine()
         let (c, capturer, reader) = makeCoordinator(
             engine: engine,
             capture: nil,
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX would have worked"),
+            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX text instead"),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
         #expect(capturer.captureCount == 1)
-        #expect(reader.readCount == 0)
+        #expect(reader.readCount == 1)
+        // No screenshot exists, so the image extractor is never called;
+        // the text one is, with the AX text verbatim.
         #expect(engine.imageExtractCalls == 0)
+        #expect(engine.textExtractCalls == 1)
+        #expect(engine.lastExtractText == "AX text instead")
+        #expect(engine.setCalls == [["AXKeyword"]])
+    }
+
+    @Test func nil_capture_fallback_still_clears_when_ax_has_nothing_either() async {
+        // Both paths dry: keywords are cleared rather than left armed
+        // from the previous window.
+        let engine = SpyEngine()
+        let (c, capturer, reader) = makeCoordinator(
+            engine: engine, capture: nil, snapshot: nil, frontmostBundleID: "com.a"
+        )
+        await c.refresh(now: t0)
+        #expect(capturer.captureCount == 1)
+        #expect(reader.readCount == 1)
         #expect(engine.textExtractCalls == 0)
+        #expect(engine.setCalls == [[]])
+    }
+
+    @Test func nil_capture_fallback_never_extracts_from_a_denylisted_app() async {
+        // The screenshot-unavailable route must be no weaker a
+        // guarantee than the no-vision one. `AXWindowTextReader.read()`
+        // enforces the denylist internally (via
+        // `resolveReadableFrontmostApp`, so identity and judgement are
+        // one main-actor hop); this covers the coordinator's own
+        // post-read gate, the second of the two, using a stub reader
+        // that deliberately hands back a denylisted snapshot the way a
+        // mid-flight app switch would.
+        let engine = SpyEngine()
+        let (c, _, reader) = makeCoordinator(
+            engine: engine,
+            capture: nil,
+            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            frontmostBundleID: "com.a"
+        )
+        await c.refresh(now: t0)
+        #expect(reader.readCount == 1)
+        #expect(engine.textExtractCalls == 0)
+        #expect(engine.lastExtractText == "")
         #expect(engine.setCalls == [[]])
     }
 
@@ -703,19 +749,56 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(activities.first?.capturedTextLength == nil)
     }
 
-    @Test func no_capture_records_the_pre_capture_bundle_id() async {
+    @Test func no_capture_and_no_ax_text_records_both_facts_separately() async {
+        // The record must distinguish "no screenshot" from "no text":
+        // the outcome is the AX read's own result, and why the image
+        // path was skipped rides alongside it as `fallbackReason`.
+        // Collapsing them into one case is what makes an inspector
+        // unable to tell "grant Screen Recording" from "this app
+        // exposes no AX text".
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, capturer, _) = makeCoordinator(
-            engine: engine, capture: nil, frontmostBundleID: "com.a", activityRecorder: recorder
+        let (c, capturer, reader) = makeCoordinator(
+            engine: engine, capture: nil, snapshot: nil,
+            frontmostBundleID: "com.a", activityRecorder: recorder
         )
         await c.refresh(now: t0)
         #expect(capturer.captureCount == 1)
+        #expect(reader.readCount == 1)
         let activities = await recorder.activities
         #expect(activities.count == 1)
         #expect(activities.first?.outcome == .noReadableWindowText)
+        #expect(activities.first?.fallbackReason == .screenshotUnavailable)
         #expect(activities.first?.bundleID == "com.a")
         #expect(activities.first?.capturedImageBytes == nil)
+        #expect(activities.first?.capturedImagePixelSize == nil)
+    }
+
+    @Test func no_capture_fallback_records_the_accessibility_source_and_why() async {
+        // Exactly one record for the refresh, saying where the keywords
+        // came from (AX text) and why the image path was skipped
+        // (no screenshot) — the two together are what lets the
+        // inspector say "the screenshot failed, so this came from
+        // accessibility text".
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, _, _) = makeCoordinator(
+            engine: engine,
+            capture: nil,
+            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX window text"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        let a = activities[0]
+        #expect(a.outcome == .extractionSucceeded)
+        #expect(a.source == .accessibility)
+        #expect(a.fallbackReason == .screenshotUnavailable)
+        #expect(a.capturedText == "AX window text")
+        #expect(a.capturedImageBytes == nil)
+        #expect(a.appliedKeywords == ["AXKeyword"])
     }
 
     @Test func cache_hit_records_the_image_size_and_applied_keywords_but_no_raw_or_dropped() async {
@@ -813,5 +896,25 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(a.capturedTextLength == "AX window text".count)
         #expect(a.capturedImageBytes == nil)
         #expect(a.appliedKeywords == ["AXKeyword"])
+        // Same fallback, different reason — this one is the model's
+        // fault, not the screenshot's.
+        #expect(a.fallbackReason == .noVision)
+    }
+
+    @Test func the_screenshot_path_records_the_pixel_dimensions_and_no_fallback_reason() async {
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let capture = shot("com.a", "Doc", "pixels", pixels: ScreenContextPixelSize(width: 1568, height: 902))
+        let (c, _, _) = makeCoordinator(
+            engine: engine, capture: capture, frontmostBundleID: "com.a", activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.source == .screenshot)
+        #expect(activities.first?.capturedImageBytes == capture.pngData.count)
+        #expect(activities.first?.capturedImagePixelSize == ScreenContextPixelSize(width: 1568, height: 902))
+        // Nothing fell back, so there is no reason to report.
+        #expect(activities.first?.fallbackReason == nil)
     }
 }

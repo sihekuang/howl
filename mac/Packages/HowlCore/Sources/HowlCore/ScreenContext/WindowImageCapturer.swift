@@ -15,11 +15,18 @@ public struct WindowImageCapture: Equatable, Sendable {
     public let bundleID: String
     public let windowTitle: String
     public let pngData: Data
+    /// Dimensions of `pngData` as encoded, i.e. after any downscale.
+    /// The capturer already has these numbers; carrying them costs two
+    /// integers and lets the diagnostic inspector report what the model
+    /// was actually shown without the image travelling any further than
+    /// it already does.
+    public let pixelSize: ScreenContextPixelSize
 
-    public init(bundleID: String, windowTitle: String, pngData: Data) {
+    public init(bundleID: String, windowTitle: String, pngData: Data, pixelSize: ScreenContextPixelSize) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.pngData = pngData
+        self.pixelSize = pixelSize
     }
 }
 
@@ -148,7 +155,8 @@ public struct ScreenCaptureKitWindowCapturer: WindowImageCapturing {
             return WindowImageCapture(
                 bundleID: bundleID,
                 windowTitle: window.title ?? "",
-                pngData: png
+                pngData: png,
+                pixelSize: ScreenContextPixelSize(width: sized.width, height: sized.height)
             )
         } catch {
             // Permission denied, window vanished mid-capture, or an

@@ -11,13 +11,17 @@ import Foundation
 ///
 /// DEMOTED, NOT LEGACY. The primary screen-context path is now a
 /// screenshot sent to a vision model
-/// (`ScreenCaptureKitWindowCapturer`), and this reader runs only when
-/// the configured provider+model turns out to reject images — the
-/// `no_vision` verdict Go reports. Keep it healthy: it is the only
-/// zero-prompt path (no Screen Recording TCC), and the only path that
-/// works at all for the text-only local models people run under Ollama
-/// and LM Studio. Its denylist enforcement is identical to the
-/// capturer's and is not weakened by the demotion.
+/// (`ScreenCaptureKitWindowCapturer`), and this reader runs whenever
+/// pixels are unavailable: either the configured provider+model turns
+/// out to reject images (the `no_vision` verdict Go reports), or no
+/// screenshot could be taken at all (Screen Recording denied, no
+/// on-screen window, the window vanished mid-capture). Keep it
+/// healthy: it is the only zero-prompt path (no Screen Recording TCC),
+/// the only path that works at all for the text-only local models
+/// people run under Ollama and LM Studio, and the only thing standing
+/// between "the user declined the Screen Recording prompt" and "screen
+/// context silently never works again". Its denylist enforcement is
+/// identical to the capturer's and is not weakened by the demotion.
 public struct AXWindowTextReader: WindowTextReader {
     /// Never construct this without a denylist. There is deliberately
     /// no default: a reader that silently reads everything is the
