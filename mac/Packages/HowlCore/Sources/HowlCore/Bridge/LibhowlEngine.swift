@@ -235,10 +235,13 @@ public actor LibhowlEngine: CoreEngine {
     /// `DispatchQueue` instead, resumed via a continuation. This keeps
     /// `startCapture()` (and everything else on the actor) from ever
     /// waiting behind an in-flight extraction.
-    public nonisolated func extractScreenKeywords(text: String) async -> [String]? {
+    public nonisolated func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction? {
         struct Request: Encodable { let text: String }
+        struct DroppedWire: Decodable { let term: String; let reason: String }
         struct Response: Decodable {
+            let raw: String?
             let keywords: [String]?
+            let dropped: [DroppedWire]?
             let error: String?
         }
         guard let json = try? JSONEncoder().encode(Request(text: text)),
@@ -260,12 +263,18 @@ public actor LibhowlEngine: CoreEngine {
               let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return nil }
         // A non-nil `error` is a FAILURE signal (provider/network
         // problem), not "no keywords found" — the caller must treat
-        // this as nil, not []. Never log `decoded.error` itself: it
-        // can embed an arbitrary HTTP response body from the LLM
-        // provider (core/internal/llm/ollama.go:219, openai.go:307,
-        // lmstudio.go:110).
+        // this as nil, not an empty extraction. Never log `decoded.error`
+        // itself: it can embed an arbitrary HTTP response body from the
+        // LLM provider (core/internal/llm/ollama.go:219, openai.go:307,
+        // lmstudio.go:110). On this failure path there is no diagnostic
+        // payload at all (the Go side returns only `{"error": "..."}"`),
+        // so `raw`/`dropped` are never fabricated here.
         if decoded.error != nil { return nil }
-        return decoded.keywords ?? []
+        return ScreenKeywordExtraction(
+            raw: decoded.raw ?? "",
+            keywords: decoded.keywords ?? [],
+            dropped: (decoded.dropped ?? []).map { ScreenContextDroppedTerm(term: $0.term, reason: $0.reason) }
+        )
     }
 
     public func setScreenKeywords(_ keywords: [String]) async {
@@ -275,5 +284,32 @@ public actor LibhowlEngine: CoreEngine {
         _ = jsonString.withCString { cstr in
             howl_set_screen_keywords(UnsafeMutablePointer(mutating: cstr))
         }
+    }
+
+    /// `nonisolated`, for the same reason as `extractScreenKeywords`
+    /// above, and routed through the same dedicated
+    /// `screenContextQueue` for consistency even though
+    /// `howl_screen_context_preview` is documented as instant and
+    /// network-free: keeping every screen-context C call off the
+    /// actor's serialized executor means none of them can ever queue
+    /// behind (or make `startCapture()` queue behind) a slow one.
+    public nonisolated func screenContextPreview() async -> ScreenContextPreview? {
+        let raw: String? = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            LibhowlEngine.screenContextQueue.async {
+                guard let out = howl_screen_context_preview() else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                defer { howl_free_string(out) }
+                continuation.resume(returning: String(cString: out))
+            }
+        }
+        guard let raw, let data = raw.data(using: .utf8) else { return nil }
+        // A failure response is `{"error": "..."}"`, which simply
+        // doesn't decode against `ScreenContextPreview`'s required
+        // fields — `try?` turns that into nil, matching "degrades
+        // silently" rather than needing a second decode attempt to
+        // detect it.
+        return try? JSONDecoder().decode(ScreenContextPreview.self, from: data)
     }
 }

@@ -10,14 +10,28 @@ private final class SpyEngine: @unchecked Sendable {
     // rate-limited, timed out); [] simulates a successful call that
     // genuinely found nothing.
     var stubbedKeywords: [String]? = ["SpeakerGate"]
+    var stubbedRaw = "SpeakerGate, DeepFilterNet"
+    var stubbedDropped: [ScreenContextDroppedTerm] = []
 
-    func extract(_ text: String) async -> [String]? {
+    func extract(_ text: String) async -> ScreenKeywordExtraction? {
         extractCalls += 1
         lastExtractText = text
-        return stubbedKeywords
+        guard let keywords = stubbedKeywords else { return nil }
+        return ScreenKeywordExtraction(raw: stubbedRaw, keywords: keywords, dropped: stubbedDropped)
     }
     func set(_ keywords: [String]) async {
         setCalls.append(keywords)
+    }
+}
+
+/// Collects every `ScreenContextActivity` an `onActivity` closure is
+/// called with, in order. An `actor` (rather than an NSLock-guarded
+/// class like the other spies here) since nothing about it needs to be
+/// synchronous — `onActivity` is itself `async`.
+private actor ActivityRecorder {
+    private(set) var activities: [ScreenContextActivity] = []
+    func record(_ activity: ScreenContextActivity) {
+        activities.append(activity)
     }
 }
 
@@ -105,14 +119,14 @@ private final class SlowExtractEngine: @unchecked Sendable {
     private var _setCalls: [[String]] = []
     var setCalls: [[String]] { withLock { _setCalls } }
 
-    func extract(_ text: String) async -> [String]? {
+    func extract(_ text: String) async -> ScreenKeywordExtraction? {
         await started.set()
         // `wait()` (not a raw sleep) blocks here until the test
         // releases it, matching the real C call: the Go side is
         // uncancellable and runs to completion regardless of whether
         // the wrapping Task was cancelled.
         await proceed.wait()
-        return ["X"]
+        return ScreenKeywordExtraction(raw: "X raw", keywords: ["X"], dropped: [])
     }
     func set(_ keywords: [String]) async {
         withLock { _setCalls.append(keywords) }
@@ -136,7 +150,8 @@ private func makeCoordinator(
     frontmostBundleID: String?,
     enabled: Bool = true,
     denylist: [String] = [],
-    cache: ScreenContextCache = ScreenContextCache()
+    cache: ScreenContextCache = ScreenContextCache(),
+    activityRecorder: ActivityRecorder = ActivityRecorder()
 ) -> (ScreenContextCoordinator, StubReader) {
     let reader = StubReader(snapshot: snapshot)
     let coordinator = ScreenContextCoordinator(
@@ -146,7 +161,8 @@ private func makeCoordinator(
         isEnabled: { enabled },
         frontmostBundleID: { frontmostBundleID },
         extract: { await engine.extract($0) },
-        apply: { await engine.set($0) }
+        apply: { await engine.set($0) },
+        onActivity: { await activityRecorder.record($0) }
     )
     return (coordinator, reader)
 }
@@ -314,6 +330,7 @@ struct ScreenContextCoordinatorTests {
         let yKey = cache.key(bundleID: snapshotY.bundleID, windowTitle: snapshotY.windowTitle, text: snapshotY.text)
         cache.store(["Y"], for: yKey, now: Date())
 
+        let activityRecorder = ActivityRecorder()
         let coordinator = ScreenContextCoordinator(
             reader: SequenceReader([snapshotX, snapshotY]),
             cache: cache,
@@ -321,7 +338,8 @@ struct ScreenContextCoordinatorTests {
             isEnabled: { true },
             frontmostBundleID: { "com.test" },   // any non-denylisted id; both snapshots pass the post-read gate too
             extract: { await engine.extract($0) },
-            apply: { await engine.set($0) }
+            apply: { await engine.set($0) },
+            onActivity: { await activityRecorder.record($0) }
         )
 
         await coordinator.scheduleRefresh()   // starts X: read -> miss -> extract() blocks on `proceed`
@@ -356,6 +374,18 @@ struct ScreenContextCoordinatorTests {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         #expect(engine.setCalls == [["Y"]])
+
+        // X's late-arriving result must be recorded as `.superseded` —
+        // NOT as `.extractionSucceeded`, which would misrepresent a
+        // result that never actually reached the engine. Y's own
+        // refresh (the one that won) recorded a normal `.cacheHit`.
+        let activities = await activityRecorder.activities
+        #expect(activities.contains { $0.bundleID == "com.x" && $0.outcome == .superseded })
+        #expect(activities.contains { $0.bundleID == "com.y" && $0.outcome == .cacheHit })
+        // A superseded result must never carry the keywords it would
+        // otherwise have applied — they never actually reached the
+        // engine, so surfacing them here would be misleading.
+        #expect(activities.first { $0.bundleID == "com.x" }?.appliedKeywords == [])
     }
 
     @Test func overlapping_direct_refresh_calls_are_ordered_by_generation_not_cancellation() async throws {
@@ -384,7 +414,8 @@ struct ScreenContextCoordinatorTests {
             isEnabled: { true },
             frontmostBundleID: { "com.test" },
             extract: { await engine.extract($0) },
-            apply: { await engine.set($0) }
+            apply: { await engine.set($0) },
+            onActivity: { _ in }
         )
 
         // Direct `refresh()` calls, each wrapped in a Task we hold and
@@ -401,5 +432,154 @@ struct ScreenContextCoordinatorTests {
         await yTask.value
 
         #expect(engine.setCalls == [["Y"]])
+    }
+}
+
+/// One `@Test` per `refresh()` outcome, verifying `ScreenContextActivity`
+/// carries the right `outcome` and the right (or deliberately absent)
+/// payload for that path.
+@Suite("ScreenContextCoordinator activity")
+struct ScreenContextCoordinatorActivityTests {
+
+    @Test func disabled_records_disabled_outcome_with_no_bundle_id() async {
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "text"),
+            frontmostBundleID: "com.a",
+            enabled: false,
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .disabled)
+        #expect(activities.first?.bundleID == nil)
+        #expect(activities.first?.capturedText == nil)
+    }
+
+    @Test func pre_read_denylist_skip_records_bundle_id_but_no_captured_text() async {
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, reader) = makeCoordinator(
+            engine: engine,
+            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            frontmostBundleID: "com.1password.1password",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        #expect(reader.readCount == 0)   // the read never happened at all
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .skippedPreReadDenylist)
+        #expect(activities.first?.bundleID == "com.1password.1password")
+        #expect(activities.first?.capturedText == nil)
+    }
+
+    @Test func post_read_denylist_skip_records_bundle_id_but_never_the_text_it_read() async {
+        // Mirrors `post_read_gate_still_catches_a_denylisted_snapshot_even_when_the_frontmost_lookup_disagrees`:
+        // the pre-read gate sees a benign app, so the read genuinely
+        // happens and genuinely returns a denylisted app's text — but
+        // that text must never reach the activity record. Recording it
+        // here, even in memory, would defeat the one guarantee this
+        // gate exists to provide.
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, reader) = makeCoordinator(
+            engine: engine,
+            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        #expect(reader.readCount == 1)   // the read DID happen this time
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .skippedPostReadDenylist)
+        #expect(activities.first?.bundleID == "com.1password.1password")
+        #expect(activities.first?.capturedText == nil)
+        #expect(activities.first?.capturedTextLength == nil)
+        #expect(activities.first?.capturedTextSource == nil)
+    }
+
+    @Test func no_readable_window_text_records_the_pre_read_bundle_id() async {
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, reader) = makeCoordinator(
+            engine: engine, snapshot: nil, frontmostBundleID: "com.a", activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        #expect(reader.readCount == 1)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .noReadableWindowText)
+        #expect(activities.first?.bundleID == "com.a")
+        #expect(activities.first?.capturedText == nil)
+    }
+
+    @Test func cache_hit_records_captured_text_and_applied_keywords_but_no_raw_or_dropped() async {
+        let engine = SpyEngine()
+        let cache = ScreenContextCache()
+        let recorder = ActivityRecorder()
+        let snapshot = WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "unchanged text", source: .ocr)
+        let (c, _) = makeCoordinator(engine: engine, snapshot: snapshot, frontmostBundleID: "com.a", cache: cache, activityRecorder: recorder)
+
+        await c.refresh(now: t0)   // primes the cache (extraction)
+        await c.refresh(now: t0)   // cache hit
+
+        let activities = await recorder.activities
+        #expect(activities.count == 2)
+        let hit = activities[1]
+        #expect(hit.outcome == .cacheHit)
+        #expect(hit.bundleID == "com.a")
+        #expect(hit.capturedText == "unchanged text")
+        #expect(hit.capturedTextSource == .ocr)
+        #expect(hit.capturedTextLength == "unchanged text".count)
+        #expect(hit.appliedKeywords == ["SpeakerGate"])
+        #expect(hit.rawResponse == nil)
+        #expect(hit.dropped.isEmpty)
+    }
+
+    @Test func extraction_succeeded_records_raw_response_and_drops() async {
+        let engine = SpyEngine()
+        engine.stubbedRaw = "SpeakerGate, 123, DeepFilterNet"
+        engine.stubbedKeywords = ["SpeakerGate", "DeepFilterNet"]
+        engine.stubbedDropped = [ScreenContextDroppedTerm(term: "123", reason: "numeric")]
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "SpeakerGate 123 DeepFilterNet"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        let a = activities[0]
+        #expect(a.outcome == .extractionSucceeded)
+        #expect(a.rawResponse == "SpeakerGate, 123, DeepFilterNet")
+        #expect(a.dropped == [ScreenContextDroppedTerm(term: "123", reason: "numeric")])
+        #expect(a.appliedKeywords == ["SpeakerGate", "DeepFilterNet"])
+        #expect(a.capturedTextSource == .accessibility)
+    }
+
+    @Test func extraction_failed_records_captured_text_but_no_raw_response() async {
+        let engine = SpyEngine()
+        engine.stubbedKeywords = nil   // simulates a provider failure
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "flaky text"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .extractionFailed)
+        #expect(activities.first?.capturedText == "flaky text")
+        #expect(activities.first?.rawResponse == nil)
+        #expect(activities.first?.appliedKeywords == [])
     }
 }

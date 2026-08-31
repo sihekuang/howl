@@ -12,8 +12,14 @@ public actor ScreenContextCoordinator {
     private let denylist: @Sendable () -> ScreenContextDenylist
     private let isEnabled: @Sendable () -> Bool
     private let frontmostBundleID: @Sendable () async -> String?
-    private let extract: @Sendable (String) async -> [String]?
+    private let extract: @Sendable (String) async -> ScreenKeywordExtraction?
     private let apply: @Sendable ([String]) async -> Void
+    /// Fires once per `refresh()` outcome, carrying the full diagnostic
+    /// record for the "before/after" inspector. Follows the same
+    /// injected-closure pattern as every other dependency here — see
+    /// the type header comment — so the policy (including what counts
+    /// as `.superseded`) stays testable without a live UI store.
+    private let onActivity: @Sendable (ScreenContextActivity) async -> Void
 
     // `.notice` and above persist in the unified log; `.debug`/`.info` do
     // not survive past the live stream. These four lines are the entire
@@ -42,8 +48,9 @@ public actor ScreenContextCoordinator {
         denylist: @escaping @Sendable () -> ScreenContextDenylist,
         isEnabled: @escaping @Sendable () -> Bool,
         frontmostBundleID: @escaping @Sendable () async -> String?,
-        extract: @escaping @Sendable (String) async -> [String]?,
-        apply: @escaping @Sendable ([String]) async -> Void
+        extract: @escaping @Sendable (String) async -> ScreenKeywordExtraction?,
+        apply: @escaping @Sendable ([String]) async -> Void,
+        onActivity: @escaping @Sendable (ScreenContextActivity) async -> Void
     ) {
         self.reader = reader
         self.cache = cache
@@ -52,6 +59,7 @@ public actor ScreenContextCoordinator {
         self.frontmostBundleID = frontmostBundleID
         self.extract = extract
         self.apply = apply
+        self.onActivity = onActivity
     }
 
     /// Re-derive keywords for whatever window is focused right now.
@@ -70,7 +78,7 @@ public actor ScreenContextCoordinator {
         // applies the engine's last-set `screenKeywords` unconditionally
         // on every capture and nothing else ever clears them.
         guard isEnabled() else {
-            await applyIfCurrent([], myGeneration: myGeneration)
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: nil, outcome: .disabled)
             return
         }
 
@@ -93,16 +101,17 @@ public actor ScreenContextCoordinator {
         // frontmost lookup, so the two observations were never atomic
         // even when this call was synchronous. The authoritative check
         // is the post-read gate on the snapshot's own bundle ID.
-        if denylist().shouldSkip(bundleID: await frontmostBundleID()) {
+        let frontID = await frontmostBundleID()
+        if denylist().shouldSkip(bundleID: frontID) {
             log.notice("screen context skipped for denylisted app")
-            await applyIfCurrent([], myGeneration: myGeneration)
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: frontID, outcome: .skippedPreReadDenylist)
             return
         }
 
         guard let snapshot = await reader.read() else {
             // No readable window — clear rather than leave the previous
             // window's keywords armed.
-            await applyIfCurrent([], myGeneration: myGeneration)
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: frontID, outcome: .noReadableWindowText)
             return
         }
 
@@ -110,9 +119,15 @@ public actor ScreenContextCoordinator {
         // The frontmost-app lookup above and this read aren't atomic
         // with each other, so re-check against the ID the text
         // actually came from — defence in depth, not redundant.
+        //
+        // The activity recorded here deliberately omits the captured
+        // text even though a read may already have happened — see
+        // `ScreenContextActivity.capturedText`'s doc comment: this gate
+        // is the actual guarantee, and leaking the text into an
+        // in-memory diagnostic would defeat it.
         if denylist().shouldSkip(bundleID: snapshot.bundleID) {
             log.notice("screen context skipped for denylisted app")
-            await applyIfCurrent([], myGeneration: myGeneration)
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .skippedPostReadDenylist)
             return
         }
 
@@ -122,11 +137,14 @@ public actor ScreenContextCoordinator {
             text: snapshot.text
         )
         if let cached = cache.value(for: key, now: now) {
-            await applyIfCurrent(cached, myGeneration: myGeneration)
+            await recordAndApply(
+                cached, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .cacheHit,
+                capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count
+            )
             return
         }
 
-        guard let keywords = await extract(snapshot.text) else {
+        guard let extraction = await extract(snapshot.text) else {
             // Extraction FAILED (provider unreachable, rate-limited,
             // timed out, malformed response) — distinct from "the LLM
             // ran and found nothing". Never cache a failure: doing so
@@ -135,13 +153,21 @@ public actor ScreenContextCoordinator {
             // Still clear rather than leave a stale window's keywords
             // armed for the next dictation.
             log.notice("screen context extraction failed")
-            await applyIfCurrent([], myGeneration: myGeneration)
+            await recordAndApply(
+                [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionFailed,
+                capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count
+            )
             return
         }
-        cache.store(keywords, for: key, now: now)
-        if await applyIfCurrent(keywords, myGeneration: myGeneration) {
+        cache.store(extraction.keywords, for: key, now: now)
+        let applied = await recordAndApply(
+            extraction.keywords, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionSucceeded,
+            capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count,
+            rawResponse: extraction.raw, dropped: extraction.dropped
+        )
+        if applied {
             // Deliberately logs the COUNT, never the terms or window text.
-            log.notice("screen context applied \(keywords.count, privacy: .public) keyword(s)")
+            log.notice("screen context applied \(extraction.keywords.count, privacy: .public) keyword(s)")
         }
     }
 
@@ -153,6 +179,46 @@ public actor ScreenContextCoordinator {
         guard myGeneration == generation, !Task.isCancelled else { return false }
         await apply(keywords)
         return true
+    }
+
+    /// Applies `keywords` via `applyIfCurrent`, then emits exactly one
+    /// `ScreenContextActivity` recording what actually happened.
+    ///
+    /// `outcome` is the caller's intended outcome, but the RECORDED
+    /// outcome is `.superseded` whenever the apply itself didn't run —
+    /// whether because a newer `refresh` already bumped `generation`,
+    /// or because `scheduleRefresh` cancelled this call's Task. Either
+    /// way nothing was actually applied, so reporting the caller's
+    /// original outcome would misrepresent what the user's dictation
+    /// actually saw; `.superseded` is the truthful record. Returns
+    /// whether the apply ran, exactly like `applyIfCurrent`.
+    @discardableResult
+    private func recordAndApply(
+        _ keywords: [String],
+        myGeneration: UInt64,
+        now: Date,
+        bundleID: String?,
+        outcome: ScreenContextActivity.Outcome,
+        capturedText: String? = nil,
+        capturedTextSource: WindowTextSource? = nil,
+        capturedTextLength: Int? = nil,
+        rawResponse: String? = nil,
+        dropped: [ScreenContextDroppedTerm] = []
+    ) async -> Bool {
+        let applied = await applyIfCurrent(keywords, myGeneration: myGeneration)
+        let activity = ScreenContextActivity(
+            timestamp: now,
+            bundleID: bundleID,
+            outcome: applied ? outcome : .superseded,
+            capturedText: capturedText,
+            capturedTextSource: capturedTextSource,
+            capturedTextLength: capturedTextLength,
+            rawResponse: rawResponse,
+            dropped: dropped,
+            appliedKeywords: applied ? keywords : []
+        )
+        await onActivity(activity)
+        return applied
     }
 
     /// Schedule a refresh, superseding any still running — a newer

@@ -95,6 +95,10 @@ public final class CompositionRoot {
         return ScreenContextDenylist(userAdditions: stored.screenContextDenylist)
     }
 
+    /// Diagnostic ring buffer backing the Screen Context inspector
+    /// (Settings → General). In-memory only — dies with the app.
+    public lazy var screenContextActivityStore = ScreenContextActivityStore()
+
     lazy var screenContextCoordinator = ScreenContextCoordinator(
         reader: FallbackWindowTextReader(
             primary: AXWindowTextReader(denylist: screenContextDenylistProvider),
@@ -117,7 +121,13 @@ public final class CompositionRoot {
             await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
         },
         extract: { [engine] text in await engine.extractScreenKeywords(text: text) },
-        apply: { [engine] keywords in await engine.setScreenKeywords(keywords) }
+        apply: { [engine] keywords in await engine.setScreenKeywords(keywords) },
+        // `record(_:)` is `@MainActor`-isolated (the whole store is);
+        // this `await` is the hop off the coordinator's own actor onto
+        // main, the same shape as `frontmostBundleID` above.
+        onActivity: { [screenContextActivityStore] activity in
+            await screenContextActivityStore.record(activity)
+        }
     )
 
     lazy var screenContextObserver = ScreenContextObserver(onFocusSettled: makeScreenContextFocusSettledAction())

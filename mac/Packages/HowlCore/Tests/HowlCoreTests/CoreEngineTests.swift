@@ -53,8 +53,12 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
         return stubTSEExtractRC
     }
 
-    func extractScreenKeywords(text: String) async -> [String]? { [] }
+    var stubExtraction: ScreenKeywordExtraction? = ScreenKeywordExtraction(raw: "", keywords: [], dropped: [])
+    var stubPreview: ScreenContextPreview?
+
+    func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction? { stubExtraction }
     func setScreenKeywords(_ keywords: [String]) async {}
+    func screenContextPreview() async -> ScreenContextPreview? { stubPreview }
 }
 
 @Suite("CoreEngine protocol")

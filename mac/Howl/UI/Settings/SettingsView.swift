@@ -195,7 +195,9 @@ private struct DetailView: View {
                 settings: $settings,
                 onSave: save,
                 audioCapture: composition.audioCapture,
-                presets: LibVKBPresetsClient(engine: composition.engine)
+                presets: LibVKBPresetsClient(engine: composition.engine),
+                engine: composition.engine,
+                screenContextActivity: composition.screenContextActivityStore
             )
         case .voice:
             VoiceTab(

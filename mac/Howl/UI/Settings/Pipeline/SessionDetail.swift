@@ -29,6 +29,56 @@ struct SessionDetail: View {
             if !manifest.transcripts.prompt.isEmpty {
                 transcriptRow(label: "prompt.txt", rel: manifest.transcripts.prompt)
             }
+            if hasScreenContextData {
+                Divider().padding(.vertical, 4)
+                screenContextSummary
+            }
+        }
+    }
+
+    // MARK: - Screen context (what biased this dictation)
+
+    /// Whether this manifest carries any of the three screen-context
+    /// fields — false for a legacy session recorded before this
+    /// feature shipped (they decode to `[]` / `""` / `0`), so the
+    /// section is simply omitted rather than shown empty.
+    private var hasScreenContextData: Bool {
+        !manifest.screenKeywords.isEmpty || !manifest.whisperPrompt.isEmpty || manifest.whisperPromptTokens != 0
+    }
+
+    /// What actually biased whisper for this specific dictation: the
+    /// screen-derived keywords that reached the prompt, and the exact
+    /// `initial_prompt` string (dictionary + surviving screen terms)
+    /// whisper received, with its real token count. This is the
+    /// per-dictation record — the live inspector in Settings → General
+    /// (`ScreenContextInspectorView`) shows the same chain for the
+    /// window in front of you right now; this shows what happened for
+    /// THIS past capture.
+    @ViewBuilder
+    private var screenContextSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Screen context").font(.callout).bold()
+            if !manifest.screenKeywords.isEmpty {
+                HStack(alignment: .top) {
+                    Text("Keywords").font(.caption).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
+                    Text(manifest.screenKeywords.joined(separator: ", "))
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+            if !manifest.whisperPrompt.isEmpty {
+                HStack(alignment: .top) {
+                    Text("Prompt").font(.caption).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(manifest.whisperPrompt)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                        Text("\(manifest.whisperPromptTokens) tokens")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 

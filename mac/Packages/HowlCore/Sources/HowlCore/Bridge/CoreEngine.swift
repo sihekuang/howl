@@ -103,14 +103,33 @@ public protocol CoreEngine: Sendable {
     ///
     /// Returns nil when the extraction itself FAILED (provider
     /// unreachable, rate-limited, timed out, malformed response) —
-    /// distinct from a successful call that found nothing ([]).
-    /// Callers must not cache a nil result: caching it would silently
-    /// disable screen context for that window's content for a whole
-    /// cache TTL over one transient blip. Either way this is
-    /// best-effort — never throws, never blocks the dictation path.
-    func extractScreenKeywords(text: String) async -> [String]?
+    /// distinct from a successful call that found nothing
+    /// (`.keywords == []`). Callers must not cache a nil result:
+    /// caching it would silently disable screen context for that
+    /// window's content for a whole cache TTL over one transient blip.
+    /// Either way this is best-effort — never throws, never blocks the
+    /// dictation path.
+    ///
+    /// The richer `ScreenKeywordExtraction` (vs. a bare `[String]?`)
+    /// exists so the diagnostic inspector can show the LLM's raw
+    /// response and every sanitizer rejection, not just the surviving
+    /// keywords — see `ScreenContextActivity`.
+    func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction?
 
     /// Store the keyword list applied at the next startCapture.
     /// Instant; no network.
     func setScreenKeywords(_ keywords: [String]) async
+
+    /// Reports exactly how the NEXT capture's whisper `initial_prompt`
+    /// would be composed from the engine's current custom dictionary
+    /// and stored screen keywords — the complete before/after of the
+    /// whisper-biasing chain, up to and including the string whisper
+    /// would actually receive.
+    ///
+    /// Instant; no network. Read-only: does not mutate engine state,
+    /// so calling it cannot change what the next capture sees. Returns
+    /// nil when the engine isn't initialized, isn't configured yet, or
+    /// the response fails to decode — best-effort, like every other
+    /// screen-context method: never throws.
+    func screenContextPreview() async -> ScreenContextPreview?
 }

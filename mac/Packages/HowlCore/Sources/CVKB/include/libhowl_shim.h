@@ -42,5 +42,6 @@ int howl_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, ch
 // Screen-context whisper biasing. See core/cmd/libhowl/screenctx_export.go.
 char* howl_extract_keywords(char* jsonC);
 int howl_set_screen_keywords(char* jsonC);
+char* howl_screen_context_preview(void);
 
 #endif

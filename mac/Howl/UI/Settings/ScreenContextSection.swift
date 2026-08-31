@@ -15,6 +15,8 @@ import SwiftUI
 struct ScreenContextSection: View {
     @Binding var enabled: Bool
     @Binding var denylist: [String]
+    let engine: any CoreEngine
+    var activityStore: ScreenContextActivityStore
     @State private var newBundleID: String = ""
 
     var body: some View {
@@ -53,6 +55,9 @@ struct ScreenContextSection: View {
                     }
                     .disabled(newBundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+
+                Divider().padding(.vertical, 4)
+                ScreenContextInspectorView(engine: engine, activityStore: activityStore)
             }
         }
     }

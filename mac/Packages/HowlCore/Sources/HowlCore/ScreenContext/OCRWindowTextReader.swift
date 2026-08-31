@@ -67,7 +67,8 @@ public struct OCRWindowTextReader: WindowTextReader {
             return WindowSnapshot(
                 bundleID: bundleID,
                 windowTitle: window.title ?? "",
-                text: trimmed
+                text: trimmed,
+                source: .ocr
             )
         } catch {
             // Permission denied, window vanished mid-capture, or OCR

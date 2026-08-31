@@ -14,6 +14,13 @@ struct GeneralTab: View {
     /// Playground and Pipeline only show it (Playground read-only,
     /// Pipeline picks editing targets — neither activates).
     let presets: any PresetsClient
+    /// Passed through to `ScreenContextSection`'s inspector, which
+    /// calls `engine.screenContextPreview()` to show the live
+    /// whisper-prompt composition.
+    let engine: any CoreEngine
+    /// Recent screen-context activity, likewise passed through to the
+    /// inspector.
+    let screenContextActivity: ScreenContextActivityStore
 
     @State private var devices: [AudioInputDevice] = []
     @State private var downloader = ModelDownloader()
@@ -83,7 +90,9 @@ struct GeneralTab: View {
 
             ScreenContextSection(
                 enabled: $settings.screenContextEnabled,
-                denylist: $settings.screenContextDenylist
+                denylist: $settings.screenContextDenylist,
+                engine: engine,
+                activityStore: screenContextActivity
             )
         }
         .onChange(of: settings) { _, new in onSave(new) }

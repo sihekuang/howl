@@ -65,17 +65,34 @@ func resolveReadableFrontmostApp(
     }
 }
 
+/// Which reader actually produced a `WindowSnapshot`'s text — the
+/// answer to "did AX work, or did we fall back to screenshotting?",
+/// which was previously unrecoverable from the snapshot alone.
+public enum WindowTextSource: String, Equatable, Sendable {
+    /// Read via the Accessibility API (`AXWindowTextReader`).
+    case accessibility
+    /// Read via a screenshot + Vision OCR (`OCRWindowTextReader`),
+    /// used when AX yielded nothing or too little to be useful.
+    case ocr
+}
+
 /// Text read from the user's focused window, with the identity needed
 /// to cache and denylist it.
 public struct WindowSnapshot: Equatable, Sendable {
     public let bundleID: String
     public let windowTitle: String
     public let text: String
+    /// Which reader produced `text`. Defaults to `.accessibility` so
+    /// existing call sites (mostly tests, which don't exercise the
+    /// AX/OCR distinction) don't need to change; the two real readers
+    /// below always pass this explicitly.
+    public let source: WindowTextSource
 
-    public init(bundleID: String, windowTitle: String, text: String) {
+    public init(bundleID: String, windowTitle: String, text: String, source: WindowTextSource = .accessibility) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.text = text
+        self.source = source
     }
 }
 
