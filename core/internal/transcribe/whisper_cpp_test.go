@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -347,5 +348,136 @@ func TestWhisperCpp_SetContextPrompt_LargeDictionaryStaysOrdered(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("SetContextPrompt returned %d surviving screen term(s), want 0 — a 300-term dictionary already exceeds the token budget on its own", len(got))
+	}
+}
+
+// tinyModelOrSkip returns a WhisperCpp on the tiny.en model, skipping
+// when the model isn't present. Mirrors the inline preamble the older
+// tests in this file each repeat.
+func tinyModelOrSkip(t *testing.T) *WhisperCpp {
+	t.Helper()
+	modelPath := os.ExpandEnv("$HOME/Library/Application Support/Howl/models/ggml-tiny.en.bin")
+	if _, err := os.Stat(modelPath); err != nil {
+		t.Skipf("model not available at %s", modelPath)
+	}
+	w, err := NewWhisperCpp(WhisperOptions{ModelPath: modelPath, Language: "en"})
+	if err != nil {
+		t.Fatalf("NewWhisperCpp: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	return w
+}
+
+// trimmingFixture returns a dict/screen pair sized so BOTH trim stages
+// actually execute — same empirically-verified shape as
+// TestWhisperCpp_SetContextPrompt_TrimsToRealTokenWindow.
+func trimmingFixture() (dict, screen []string) {
+	dict = make([]string, 20)
+	for i := range dict {
+		dict[i] = fmt.Sprintf("QvxDictTerm%02d", i)
+	}
+	screen = make([]string, 60)
+	for i := range screen {
+		screen[i] = fmt.Sprintf("XqzGlyphWarpNode%02d", i)
+	}
+	return dict, screen
+}
+
+// TestWhisperCpp_PreviewMatchesSetContextPrompt is the anti-drift
+// guarantee this whole refactor exists for: the diagnostic preview and
+// the real, mutating path must be the SAME computation. A preview
+// computed by a parallel code path would drift from what whisper
+// actually receives and would lie precisely when a developer is
+// staring at it to work out why recognition went wrong.
+//
+// Inputs are sized so both token-trim stages run — a preview that
+// agreed only on inputs small enough to skip trimming would prove
+// nothing.
+func TestWhisperCpp_PreviewMatchesSetContextPrompt(t *testing.T) {
+	w := tinyModelOrSkip(t)
+	dict, screen := trimmingFixture()
+
+	plan := w.PreviewContextPrompt(dict, screen)
+
+	// The preview must not touch engine state.
+	if w.initialPrompt != "" {
+		t.Fatalf("PreviewContextPrompt mutated initialPrompt to %q", w.initialPrompt)
+	}
+	if plan.Prompt == "" {
+		t.Fatal("preview produced an empty prompt; fixture needs rebalancing")
+	}
+
+	got := w.SetContextPrompt(dict, screen)
+
+	if w.initialPrompt != plan.Prompt {
+		t.Errorf("initialPrompt = %q, preview said %q", w.initialPrompt, plan.Prompt)
+	}
+	if !reflect.DeepEqual(got, plan.ScreenApplied) {
+		t.Errorf("SetContextPrompt returned %v, preview said %v", got, plan.ScreenApplied)
+	}
+
+	// And the preview must be stable: composing again yields the same
+	// plan, before and after the mutating call.
+	again := w.PreviewContextPrompt(dict, screen)
+	if !reflect.DeepEqual(again, plan) {
+		t.Errorf("preview is not deterministic:\n first = %+v\nsecond = %+v", plan, again)
+	}
+}
+
+// TestWhisperCpp_ComposeContextPrompt_DictionaryFirstUnderTokenTrim
+// asserts the ordering invariant survives the refactor, under inputs
+// where stage 2 (MaxPromptTokens) genuinely has to trim. A version of
+// this test whose trim loop never executes would pass against a
+// completely broken implementation.
+func TestWhisperCpp_ComposeContextPrompt_DictionaryFirstUnderTokenTrim(t *testing.T) {
+	w := tinyModelOrSkip(t)
+	dict, screen := trimmingFixture()
+
+	plan := w.PreviewContextPrompt(dict, screen)
+
+	// Stage 2 must actually have run, or this test proves nothing.
+	var stage2Drops int
+	for _, d := range plan.Dropped {
+		if d.Stage == DropPromptTokenCap {
+			stage2Drops++
+		}
+	}
+	if stage2Drops == 0 {
+		t.Fatalf("no %s drops — fixture no longer forces stage 2 to trim; rebalance it", DropPromptTokenCap)
+	}
+
+	if plan.TokenCount > MaxPromptTokens {
+		t.Errorf("prompt is %d tokens, want <= %d", plan.TokenCount, MaxPromptTokens)
+	}
+	if plan.MaxPromptTokens != MaxPromptTokens || plan.MaxScreenPromptTokens != MaxScreenPromptTokens {
+		t.Errorf("caps = (%d, %d), want (%d, %d)", plan.MaxScreenPromptTokens, plan.MaxPromptTokens, MaxScreenPromptTokens, MaxPromptTokens)
+	}
+
+	// Dictionary first, screen second, both in offered order.
+	for i, term := range plan.DictApplied {
+		if term != dict[i] {
+			t.Fatalf("DictApplied[%d] = %q, want %q — dictionary must keep its offered order", i, term, dict[i])
+		}
+	}
+	for i, term := range plan.ScreenApplied {
+		if term != screen[i] {
+			t.Fatalf("ScreenApplied[%d] = %q, want %q — screen terms must keep their offered order", i, term, screen[i])
+		}
+	}
+
+	// The invariant: overflow sacrifices screen keywords, never the
+	// user's configured dictionary. If any dictionary term was evicted,
+	// not one screen term may have survived.
+	if len(plan.DictApplied) < len(dict) && len(plan.ScreenApplied) > 0 {
+		t.Errorf("ordering inversion: %d/%d dict terms survived while %d screen terms also survived", len(plan.DictApplied), len(dict), len(plan.ScreenApplied))
+	}
+	if len(plan.DictApplied) == 0 {
+		t.Fatal("no dictionary terms survived at all; fixture needs rebalancing")
+	}
+
+	// The plan's own parts must reconstruct the prompt it reports.
+	want := strings.Join(append(append([]string{}, plan.DictApplied...), plan.ScreenApplied...), ", ")
+	if plan.Prompt != want {
+		t.Errorf("Prompt = %q, but DictApplied++ScreenApplied joins to %q", plan.Prompt, want)
 	}
 }

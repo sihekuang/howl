@@ -166,3 +166,72 @@ func TestContextPrompt_ScreenOnlyIsAllowed(t *testing.T) {
 		t.Errorf("surviving screen terms = %v, want 1", screen)
 	}
 }
+
+// TestScreenPreFilterDrops_ClassifiesEachRejection checks that the
+// pre-filter drop classifier agrees with what ContextPrompt actually
+// did — it classifies ContextPrompt's own output rather than
+// re-deciding, so a wrong label here means a diagnostic that
+// misattributes why a keyword vanished.
+func TestScreenPreFilterDrops_ClassifiesEachRejection(t *testing.T) {
+	dict := []string{"MCP"}
+	// "mcp" duplicates the dictionary case-insensitively; "webrtc"
+	// duplicates the earlier "WebRTC"; "  " is blank; the long tail
+	// overflows MaxScreenPromptLen.
+	screen := []string{"WebRTC", "mcp", "webrtc", "  ", "SpeakerGate"}
+	filler := strings.Repeat("Q", 60)
+	for i := 0; i < 10; i++ {
+		screen = append(screen, fmt.Sprintf("%s%02d", filler, i))
+	}
+
+	_, kept := ContextPrompt(dict, screen)
+	drops := screenPreFilterDrops(dict, screen, kept)
+
+	byTerm := make(map[string]string, len(drops))
+	for _, d := range drops {
+		if d.Source != SourceScreen {
+			t.Errorf("drop %+v has source %q, want %q", d, d.Source, SourceScreen)
+		}
+		byTerm[d.Term] = d.Stage
+	}
+
+	want := map[string]string{
+		"mcp":    DropDuplicateOfDictionary,
+		"webrtc": DropDuplicate,
+		"  ":     DropEmptyTerm,
+	}
+	for term, stage := range want {
+		if got := byTerm[term]; got != stage {
+			t.Errorf("drop for %q = %q, want %q", term, got, stage)
+		}
+	}
+	// The filler tail must have been cut by a byte cap, not mislabelled.
+	var byteDrops int
+	for _, d := range drops {
+		if d.Stage == DropBytePreFilter {
+			byteDrops++
+		}
+	}
+	if byteDrops == 0 {
+		t.Fatalf("no %s drops; fixture no longer overflows the byte pre-filter", DropBytePreFilter)
+	}
+
+	// Every screen term is accounted for exactly once: kept or dropped.
+	if len(kept)+len(drops) != len(screen) {
+		t.Errorf("%d kept + %d dropped != %d offered — some term is unaccounted for", len(kept), len(drops), len(screen))
+	}
+}
+
+// TestBlankTermDrops_ReportsOnlyBlanks pins the dictionary-side
+// counterpart: cleanTerms silently discards blank entries, and the
+// diagnostic must say so.
+func TestBlankTermDrops_ReportsOnlyBlanks(t *testing.T) {
+	drops := blankTermDrops([]string{"MCP", "", "  \t", "WebRTC"}, SourceDictionary)
+	if len(drops) != 2 {
+		t.Fatalf("drops = %+v, want 2", drops)
+	}
+	for _, d := range drops {
+		if d.Stage != DropEmptyTerm || d.Source != SourceDictionary {
+			t.Errorf("drop %+v, want stage %q source %q", d, DropEmptyTerm, SourceDictionary)
+		}
+	}
+}

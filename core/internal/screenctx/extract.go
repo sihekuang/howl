@@ -41,24 +41,49 @@ Hard rules:
 Window text:
 {{transcription}}`
 
-// Extract asks the provider for keywords describing windowText and
-// returns the sanitized result. dictTerms are passed as the "already
-// covered" list so the model doesn't spend the budget on duplicates.
+// ExtractResult is everything one extraction round trip produced: the
+// model's response verbatim, the keywords that survived sanitizing,
+// and every candidate that didn't (with the reason).
 //
-// Returns (nil, nil) for empty input without calling the provider.
-func Extract(ctx context.Context, cleaner llm.Cleaner, windowText string, dictTerms []string) ([]string, error) {
+// Raw is kept deliberately. It is the only way to tell "the model
+// returned nothing useful" apart from "the model returned plenty and
+// the sanitizer rejected all of it" — the single most common question
+// when screen-context biasing appears to do nothing. It is returned
+// across the ABI for live display only; nothing writes it to disk or
+// to the log.
+type ExtractResult struct {
+	// Raw is the provider's response exactly as received.
+	Raw string `json:"raw"`
+	// Keywords are the sanitized terms, in order. nil when none
+	// survived — same contract as Sanitize.
+	Keywords []string `json:"keywords"`
+	// Dropped lists every rejected candidate and why. nil when none
+	// were rejected.
+	Dropped []DroppedTerm `json:"dropped"`
+}
+
+// Extract asks the provider for keywords describing windowText and
+// returns the sanitized result alongside the raw response and the
+// sanitizer's rejects. dictTerms are passed as the "already covered"
+// list so the model doesn't spend the budget on duplicates.
+//
+// Returns a zero ExtractResult for empty input without calling the
+// provider, and a zero ExtractResult with the error on provider
+// failure.
+func Extract(ctx context.Context, cleaner llm.Cleaner, windowText string, dictTerms []string) (ExtractResult, error) {
 	text := truncateUTF8(strings.TrimSpace(windowText), MaxWindowTextBytes)
 	if text == "" {
-		return nil, nil
+		return ExtractResult{}, nil
 	}
 	// Tagged so the provider's Clean implementation can tell this apart
 	// from an ordinary dictation-cleanup call and adjust its own
 	// logging — see llm.WithScreenContextSource's doc comment.
 	raw, err := cleaner.Clean(llm.WithScreenContextSource(ctx), text, dictTerms)
 	if err != nil {
-		return nil, err
+		return ExtractResult{}, err
 	}
-	return Sanitize(raw), nil
+	kept, dropped := SanitizeWithDrops(raw)
+	return ExtractResult{Raw: raw, Keywords: kept, Dropped: dropped}, nil
 }
 
 // NewExtractor builds a keyword-extraction Cleaner from the configured

@@ -33,4 +33,21 @@ type PromptSetter interface {
 	// capture can have its manifest overwritten by this one's result —
 	// see the comment at the `howl_start_capture` call site.
 	SetContextPrompt(dictTerms, screenTerms []string) []string
+
+	// PreviewContextPrompt composes exactly what SetContextPrompt would
+	// compose for the same inputs and returns the full plan — the
+	// byte-bounded dictionary, the surviving terms, everything dropped
+	// and at which stage, the resulting prompt, its real token count,
+	// and the caps — WITHOUT mutating the transcriber. Purely a
+	// diagnostic read path.
+	//
+	// Implementations MUST route both this and SetContextPrompt through
+	// one composition. The point of the preview is to show what whisper
+	// actually receives; a preview computed by separate code would
+	// drift from reality and mislead exactly when someone is using it
+	// to debug recognition.
+	//
+	// Not free: it repeats the same whisper_token_count work
+	// SetContextPrompt does. Call it for diagnostics, not per frame.
+	PreviewContextPrompt(dictTerms, screenTerms []string) ContextPromptPlan
 }

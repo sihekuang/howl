@@ -164,3 +164,24 @@ func TestManifest_ScreenKeywordsOmittedWhenEmpty(t *testing.T) {
 }
 
 func floatPtr(f float32) *float32 { return &f }
+
+// TestManifest_WhisperPromptOmittedWhenEmpty holds whisper_prompt and
+// whisper_prompt_tokens to the same back-compat promise
+// screen_keywords already carries: a session that had no ASR prompt
+// must serialize with neither key present, so existing manifests stay
+// byte-identical.
+func TestManifest_WhisperPromptOmittedWhenEmpty(t *testing.T) {
+	base := TranscriptEntries{Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt"}
+	dir := t.TempDir()
+	m := Manifest{Version: 1, ID: "x", Preset: "default", Transcripts: base}
+	if err := m.Write(dir); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "whisper_prompt") {
+		t.Errorf("expected whisper_prompt absent when empty, got:\n%s", got)
+	}
+}

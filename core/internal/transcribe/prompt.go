@@ -177,3 +177,177 @@ func ContextPrompt(dictTerms, screenTerms []string) (string, []string) {
 	}
 	return prompt, surviving
 }
+
+// Prompt-drop stages. Every one names a specific filter in the
+// composition, in the order the composition applies them. Together they
+// account for every term that is offered to a context prompt but does
+// not reach whisper.
+const (
+	// DropEmptyTerm: blank once trimmed (cleanTerms).
+	DropEmptyTerm = "empty"
+	// DropDuplicateOfDictionary: a screen term the user's custom
+	// dictionary already covers, deduped case-insensitively by
+	// ContextPrompt.
+	DropDuplicateOfDictionary = "duplicate_of_dictionary"
+	// DropDuplicate: a screen term repeating an earlier screen term,
+	// case-insensitively.
+	DropDuplicate = "duplicate"
+	// DropBytePreFilter: a screen term cut by ContextPrompt's byte
+	// pre-filters (MaxScreenPromptLen on the screen slice, then
+	// MaxInitialPromptLen on the whole join). Coarse and deliberately
+	// loose — the token stages below are the authoritative bound.
+	DropBytePreFilter = "byte_prefilter"
+	// DropDictByteCap: a dictionary term cut by boundTermsByBytes at
+	// MaxInitialPromptLen, the pre-filter that keeps the stage-2 token
+	// loop from going quadratic on a large custom dictionary.
+	DropDictByteCap = "dict_byte_cap"
+	// DropScreenTokenCap: a screen term cut by stage 1, the real
+	// token-count bound on the screen slice alone
+	// (MaxScreenPromptTokens).
+	DropScreenTokenCap = "screen_token_cap"
+	// DropPromptTokenCap: a term cut by stage 2, the real token-count
+	// bound on the whole prompt (MaxPromptTokens). Drops from the tail,
+	// so screen terms go before any dictionary term is touched.
+	DropPromptTokenCap = "prompt_token_cap"
+)
+
+// Prompt-drop sources.
+const (
+	SourceDictionary = "dictionary"
+	SourceScreen     = "screen"
+)
+
+// PromptDrop is one term that was offered to a context prompt and did
+// not reach whisper, tagged with where it came from and which filter
+// removed it.
+type PromptDrop struct {
+	Term   string `json:"term"`
+	Source string `json:"source"` // SourceDictionary | SourceScreen
+	Stage  string `json:"stage"`  // one of the Drop* constants above
+}
+
+// ContextPromptPlan is the complete record of one context-prompt
+// composition: what was offered, what survived each filter, what
+// whisper actually receives, and the caps that governed it.
+//
+// It is produced by exactly one function
+// (WhisperCpp.composeContextPrompt), which both the mutating
+// SetContextPrompt and the read-only preview go through. That is
+// deliberate: a preview computed by a parallel code path would drift
+// from the prompt whisper really gets and would mislead exactly when
+// someone is using it to debug recognition.
+type ContextPromptPlan struct {
+	// Dictionary and ScreenKeywords are the inputs as offered, before
+	// any trimming.
+	Dictionary     []string `json:"dictionary"`
+	ScreenKeywords []string `json:"screen_keywords"`
+
+	// DictBounded is the dictionary after blank-stripping and the
+	// MaxInitialPromptLen byte pre-filter — what entered the stage-2
+	// token loop.
+	DictBounded []string `json:"dictionary_bounded"`
+
+	// DictApplied and ScreenApplied are the terms that actually reach
+	// whisper, in prompt order (dictionary first, screen second).
+	// ScreenApplied is exactly SetContextPrompt's return value.
+	DictApplied   []string `json:"dictionary_applied"`
+	ScreenApplied []string `json:"screen_applied"`
+
+	// Dropped lists every term that did not make it, in the order the
+	// stages ran: screen pre-filter, then screen token cap, then
+	// dictionary byte cap, then the whole-prompt token cap.
+	Dropped []PromptDrop `json:"dropped"`
+
+	// Prompt is the exact string assigned to whisper's initial_prompt,
+	// and TokenCount is its length measured by whisper_token_count
+	// against the loaded model — not an estimate.
+	Prompt     string `json:"prompt"`
+	TokenCount int    `json:"token_count"`
+
+	// The two caps that governed this composition, echoed so a consumer
+	// can render "N of M tokens" without hardcoding them.
+	MaxScreenPromptTokens int `json:"max_screen_prompt_tokens"`
+	MaxPromptTokens       int `json:"max_prompt_tokens"`
+}
+
+// NonNil returns a copy of the plan with every nil slice replaced by an
+// empty one, so JSON encoding always yields arrays rather than nulls.
+// Go callers should use the plan as-is (nil is meaningful there — it is
+// what SetContextPrompt returns when no screen term survived); this
+// exists for the C-ABI boundary, where a consumer decoding `[]` is
+// simpler than one decoding `null`.
+func (p ContextPromptPlan) NonNil() ContextPromptPlan {
+	if p.Dictionary == nil {
+		p.Dictionary = []string{}
+	}
+	if p.ScreenKeywords == nil {
+		p.ScreenKeywords = []string{}
+	}
+	if p.DictBounded == nil {
+		p.DictBounded = []string{}
+	}
+	if p.DictApplied == nil {
+		p.DictApplied = []string{}
+	}
+	if p.ScreenApplied == nil {
+		p.ScreenApplied = []string{}
+	}
+	if p.Dropped == nil {
+		p.Dropped = []PromptDrop{}
+	}
+	return p
+}
+
+// blankTermDrops reports the entries of terms that cleanTerms discards
+// for being blank once trimmed.
+func blankTermDrops(terms []string, source string) []PromptDrop {
+	var drops []PromptDrop
+	for _, t := range terms {
+		if strings.TrimSpace(t) == "" {
+			drops = append(drops, PromptDrop{Term: t, Source: source, Stage: DropEmptyTerm})
+		}
+	}
+	return drops
+}
+
+// screenPreFilterDrops explains which of screenTerms ContextPrompt
+// discarded, given the slice it kept. It classifies rather than
+// re-implements: `kept` is ContextPrompt's own output and is always an
+// order-preserving subsequence of the non-blank screenTerms, so a
+// single walk identifies the drops, and each one is labelled by
+// checking the two conditions ContextPrompt can reject on (already
+// covered by the dictionary, or a repeat of an earlier screen term) —
+// anything else was cut by a byte cap.
+func screenPreFilterDrops(dictTerms, screenTerms, kept []string) []PromptDrop {
+	dictSeen := make(map[string]struct{}, len(dictTerms))
+	for _, t := range dictTerms {
+		if t = strings.TrimSpace(t); t != "" {
+			dictSeen[strings.ToLower(t)] = struct{}{}
+		}
+	}
+
+	var drops []PromptDrop
+	screenSeen := make(map[string]struct{}, len(screenTerms))
+	k := 0
+	for _, raw := range screenTerms {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			drops = append(drops, PromptDrop{Term: raw, Source: SourceScreen, Stage: DropEmptyTerm})
+			continue
+		}
+		if k < len(kept) && kept[k] == t {
+			k++
+			screenSeen[strings.ToLower(t)] = struct{}{}
+			continue
+		}
+		key := strings.ToLower(t)
+		stage := DropBytePreFilter
+		if _, dup := dictSeen[key]; dup {
+			stage = DropDuplicateOfDictionary
+		} else if _, dup := screenSeen[key]; dup {
+			stage = DropDuplicate
+		}
+		drops = append(drops, PromptDrop{Term: t, Source: SourceScreen, Stage: stage})
+	}
+	return drops
+}

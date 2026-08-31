@@ -75,6 +75,15 @@ type Pipeline struct {
 	// The window TEXT they came from is deliberately never stored.
 	ScreenKeywords []string
 
+	// WhisperPrompt is the exact initial_prompt this capture handed to
+	// the transcriber, and WhisperPromptTokens its real token count.
+	// Recorded in the session manifest because nothing else records it:
+	// the manifest's existing `prompt` artifact is the LLM cleanup
+	// prompt, so before this the string that actually biased
+	// recognition was invisible after the fact.
+	WhisperPrompt       string
+	WhisperPromptTokens int
+
 	ChunkerOpts ChunkerOpts
 }
 

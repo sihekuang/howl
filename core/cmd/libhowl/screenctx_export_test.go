@@ -3,10 +3,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/voice-keyboard/core/internal/config"
+	"github.com/voice-keyboard/core/internal/pipeline"
+	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 func TestSetScreenKeywords_StoresOnEngine(t *testing.T) {
@@ -148,4 +152,110 @@ func resetEngineForTest(t *testing.T) {
 	e.screenExtractor = nil
 	e.screenExtractorKey = extractorCacheKey{}
 	e.extractorMu.Unlock()
+}
+
+// fakePromptSetter is a Transcriber that also implements
+// transcribe.PromptSetter, so the preview export can be exercised
+// without loading a whisper model. It records whether the MUTATING
+// call was made — the preview must never make it.
+type fakePromptSetter struct {
+	setCalls     int
+	previewCalls int
+	lastDict     []string
+	lastScreen   []string
+}
+
+func (f *fakePromptSetter) Transcribe(context.Context, []float32) (string, error) { return "", nil }
+func (f *fakePromptSetter) Close() error                                          { return nil }
+
+func (f *fakePromptSetter) SetContextPrompt(dictTerms, screenTerms []string) []string {
+	f.setCalls++
+	return screenTerms
+}
+
+func (f *fakePromptSetter) PreviewContextPrompt(dictTerms, screenTerms []string) transcribe.ContextPromptPlan {
+	f.previewCalls++
+	f.lastDict = dictTerms
+	f.lastScreen = screenTerms
+	return transcribe.ContextPromptPlan{
+		Dictionary:            dictTerms,
+		ScreenKeywords:        screenTerms,
+		DictBounded:           dictTerms,
+		DictApplied:           dictTerms,
+		ScreenApplied:         screenTerms,
+		Prompt:                "MCP, SpeakerGate",
+		TokenCount:            7,
+		MaxScreenPromptTokens: transcribe.MaxScreenPromptTokens,
+		MaxPromptTokens:       transcribe.MaxPromptTokens,
+	}
+}
+
+// TestScreenContextPreview_ReturnsPlanWithoutMutating is the export's
+// contract: it composes from the engine's CURRENT dictionary and screen
+// keywords, returns the whole plan as JSON, and does not re-bias the
+// transcriber on the way through.
+func TestScreenContextPreview_ReturnsPlanWithoutMutating(t *testing.T) {
+	resetEngineForTest(t)
+	fake := &fakePromptSetter{}
+	e := getEngine()
+	e.mu.Lock()
+	e.cfg.CustomDict = []string{"MCP"}
+	e.screenKeywords = []string{"SpeakerGate"}
+	e.pipeline = pipeline.New(fake, nil, nil)
+	e.mu.Unlock()
+	t.Cleanup(func() {
+		e.mu.Lock()
+		e.pipeline = nil
+		e.mu.Unlock()
+	})
+
+	out := screenContextPreviewJSON()
+
+	if fake.setCalls != 0 {
+		t.Errorf("preview called SetContextPrompt %d time(s); it must not mutate engine state", fake.setCalls)
+	}
+	if fake.previewCalls != 1 {
+		t.Fatalf("PreviewContextPrompt called %d time(s), want 1", fake.previewCalls)
+	}
+	if len(fake.lastDict) != 1 || fake.lastDict[0] != "MCP" {
+		t.Errorf("composed from dictionary %v, want [MCP]", fake.lastDict)
+	}
+	if len(fake.lastScreen) != 1 || fake.lastScreen[0] != "SpeakerGate" {
+		t.Errorf("composed from screen keywords %v, want [SpeakerGate]", fake.lastScreen)
+	}
+
+	var got transcribe.ContextPromptPlan
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("response is not JSON: %v (%s)", err, out)
+	}
+	if got.Prompt != "MCP, SpeakerGate" || got.TokenCount != 7 {
+		t.Errorf("prompt/token_count = %q/%d, want %q/7", got.Prompt, got.TokenCount, "MCP, SpeakerGate")
+	}
+	if got.MaxPromptTokens != transcribe.MaxPromptTokens || got.MaxScreenPromptTokens != transcribe.MaxScreenPromptTokens {
+		t.Errorf("caps = (%d, %d), want (%d, %d)", got.MaxScreenPromptTokens, got.MaxPromptTokens, transcribe.MaxScreenPromptTokens, transcribe.MaxPromptTokens)
+	}
+	// Nil slices must encode as [], not null — the Swift side decodes
+	// arrays unconditionally.
+	if !strings.Contains(out, `"dropped":[]`) {
+		t.Errorf("expected an empty dropped array, got %s", out)
+	}
+}
+
+func TestScreenContextPreview_NoPipelineReturnsErrorJSON(t *testing.T) {
+	resetEngineForTest(t)
+	e := getEngine()
+	e.mu.Lock()
+	e.pipeline = nil
+	e.mu.Unlock()
+
+	out := screenContextPreviewJSON()
+	var resp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("response is not JSON: %v (%s)", err, out)
+	}
+	if resp.Error == "" {
+		t.Errorf("expected an error field, got %s", out)
+	}
 }

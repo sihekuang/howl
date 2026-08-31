@@ -29,10 +29,11 @@ func (f *fakeCleaner) Clean(_ context.Context, raw string, preserveTerms []strin
 
 func TestExtract_SanitizesProviderResponse(t *testing.T) {
 	f := &fakeCleaner{out: "- SpeakerGate\n- DeepFilterNet\n- speakergate"}
-	got, err := Extract(context.Background(), f, "some window text", nil)
+	res, err := Extract(context.Background(), f, "some window text", nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
+	got := res.Keywords
 	want := []string{"SpeakerGate", "DeepFilterNet"}
 	if len(got) != len(want) {
 		t.Fatalf("Extract() = %v, want %v", got, want)
@@ -68,12 +69,15 @@ func TestExtract_PassesDictionaryAsPreserveTerms(t *testing.T) {
 
 func TestExtract_EmptyTextSkipsProviderCall(t *testing.T) {
 	f := &fakeCleaner{out: "should not be called"}
-	got, err := Extract(context.Background(), f, "   \n\t ", nil)
+	res, err := Extract(context.Background(), f, "   \n\t ", nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if got != nil {
-		t.Errorf("Extract() = %v, want nil", got)
+	if res.Keywords != nil {
+		t.Errorf("Extract() keywords = %v, want nil", res.Keywords)
+	}
+	if res.Raw != "" {
+		t.Errorf("Extract() raw = %q, want empty", res.Raw)
 	}
 	if f.calls != 0 {
 		t.Errorf("provider called %d times for empty text, want 0", f.calls)
@@ -82,12 +86,12 @@ func TestExtract_EmptyTextSkipsProviderCall(t *testing.T) {
 
 func TestExtract_PropagatesProviderError(t *testing.T) {
 	f := &fakeCleaner{err: errors.New("network down")}
-	got, err := Extract(context.Background(), f, "text", nil)
+	res, err := Extract(context.Background(), f, "text", nil)
 	if err == nil {
 		t.Fatal("Extract() error = nil, want provider error")
 	}
-	if got != nil {
-		t.Errorf("Extract() = %v, want nil on error", got)
+	if res.Keywords != nil {
+		t.Errorf("Extract() keywords = %v, want nil on error", res.Keywords)
 	}
 }
 
@@ -119,5 +123,29 @@ func TestNewExtractor_UnknownProviderErrors(t *testing.T) {
 	_, err := NewExtractor(config.Config{LLMProvider: "nope"})
 	if err == nil {
 		t.Fatal("NewExtractor() error = nil, want unknown-provider error")
+	}
+}
+
+// TestExtract_ReportsRawResponseAndDrops covers the diagnostic half of
+// the result: the model's response is returned verbatim and every
+// sanitizer reject is accounted for.
+func TestExtract_ReportsRawResponseAndDrops(t *testing.T) {
+	const raw = "SpeakerGate, speakergate, 12345, DeepFilterNet"
+	f := &fakeCleaner{out: raw}
+	res, err := Extract(context.Background(), f, "some window text", nil)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if res.Raw != raw {
+		t.Errorf("Raw = %q, want %q", res.Raw, raw)
+	}
+	if len(res.Keywords) != 2 {
+		t.Fatalf("Keywords = %v, want 2 terms", res.Keywords)
+	}
+	if len(res.Dropped) != 2 {
+		t.Fatalf("Dropped = %+v, want the duplicate and the numeric token", res.Dropped)
+	}
+	if res.Dropped[0].Reason != DropDuplicate || res.Dropped[1].Reason != DropNumeric {
+		t.Errorf("Dropped reasons = %q/%q, want %q/%q", res.Dropped[0].Reason, res.Dropped[1].Reason, DropDuplicate, DropNumeric)
 	}
 }

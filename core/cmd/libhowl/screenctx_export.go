@@ -14,13 +14,22 @@ import (
 	"github.com/voice-keyboard/core/internal/config"
 	"github.com/voice-keyboard/core/internal/llm"
 	"github.com/voice-keyboard/core/internal/screenctx"
+	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 // howl_extract_keywords derives whisper biasing keywords from the text
 // of the user's focused window, using the configured LLM provider.
 //
 // Input:  {"text": "..."}
-// Output: {"keywords": ["...", ...]} or {"error": "..."}
+// Output: {"raw": "...", "keywords": [...], "dropped": [{"term": "...", "reason": "..."}, ...]}
+// or:     {"error": "..."}
+//
+// `raw` is the provider's response verbatim and `dropped` explains
+// every candidate the sanitizer rejected — together they are the only
+// way to tell "the model found nothing" apart from "the model found
+// plenty and the sanitizer threw it all away". Diagnostic payload
+// returned across the ABI for live display; neither is logged or
+// written to a session file.
 //
 // BLOCKING — this makes a network call. Callers MUST invoke it off the
 // main thread. It deliberately does not mutate engine state and does
@@ -67,14 +76,20 @@ func extractKeywordsJSON(in string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), screenctx.ExtractTimeout)
 	defer cancel()
 
-	kws, err := screenctx.Extract(ctx, cleaner, req.Text, cfg.CustomDict)
+	res, err := screenctx.Extract(ctx, cleaner, req.Text, cfg.CustomDict)
 	if err != nil {
 		return errorJSON(err.Error())
 	}
-	if kws == nil {
-		kws = []string{}
+	// Nil slices become [] so the caller always decodes arrays. `raw`
+	// and `dropped` are additive: `keywords` keeps the shape and
+	// meaning it has always had.
+	if res.Keywords == nil {
+		res.Keywords = []string{}
 	}
-	out, err := json.Marshal(map[string][]string{"keywords": kws})
+	if res.Dropped == nil {
+		res.Dropped = []screenctx.DroppedTerm{}
+	}
+	out, err := json.Marshal(res)
 	if err != nil {
 		return errorJSON(err.Error())
 	}
@@ -134,6 +149,76 @@ func (e *engine) screenExtractorFor(cfg config.Config) (llm.Cleaner, error) {
 	e.screenExtractorKey = key
 	e.extractorMu.Unlock()
 	return cleaner, nil
+}
+
+// howl_screen_context_preview reports exactly how the next capture's
+// whisper initial_prompt would be composed from the engine's current
+// custom dictionary and stored screen keywords — the before/after of
+// the whole biasing chain, up to and including the string whisper
+// actually receives.
+//
+// Takes no argument: the inputs are engine state, not caller state.
+// Mirrors howl_list_presets' no-arg/JSON-out shape rather than the
+// JSON-in/JSON-out shape of the exports above, which need a request
+// body.
+//
+// Output (all arrays always present, never null):
+//
+//	{"dictionary": [...],           // custom dictionary as configured
+//	 "screen_keywords": [...],      // keywords as offered by the host
+//	 "dictionary_bounded": [...],   // dictionary after the byte pre-filter
+//	 "dictionary_applied": [...],   // dictionary terms in the prompt
+//	 "screen_applied": [...],       // screen terms in the prompt
+//	 "dropped": [{"term": "...", "source": "...", "stage": "..."}, ...],
+//	 "prompt": "...",               // the exact initial_prompt
+//	 "token_count": 0,              // whisper_token_count of that prompt
+//	 "max_screen_prompt_tokens": 96,
+//	 "max_prompt_tokens": 224}
+//
+// or {"error": "..."}.
+//
+// Instant; no network. Read-only — it composes through the same code
+// SetContextPrompt uses but never assigns the prompt, so calling it
+// cannot change what the next capture sees. Free the result with
+// howl_free_string.
+//
+//export howl_screen_context_preview
+func howl_screen_context_preview() *C.char {
+	return C.CString(screenContextPreviewJSON())
+}
+
+// screenContextPreviewJSON is the testable body of
+// howl_screen_context_preview.
+func screenContextPreviewJSON() string {
+	e := getEngine()
+	if e == nil {
+		return errorJSON("engine not initialized")
+	}
+	// Snapshot under e.mu and copy the slices: the composition below
+	// walks them, and howl_configure / howl_set_screen_keywords can
+	// replace either one concurrently.
+	e.mu.Lock()
+	pipe := e.pipeline
+	dict := append([]string(nil), e.cfg.CustomDict...)
+	screen := append([]string(nil), e.screenKeywords...)
+	e.mu.Unlock()
+
+	if pipe == nil {
+		return errorJSON("pipeline not configured")
+	}
+	ps, ok := pipe.Transcriber.(transcribe.PromptSetter)
+	if !ok {
+		return errorJSON("transcriber does not support context prompts")
+	}
+
+	// NonNil so every array is an array on the wire; the plan's Go-side
+	// nils are meaningful (SetContextPrompt returns nil for "no screen
+	// term survived") but make for a fiddlier decode.
+	out, err := json.Marshal(ps.PreviewContextPrompt(dict, screen).NonNil())
+	if err != nil {
+		return errorJSON(err.Error())
+	}
+	return string(out)
 }
 
 // setScreenKeywordsJSON is the testable body of howl_set_screen_keywords.

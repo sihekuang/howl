@@ -43,6 +43,16 @@ type Manifest struct {
 	// ScreenKeywords are the screen-derived terms that reached whisper's
 	// initial prompt. omitempty so existing manifests are unaffected.
 	ScreenKeywords []string `json:"screen_keywords,omitempty"`
+	// WhisperPrompt is the exact initial_prompt handed to the ASR for
+	// this dictation — the custom dictionary plus the surviving screen
+	// keywords, after token-budget trimming. Distinct from
+	// Transcripts.Prompt, which is the LLM CLEANUP prompt; before this
+	// field the ASR prompt was recorded nowhere. WhisperPromptTokens is
+	// its length as whisper_token_count measured it against the loaded
+	// model, not an estimate. Both omitempty so existing manifests are
+	// unaffected.
+	WhisperPrompt       string `json:"whisper_prompt,omitempty"`
+	WhisperPromptTokens int    `json:"whisper_prompt_tokens,omitempty"`
 }
 
 // StageEntry describes one captured stage. WavRel is the path of the

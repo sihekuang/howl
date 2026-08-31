@@ -210,9 +210,27 @@ func howl_start_capture() C.int {
 	// value, not e.screenKeywords (the offered list) — the return value
 	// is what actually survived whisper's token-budget trimming, which
 	// is what the session manifest must reflect.
+	// The preview composes the same plan SetContextPrompt is about to
+	// apply — same pure function of the same two inputs, pinned by
+	// TestWhisperCpp_PreviewMatchesSetContextPrompt — so the prompt and
+	// token count stamped below describe exactly the prompt the line
+	// after it installs. It is a second composition rather than a
+	// second implementation; the cost is a handful of extra
+	// whisper_token_count calls on an already byte-bounded string.
+	//
+	// ScreenKeywords still comes from SetContextPrompt's return value
+	// rather than the plan, deliberately: that return is the reviewed
+	// contract this manifest field has always been stamped from.
 	if ps, ok := pipe.Transcriber.(transcribe.PromptSetter); ok {
+		plan := ps.PreviewContextPrompt(e.cfg.CustomDict, e.screenKeywords)
 		pipe.ScreenKeywords = ps.SetContextPrompt(e.cfg.CustomDict, e.screenKeywords)
-		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s)", len(pipe.ScreenKeywords))
+		// The whisper prompt is recorded for the session manifest only.
+		// It contains no window text — just dictionary and keyword
+		// terms — and is deliberately NOT logged: term lists derived
+		// from the focused window do not belong in /tmp/howl.log.
+		pipe.WhisperPrompt = plan.Prompt
+		pipe.WhisperPromptTokens = plan.TokenCount
+		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s); whisper prompt is %d token(s)", len(pipe.ScreenKeywords), plan.TokenCount)
 	}
 	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
@@ -752,7 +770,10 @@ func howl_clear_sessions() C.int {
 // Bumping the minor digit is safe precisely because nothing currently
 // reads it; if a Swift-side check is added later, it should assert on
 // the major version only, per the bump policy above.
-const abiVersion = "1.1.0"
+//
+// 1.1.0 -> 1.2.0: added howl_screen_context_preview. See
+// docs/decisions.md, 2026-08-30.
+const abiVersion = "1.2.0"
 
 // howl_abi_version returns the libhowl ABI semver. Caller frees via
 // howl_free_string. Never returns NULL.

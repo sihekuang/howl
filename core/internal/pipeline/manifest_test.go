@@ -157,3 +157,34 @@ func TestWriteSessionManifest_NonTSEChunkSkipsSimilarity(t *testing.T) {
 		t.Errorf("expected nil TSESimilarity for non-tse stage, got %v", *m.Stages[0].TSESimilarity)
 	}
 }
+
+// TestWriteSessionManifest_RoundTripsWhisperPrompt guards the
+// p.WhisperPrompt/WhisperPromptTokens -> sessions.Manifest wiring. The
+// manifest's existing `prompt` field is the LLM CLEANUP prompt
+// (transcripts.prompt -> prompt.txt); this is the ASR initial_prompt,
+// which was previously recorded nowhere at all.
+func TestWriteSessionManifest_RoundTripsWhisperPrompt(t *testing.T) {
+	dir := t.TempDir()
+	p := New(nil, nil, nil)
+	p.WhisperPrompt = "MCP, SpeakerGate"
+	p.WhisperPromptTokens = 7
+
+	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
+		t.Fatalf("WriteSessionManifest: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatalf("read session.json: %v", err)
+	}
+	var m sessions.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m.WhisperPrompt != "MCP, SpeakerGate" {
+		t.Errorf("WhisperPrompt = %q, want %q", m.WhisperPrompt, "MCP, SpeakerGate")
+	}
+	if m.WhisperPromptTokens != 7 {
+		t.Errorf("WhisperPromptTokens = %d, want 7", m.WhisperPromptTokens)
+	}
+}

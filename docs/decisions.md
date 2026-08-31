@@ -132,3 +132,23 @@ under downsampling, and the OCR path exists precisely for the apps AX cannot rea
 - Apple, "Capturing screen content in macOS" (sample multiplies by scale factor) — https://developer.apple.com/documentation/ScreenCaptureKit/capturing-screen-content-in-macos
 - Apple Developer Forums, "Take correctly sized screenshots with ScreenCaptureKit" (`SCContentFilter.pointPixelScale`) — https://developer.apple.com/forums/thread/765360
 - Apple Developer Forums, "Why is the image captured by SCScreenshotManager.captureImage so blurry?" (same points/pixels root cause) — https://developer.apple.com/forums/thread/739593
+
+## 2026-08-30 — libhowl ABI version: bump to 1.2.0 for `howl_screen_context_preview`
+
+**Decision:** Bump `abiVersion` in `core/cmd/libhowl/exports.go` from `1.1.0` to
+`1.2.0` as part of adding `howl_screen_context_preview`.
+
+**Trigger:** The screen-context diagnostic work adds one new C-ABI export so the
+Mac app can show, live, exactly how whisper's `initial_prompt` was composed.
+
+**Basis:** Same convention as the 2026-08-29 entry above, applied unchanged: the
+bump policy sits directly above the constant it governs, and "minor: a new
+function is added (additive, back-compat)" is exactly this case. No existing
+signature changed. `howl_extract_keywords`' response object gained two additive
+keys (`raw`, `dropped`) alongside the unchanged `keywords`, which is additive on
+the JSON payload, not on the C surface. Still no Swift consumer reads
+`howl_abi_version`, so moving the minor digit cannot break the host.
+
+**Sources:**
+- `core/cmd/libhowl/exports.go` — the bump policy and the constant
+- `core/cmd/libhowl/screenctx_export.go` — the new export

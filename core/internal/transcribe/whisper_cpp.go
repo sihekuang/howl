@@ -225,12 +225,64 @@ func (w *WhisperCpp) tokenCount(text string) int {
 // pipeline object shared across captures for the session manifest —
 // can end up recorded against the wrong capture. See the comment at
 // the howl_start_capture call site.
+//
+// The composition itself lives in composeContextPrompt, which
+// PreviewContextPrompt also calls. This method is only that plus the
+// assignment, so the diagnostic preview and the real prompt can never
+// disagree.
 func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string {
+	plan := w.composeContextPrompt(dictTerms, screenTerms)
+	w.mu.Lock()
+	w.initialPrompt = plan.Prompt
+	w.mu.Unlock()
+	return plan.ScreenApplied
+}
+
+// PreviewContextPrompt composes exactly what SetContextPrompt would
+// compose for the same inputs and returns the full plan WITHOUT
+// touching w.initialPrompt. Both go through composeContextPrompt, so
+// the preview cannot drift from what whisper actually receives — that
+// equivalence is the entire reason this method exists, and it is
+// pinned by TestWhisperCpp_PreviewMatchesSetContextPrompt.
+//
+// It does take w.mu, transiently, inside each tokenCount call — so it
+// is safe alongside an in-flight Transcribe for the same reason
+// SetContextPrompt is, but it is NOT free: it runs the same
+// whisper_token_count work. Call it for diagnostics, not per frame.
+func (w *WhisperCpp) PreviewContextPrompt(dictTerms, screenTerms []string) ContextPromptPlan {
+	return w.composeContextPrompt(dictTerms, screenTerms)
+}
+
+// composeContextPrompt is the single composition behind both
+// SetContextPrompt and PreviewContextPrompt. Pure with respect to
+// WhisperCpp's mutable state: it reads the model (via tokenCount) but
+// assigns nothing.
+//
+// The trim logic below is the original SetContextPrompt body,
+// unchanged, with a drop recorded after each stage. It must stay the
+// only copy: a preview computed by a parallel path would disagree with
+// the prompt whisper really gets, and would disagree exactly when
+// someone is using it to work out why recognition went wrong.
+func (w *WhisperCpp) composeContextPrompt(dictTerms, screenTerms []string) ContextPromptPlan {
+	plan := ContextPromptPlan{
+		Dictionary:            dictTerms,
+		ScreenKeywords:        screenTerms,
+		MaxScreenPromptTokens: MaxScreenPromptTokens,
+		MaxPromptTokens:       MaxPromptTokens,
+	}
+
 	_, screen := ContextPrompt(dictTerms, screenTerms)
 	dict := cleanTerms(dictTerms)
 
+	plan.Dropped = append(plan.Dropped, blankTermDrops(dictTerms, SourceDictionary)...)
+	plan.Dropped = append(plan.Dropped, screenPreFilterDrops(dictTerms, screenTerms, screen)...)
+
+	screenOffered := screen
 	for len(screen) > 0 && w.tokenCount(strings.Join(screen, ", ")) > MaxScreenPromptTokens {
 		screen = screen[:len(screen)-1]
+	}
+	for _, t := range screenOffered[len(screen):] {
+		plan.Dropped = append(plan.Dropped, PromptDrop{Term: t, Source: SourceScreen, Stage: DropScreenTokenCap})
 	}
 
 	// Byte-bound `dict` before the token-count loop below, unlike
@@ -249,27 +301,47 @@ func (w *WhisperCpp) SetContextPrompt(dictTerms, screenTerms []string) []string 
 	// replacement for the token-count loop: byte length and token
 	// count aren't identical, so the loop below remains the
 	// authoritative bound.
-	dict = boundTermsByBytes(dict, MaxInitialPromptLen)
+	dictBounded := boundTermsByBytes(dict, MaxInitialPromptLen)
+	for _, t := range dict[len(dictBounded):] {
+		plan.Dropped = append(plan.Dropped, PromptDrop{Term: t, Source: SourceDictionary, Stage: DropDictByteCap})
+	}
+	plan.DictBounded = dictBounded
 
-	all := make([]string, 0, len(dict)+len(screen))
-	all = append(all, dict...)
+	all := make([]string, 0, len(dictBounded)+len(screen))
+	all = append(all, dictBounded...)
 	all = append(all, screen...)
+	allOffered := all
 	for len(all) > 0 && w.tokenCount(strings.Join(all, ", ")) > MaxPromptTokens {
 		all = all[:len(all)-1]
 	}
-
-	w.mu.Lock()
-	w.initialPrompt = strings.Join(all, ", ")
-	w.mu.Unlock()
-
-	// dict is always the head of all and screen the tail (see the
-	// append order above), and both trim loops only ever shrink from
-	// the tail — so whatever remains of all past len(dict) is exactly
-	// the screen terms that survived both stages, in original order.
-	if len(all) <= len(dict) {
-		return nil
+	for i := len(all); i < len(allOffered); i++ {
+		source := SourceScreen
+		if i < len(dictBounded) {
+			source = SourceDictionary
+		}
+		plan.Dropped = append(plan.Dropped, PromptDrop{Term: allOffered[i], Source: source, Stage: DropPromptTokenCap})
 	}
-	return all[len(dict):]
+
+	plan.Prompt = strings.Join(all, ", ")
+	// One extra whisper_token_count on an already-bounded string
+	// (<= MaxInitialPromptLen bytes), so the plan can report the real
+	// size of the prompt rather than an estimate. Deliberately not
+	// folded into the loop condition above: that loop is the reviewed,
+	// load-bearing trim and is left byte-for-byte as it was.
+	plan.TokenCount = w.tokenCount(plan.Prompt)
+
+	// dictBounded is always the head of `all` and screen the tail (see
+	// the append order above), and both trim loops only ever shrink
+	// from the tail — so whatever remains of `all` past
+	// len(dictBounded) is exactly the screen terms that survived both
+	// stages, in original order.
+	if len(all) <= len(dictBounded) {
+		plan.DictApplied = all
+	} else {
+		plan.DictApplied = all[:len(dictBounded)]
+		plan.ScreenApplied = all[len(dictBounded):]
+	}
+	return plan
 }
 
 func (w *WhisperCpp) Close() error {

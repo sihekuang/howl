@@ -152,3 +152,24 @@ func (n nonClosingTranscriber) SetContextPrompt(dictTerms, screenTerms []string)
 	}
 	return nil
 }
+
+// PreviewContextPrompt forwards to the wrapped transcriber when it
+// supports re-biasing. Explicit for the same reason SetContextPrompt
+// above is: embedding transcribe.Transcriber (an interface) promotes
+// only the methods THAT interface declares, so without this the
+// PromptSetter assertion would fail on a replay-built pipeline even
+// when the wrapped concrete transcriber implements it.
+//
+// The zero plan returned when the wrapped transcriber is not a
+// PromptSetter still carries the caps: they are compile-time constants,
+// and a diagnostic reporting a budget of 0 tokens would be a worse lie
+// than reporting an empty prompt against the real budget.
+func (n nonClosingTranscriber) PreviewContextPrompt(dictTerms, screenTerms []string) transcribe.ContextPromptPlan {
+	if ps, ok := n.Transcriber.(transcribe.PromptSetter); ok {
+		return ps.PreviewContextPrompt(dictTerms, screenTerms)
+	}
+	return transcribe.ContextPromptPlan{
+		MaxScreenPromptTokens: transcribe.MaxScreenPromptTokens,
+		MaxPromptTokens:       transcribe.MaxPromptTokens,
+	}
+}
