@@ -19,9 +19,17 @@ import SwiftUI
 /// written to disk.
 ///
 /// The captured SCREENSHOT is the deliberate exception: only its byte
-/// count is ever recorded, so this panel can report that a capture
-/// happened and how big it was, but can never show the picture back.
-/// See `ScreenContextActivity.capturedImageBytes`.
+/// count and pixel dimensions are ever recorded, so this panel can
+/// report that a capture happened, how big it was and what resolution
+/// the model saw, but can never show the picture back. See
+/// `ScreenContextActivity.capturedImageBytes`.
+///
+/// Both capture paths are reachable in normal operation — a screenshot
+/// to a vision model, or accessibility text when there are no pixels to
+/// send — so every row that describes a capture names which one it was,
+/// and the Captured row spells out why the fallback happened. "This
+/// model can't read images" and "the screenshot failed" are the two
+/// reasons, and they call for opposite fixes.
 struct ScreenContextInspectorView: View {
     let engine: any CoreEngine
     var activityStore: ScreenContextActivityStore
@@ -78,6 +86,9 @@ struct ScreenContextInspectorView: View {
                 rowLabel("Captured")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(capturedSummary(activity)).font(.callout)
+                    if let note = fallbackNote(activity) {
+                        Text(note).font(.caption2).foregroundStyle(.secondary)
+                    }
                     if let note = truncationNote(activity) {
                         Text(note).font(.caption2).foregroundStyle(.secondary)
                     }
@@ -100,11 +111,19 @@ struct ScreenContextInspectorView: View {
     private func capturedSummary(_ activity: ScreenContextActivity) -> String {
         let app = activity.bundleID ?? "unknown app"
         // The screenshot path has no text to measure — only a payload
-        // size. The image itself is deliberately never retained, so a
-        // byte count is all there is to show, and all there should be.
+        // size and the dimensions it was encoded at. The image itself is
+        // deliberately never retained, so those two numbers are all
+        // there is to show, and all there should be.
         if let bytes = activity.capturedImageBytes {
-            let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-            return "\(app) · \(ScreenContextSource.screenshot.shortLabel) · \(size)"
+            var parts = [
+                app,
+                activity.source?.shortLabel ?? ScreenContextSource.screenshot.shortLabel,
+                ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+            ]
+            if let pixels = activity.capturedImagePixelSize {
+                parts.append("\(pixels.width)×\(pixels.height)")
+            }
+            return parts.joined(separator: " · ")
         }
         guard activity.capturedText != nil, let length = activity.capturedTextLength else {
             return unavailableCapturedReason(activity)
@@ -120,11 +139,35 @@ struct ScreenContextInspectorView: View {
         case .skippedPreReadDenylist, .skippedPostReadDenylist:
             return "Skipped — \(activity.bundleID ?? "this app") is on the never-read list"
         case .noReadableWindowText:
-            return "No screenshot and no readable window text"
+            // Exactly one fact: the accessibility read came up empty.
+            // WHY the screenshot path wasn't used instead is the
+            // fallback note's job, and the two are different problems.
+            return "No readable window text"
         case .superseded:
             return "Superseded before it finished"
         case .cacheHit, .extractionSucceeded, .extractionFailed:
             return "—"
+        }
+    }
+
+    /// Why this refresh used accessibility text rather than a
+    /// screenshot. Nil on the primary path, where there is nothing to
+    /// explain.
+    ///
+    /// This is the row that answers "why are my keywords worse than I
+    /// expected" for the two states that are otherwise invisible: a
+    /// model that cannot see, and a screenshot that never happened.
+    /// They look identical in the keyword list and have opposite fixes.
+    private func fallbackNote(_ activity: ScreenContextActivity) -> String? {
+        switch activity.fallbackReason {
+        case .noVision:
+            return "This model can't read images, so Howl used accessibility text instead. "
+                + "Switch to a vision model to use screenshots."
+        case .screenshotUnavailable:
+            return "No screenshot was available, so Howl used accessibility text instead. "
+                + "If this is every window, check Screen Recording in System Settings › Privacy & Security."
+        case nil:
+            return nil
         }
     }
 
@@ -272,12 +315,20 @@ struct ScreenContextInspectorView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Spacer()
-                    Text(activity.outcome.label)
+                    Text(recentLabel(activity))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
+    }
+
+    /// Outcome plus, when the refresh fell back, why — so the list
+    /// distinguishes "AX found nothing" from "there was no screenshot
+    /// AND AX found nothing" at a glance.
+    private func recentLabel(_ activity: ScreenContextActivity) -> String {
+        guard let reason = activity.fallbackReason else { return activity.outcome.label }
+        return "\(activity.outcome.label) · \(reason.shortLabel)"
     }
 
     // MARK: - Shared row chrome
@@ -342,6 +393,15 @@ private extension ScreenContextSource {
         switch self {
         case .screenshot: return "screenshot"
         case .accessibility: return "AX text"
+        }
+    }
+}
+
+private extension ScreenContextFallbackReason {
+    var shortLabel: String {
+        switch self {
+        case .noVision: return "no vision"
+        case .screenshotUnavailable: return "no screenshot"
         }
     }
 }
