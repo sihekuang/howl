@@ -30,21 +30,21 @@ import (
 // instant — budget ~30s when both servers are up.
 
 const (
-	// liveExtractTimeout replaces ExtractImageTimeout (12s) for these
-	// tests, and ONLY the timeout differs from production: the prompt,
-	// the provider construction, the credentials and the response
-	// handling are all the shipped ones (newExtractor is what
-	// NewImageExtractor calls).
+	// liveExtractTimeout replaces ExtractImageTimeout for these tests,
+	// and ONLY the timeout differs from production: the prompt, the
+	// provider construction, the credentials and the response handling
+	// are all the shipped ones (newExtractor is what NewImageExtractor
+	// calls).
 	//
-	// It is longer because the shipped 12s does not fit the local
-	// models this test can reach. Measured on an M-series laptop
-	// against this fixture: lmstudio/qwen2.5-vl-7b answered in 9–24s,
-	// ollama/qwen3-vl:8b in 45–162s (it is a thinking model and burns
-	// thousands of hidden reasoning tokens before answering). Testing
-	// against a 12s clock would measure the clock, not the pipeline —
-	// and that ExtractImageTimeout is too tight for local vision models
-	// is a finding to act on in production, not one to bake into an
-	// assertion here.
+	// It stays longer than production deliberately. Measured on an
+	// M-series laptop against this fixture: lmstudio/qwen2.5-vl-7b
+	// answered in 9–24s, ollama/qwen3-vl:8b in 45–162s (it is a
+	// thinking model and burns thousands of hidden reasoning tokens
+	// before answering). These measurements are what raised the shipped
+	// ExtractImageTimeout from 12s to 90s. This clock is looser still
+	// so that a slow-but-working model measures the pipeline rather
+	// than the clock — a live test that fails because a local model was
+	// swapping would be noise, not a finding.
 	liveExtractTimeout = 5 * time.Minute
 
 	// liveProbeTimeout bounds the "is anything serving?" check. Short:

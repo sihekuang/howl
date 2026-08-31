@@ -174,3 +174,52 @@ changed one. Still no Swift consumer reads `howl_abi_version`.
 - `core/cmd/libhowl/screenctx_image_export.go` — the new export
 - `docs/superpowers/specs/2026-08-30-vision-screen-context-design.md` — decision 2,
   why the image crosses the ABI as bytes rather than base64 JSON
+
+## 2026-08-31 — Vision extraction timeout: 12s → 90s
+
+**Decision:** Raise `screenctx.ExtractImageTimeout` from 12 seconds to 90 seconds.
+
+**Trigger:** The constant shipped with a comment admitting it was "the one number
+in this file that is a guess rather than a measurement — it should be tuned once
+the Swift side can report real end-to-end latencies." The Part 3 live test
+produced those latencies, and they showed 12s sits below even the *working*
+configuration's worst case: a user on a local vision model would have every
+extraction time out, land in `.failed`, and get no keywords at all — a silent
+failure indistinguishable from "nothing on screen was worth extracting".
+
+**Basis:** Measurement through this exact code path, not external practice. This
+is a hardware- and model-dependent tuning value; no third-party source can know
+what a local vision model costs on this machine, so the repo's own numbers are
+the only relevant evidence.
+
+Measured end-to-end (M-series laptop, production prompt and provider
+construction, `newExtractor` — the same call `NewImageExtractor` makes):
+
+| Model | Latency |
+|---|---|
+| `lmstudio/qwen/qwen2.5-vl-7b` | 1.5–24s |
+| `ollama/qwen3-vl:8b` | 45–162s (thinking model; burns hidden reasoning tokens first) |
+
+90s is deliberately generous rather than fitted to the median, because the cost
+is lopsided. Too short silently kills the feature for local-vision users. Too
+long costs at most ONE hung HTTP call: extraction runs off the dictation path
+entirely, and `ScreenContextCoordinator` cancels the previous in-flight task on
+every new refresh (`ScreenContextCoordinator.swift:381`), so requests cannot pile
+up. Late keywords are not wasted either — the generation counter drops them if
+the user has moved on, and they still bias the next dictation if the user has
+not. 90s covers roughly 4x the working model's observed worst case without
+covering `qwen3-vl:8b`'s 162s tail, which is moot: see the canary finding below.
+
+**Not fixed by this:** `.failed` still does not fall back to the accessibility
+text path, and that is deliberate. The line is structural-vs-transient: fall back
+when the pixel path is *structurally* unavailable (no Screen Recording
+permission, no vision capability — both persistent states), not when it is a
+*transient* failure the next focus change retries for free. Falling back on
+`.failed` would double the work on every blip and would have masked this timeout
+bug rather than surfacing it.
+
+**Sources:**
+- `core/internal/screenctx/vision_live_test.go` — the measurements
+- `core/internal/screenctx/vision.go` — the constant and its reasoning
+- `mac/Packages/HowlCore/Sources/HowlCore/ScreenContext/ScreenContextCoordinator.swift:381`
+  — in-flight cancellation, which is what bounds the cost of a long timeout

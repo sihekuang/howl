@@ -13,18 +13,28 @@ import (
 )
 
 const (
-	// ExtractImageTimeout bounds the vision provider call. Longer than
-	// ExtractTimeout because a vision request is a different animal: it
-	// uploads a downscaled screenshot rather than a few KB of text, and
-	// a local vision model (Ollama/LM Studio) JIT-loads a projector on
-	// top of the language model on the first request after idle. Still
-	// short enough that the result cannot outlive the user's interest
-	// in the window by much.
+	// ExtractImageTimeout bounds the vision provider call. Far longer
+	// than ExtractTimeout because a vision request is a different
+	// animal: it uploads a downscaled screenshot rather than a few KB of
+	// text, and a local vision model (Ollama/LM Studio) JIT-loads a
+	// projector on top of the language model on the first request after
+	// idle.
 	//
-	// This is the one number in this file that is a guess rather than a
-	// measurement — it should be tuned once the Swift side can report
-	// real end-to-end latencies.
-	ExtractImageTimeout = 12 * time.Second
+	// Measured end-to-end through this exact path, not guessed:
+	// LM Studio qwen2.5-vl-7b ran 1.5-24s; Ollama qwen3-vl:8b ran
+	// 45-162s. The 12s this used to be was below even the working
+	// configuration's worst case, so a local-vision user's every
+	// extraction timed out and the feature produced nothing.
+	//
+	// 90s is deliberately generous, because the cost is lopsided. Too
+	// short silently kills the feature for local-vision users and looks
+	// exactly like "no keywords found". Too long costs at most ONE hung
+	// HTTP call: extraction runs off the dictation path entirely, and
+	// the coordinator cancels the previous in-flight task on every new
+	// refresh, so requests cannot pile up. Late keywords are also not
+	// wasted — the generation counter drops them if the user has moved
+	// on, and they still bias the next dictation if the user has not.
+	ExtractImageTimeout = 90 * time.Second
 
 	// MaxImageBytes bounds what leaves the process on the image path,
 	// mirroring MaxWindowTextBytes' role on the text path. The design
