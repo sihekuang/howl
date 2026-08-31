@@ -17,6 +17,11 @@ import SwiftUI
 /// user explicitly asked to see the truth on, and everything it shows
 /// is already in-memory-only (`ScreenContextActivityStore`), never
 /// written to disk.
+///
+/// The captured SCREENSHOT is the deliberate exception: only its byte
+/// count is ever recorded, so this panel can report that a capture
+/// happened and how big it was, but can never show the picture back.
+/// See `ScreenContextActivity.capturedImageBytes`.
 struct ScreenContextInspectorView: View {
     let engine: any CoreEngine
     var activityStore: ScreenContextActivityStore
@@ -93,11 +98,18 @@ struct ScreenContextInspectorView: View {
     }
 
     private func capturedSummary(_ activity: ScreenContextActivity) -> String {
+        let app = activity.bundleID ?? "unknown app"
+        // The screenshot path has no text to measure — only a payload
+        // size. The image itself is deliberately never retained, so a
+        // byte count is all there is to show, and all there should be.
+        if let bytes = activity.capturedImageBytes {
+            let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+            return "\(app) · \(ScreenContextSource.screenshot.shortLabel) · \(size)"
+        }
         guard activity.capturedText != nil, let length = activity.capturedTextLength else {
             return unavailableCapturedReason(activity)
         }
-        let sourceLabel = activity.capturedTextSource?.shortLabel ?? "?"
-        let app = activity.bundleID ?? "unknown app"
+        let sourceLabel = activity.source?.shortLabel ?? "?"
         return "\(app) · \(sourceLabel) · \(length.formatted()) chars"
     }
 
@@ -108,7 +120,7 @@ struct ScreenContextInspectorView: View {
         case .skippedPreReadDenylist, .skippedPostReadDenylist:
             return "Skipped — \(activity.bundleID ?? "this app") is on the never-read list"
         case .noReadableWindowText:
-            return "No readable window text"
+            return "No screenshot and no readable window text"
         case .superseded:
             return "Superseded before it finished"
         case .cacheHit, .extractionSucceeded, .extractionFailed:
@@ -325,11 +337,11 @@ private extension ScreenContextActivity.Outcome {
     }
 }
 
-private extension WindowTextSource {
+private extension ScreenContextSource {
     var shortLabel: String {
         switch self {
-        case .accessibility: return "AX"
-        case .ocr: return "OCR"
+        case .screenshot: return "screenshot"
+        case .accessibility: return "AX text"
         }
     }
 }

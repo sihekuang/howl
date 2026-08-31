@@ -116,6 +116,22 @@ public protocol CoreEngine: Sendable {
     /// keywords — see `ScreenContextActivity`.
     func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction?
 
+    /// Derive whisper biasing keywords from a PNG screenshot of the
+    /// focused window, by asking the configured provider's VISION
+    /// model to read it directly. The primary screen-context path;
+    /// `extractScreenKeywords(text:)` is now reachable only as its
+    /// `.noVision` fallback.
+    ///
+    /// Blocking on the C side (a network call), so the same rule
+    /// applies: never call this from a latency-sensitive path.
+    ///
+    /// Three-way rather than optional because `.noVision` — this
+    /// provider+model rejects images — changes which path the caller
+    /// uses next, whereas `.failed` (timeout, rate limit, auth) means
+    /// only that this attempt did not work. Never throws; the caller
+    /// degrades to dictionary-only biasing on anything but `.success`.
+    func extractScreenKeywords(image: Data) async -> ScreenImageExtractionResult
+
     /// Store the keyword list applied at the next startCapture.
     /// Instant; no network.
     func setScreenKeywords(_ keywords: [String]) async

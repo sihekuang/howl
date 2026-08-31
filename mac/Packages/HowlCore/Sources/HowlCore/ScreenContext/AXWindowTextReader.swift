@@ -7,7 +7,17 @@ import Foundation
 /// Requires no new TCC permission — Howl already holds Accessibility
 /// for text injection. Returns nil for apps that expose no usable AX
 /// text (Electron without AXManualAccessibility, Canvas apps, most
-/// terminals); the caller falls back to OCR.
+/// terminals).
+///
+/// DEMOTED, NOT LEGACY. The primary screen-context path is now a
+/// screenshot sent to a vision model
+/// (`ScreenCaptureKitWindowCapturer`), and this reader runs only when
+/// the configured provider+model turns out to reject images — the
+/// `no_vision` verdict Go reports. Keep it healthy: it is the only
+/// zero-prompt path (no Screen Recording TCC), and the only path that
+/// works at all for the text-only local models people run under Ollama
+/// and LM Studio. Its denylist enforcement is identical to the
+/// capturer's and is not weakened by the demotion.
 public struct AXWindowTextReader: WindowTextReader {
     /// Never construct this without a denylist. There is deliberately
     /// no default: a reader that silently reads everything is the
@@ -50,7 +60,7 @@ public struct AXWindowTextReader: WindowTextReader {
 
         let text = collected.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
-        return WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text, source: .accessibility)
+        return WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text)
     }
 
     /// Depth-first walk accumulating AXValue and AXTitle strings.

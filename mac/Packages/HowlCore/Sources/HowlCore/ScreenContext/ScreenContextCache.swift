@@ -32,8 +32,29 @@ public final class ScreenContextCache: @unchecked Sendable {
     /// Identity of a window's *content*. Hashing means the raw window
     /// text is never retained in memory beyond the extraction call.
     public func key(bundleID: String, windowTitle: String, text: String) -> String {
-        let payload = "\(bundleID)\u{0}\(windowTitle)\u{0}\(text)"
-        let digest = SHA256.hash(data: Data(payload.utf8))
+        key(bundleID: bundleID, windowTitle: windowTitle, content: Data(text.utf8))
+    }
+
+    /// Identity of a captured window *screenshot*. Same construction as
+    /// the text key — the image bytes are hashed, never retained — so
+    /// the two paths cannot collide on a shared window identity while
+    /// disagreeing about the content behind it.
+    ///
+    /// Screenshots are inherently a weaker cache key than text: any
+    /// pixel that moves (a caret, a clock, a progress spinner) is a new
+    /// key, so re-focusing a live window hits less often than the text
+    /// path did. That is accepted — the alternative, keying on window
+    /// identity alone, would serve stale keywords for a document the
+    /// user has scrolled or edited, which is the failure that actually
+    /// hurts dictation.
+    public func key(bundleID: String, windowTitle: String, imageData: Data) -> String {
+        key(bundleID: bundleID, windowTitle: windowTitle, content: imageData)
+    }
+
+    private func key(bundleID: String, windowTitle: String, content: Data) -> String {
+        var payload = Data("\(bundleID)\u{0}\(windowTitle)\u{0}".utf8)
+        payload.append(content)
+        let digest = SHA256.hash(data: payload)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 

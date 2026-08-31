@@ -44,4 +44,11 @@ char* howl_extract_keywords(char* jsonC);
 int howl_set_screen_keywords(char* jsonC);
 char* howl_screen_context_preview(void);
 
+// Vision screen-context: keywords straight from a screenshot, no OCR.
+// See core/cmd/libhowl/screenctx_image_export.go. The media type is
+// sniffed from the bytes, so there is deliberately no format argument.
+// BLOCKING (network call) — invoke off the main thread. Free the result
+// with howl_free_string.
+char* howl_extract_keywords_image(unsigned char* bytes, int length);
+
 #endif

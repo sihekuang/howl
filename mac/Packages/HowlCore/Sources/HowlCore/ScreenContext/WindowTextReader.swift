@@ -32,20 +32,24 @@ public func defaultFrontmostApp() -> (bundleID: String, pid: pid_t)? {
 /// The adjacency is the entire point, and it is why this lives here
 /// rather than in the coordinator. A caller-side gate cannot make this
 /// guarantee: the coordinator checks the denylist, then `await`s the
-/// read, and each reader independently resolves frontmost again — so
-/// the app that was checked and the app that gets read can differ. That
-/// window is not theoretical. It opens on the single most ordinary
-/// sequence there is: finish typing in an editor, the 800ms debounce
-/// fires precisely because you stopped, and you alt-tab to your
-/// password manager while the read is in flight. The AX walk of an
-/// Electron vault window then yields under `minimumUsefulChars`, and
-/// the composed reader falls through to screenshotting it.
+/// capture, and the capturer independently resolves frontmost again —
+/// so the app that was checked and the app that gets photographed can
+/// differ. That window is not theoretical. It opens on the single most
+/// ordinary sequence there is: finish typing in an editor, the 800ms
+/// debounce fires precisely because you stopped, and you alt-tab to
+/// your password manager while the capture is in flight. The
+/// screenshot then contains the vault.
 ///
 /// Resolving the identity and judging it with no suspension point in
 /// between closes that: the pid handed back is the pid that was
-/// checked, so the app that is read is by construction the app that was
-/// cleared. `shouldSkip` is fail-closed on nil and empty bundle IDs, so
-/// "we cannot tell what this is" also declines.
+/// checked, so the window that is captured is by construction the
+/// window that was cleared. `shouldSkip` is fail-closed on nil and
+/// empty bundle IDs, so "we cannot tell what this is" also declines.
+///
+/// Both consumers route through here — `ScreenCaptureKitWindowCapturer`
+/// (the primary path) and `AXWindowTextReader` (the no-vision
+/// fallback) — and the guard precedes every ScreenCaptureKit call, so
+/// a denylisted app never even triggers the Screen Recording prompt.
 ///
 /// The denylist is snapshotted BEFORE the hop on purpose: building it
 /// reads and JSON-decodes user settings, which has no business running
@@ -65,34 +69,20 @@ func resolveReadableFrontmostApp(
     }
 }
 
-/// Which reader actually produced a `WindowSnapshot`'s text — the
-/// answer to "did AX work, or did we fall back to screenshotting?",
-/// which was previously unrecoverable from the snapshot alone.
-public enum WindowTextSource: String, Equatable, Sendable {
-    /// Read via the Accessibility API (`AXWindowTextReader`).
-    case accessibility
-    /// Read via a screenshot + Vision OCR (`OCRWindowTextReader`),
-    /// used when AX yielded nothing or too little to be useful.
-    case ocr
-}
-
 /// Text read from the user's focused window, with the identity needed
 /// to cache and denylist it.
+///
+/// Produced only by `AXWindowTextReader` — the one remaining text
+/// reader (see its header for why it is still here).
 public struct WindowSnapshot: Equatable, Sendable {
     public let bundleID: String
     public let windowTitle: String
     public let text: String
-    /// Which reader produced `text`. Defaults to `.accessibility` so
-    /// existing call sites (mostly tests, which don't exercise the
-    /// AX/OCR distinction) don't need to change; the two real readers
-    /// below always pass this explicitly.
-    public let source: WindowTextSource
 
-    public init(bundleID: String, windowTitle: String, text: String, source: WindowTextSource = .accessibility) {
+    public init(bundleID: String, windowTitle: String, text: String) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.text = text
-        self.source = source
     }
 }
 
@@ -101,44 +91,4 @@ public struct WindowSnapshot: Equatable, Sendable {
 /// unsupported app).
 public protocol WindowTextReader: Sendable {
     func read() async -> WindowSnapshot?
-}
-
-public enum WindowTextReading {
-    /// Below this many characters an AX read is treated as unusable and
-    /// the OCR fallback runs. Electron, Canvas, and terminal apps
-    /// typically expose only a title or nothing at all.
-    public static let minimumUsefulChars = 200
-}
-
-/// Tries `primary` first and falls back to `fallback` when the primary
-/// yields nothing or too little to be useful.
-///
-/// This ordering is why most users never see a Screen Recording
-/// permission prompt: native apps satisfy the AX path, and the
-/// screenshot reader is only constructed lazily when AX comes up short.
-public struct FallbackWindowTextReader: WindowTextReader {
-    private let primary: any WindowTextReader
-    private let fallback: any WindowTextReader
-    private let minimumChars: Int
-
-    public init(primary: any WindowTextReader,
-                fallback: any WindowTextReader,
-                minimumChars: Int = WindowTextReading.minimumUsefulChars) {
-        self.primary = primary
-        self.fallback = fallback
-        self.minimumChars = minimumChars
-    }
-
-    public func read() async -> WindowSnapshot? {
-        let first = await primary.read()
-        if let first, first.text.count >= minimumChars {
-            return first
-        }
-        if let second = await fallback.read(), second.text.count >= minimumChars {
-            return second
-        }
-        // Fallback unavailable or no better — a short primary read still
-        // beats nothing.
-        return first
-    }
 }

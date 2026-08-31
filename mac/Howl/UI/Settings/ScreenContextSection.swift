@@ -22,11 +22,18 @@ struct ScreenContextSection: View {
     var body: some View {
         Group {
             SettingsGroupHeader("Screen Context")
-            Toggle("Use on-screen text to improve recognition", isOn: $enabled)
+            Toggle("Use what's on screen to improve recognition", isOn: $enabled)
+            // This paragraph is a privacy disclosure, not marketing
+            // copy: it is the only place the user is told that a
+            // picture of their focused window leaves the machine. Keep
+            // it accurate if the capture path changes again.
             Text("""
-                 Howl reads the text of your focused window and sends it to your \
-                 configured LLM provider to pull out names and jargon, which bias \
-                 Whisper toward the right spellings. Password managers are never read.
+                 Howl takes a screenshot of your focused window and sends it to your \
+                 configured LLM provider, which reads it for names and jargon that bias \
+                 Whisper toward the right spellings. This needs Screen Recording \
+                 permission. Providers whose model can't read images fall back to the \
+                 window's accessibility text instead. Password managers are never \
+                 captured or read.
                  """)
                 .font(.caption)
                 .foregroundStyle(.secondary)

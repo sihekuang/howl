@@ -47,3 +47,34 @@ public struct ScreenKeywordExtraction: Equatable, Sendable {
         self.dropped = dropped
     }
 }
+
+/// The outcome of one `CoreEngine.extractScreenKeywords(image:)` round
+/// trip. Three-way rather than the text path's `ScreenKeywordExtraction?`
+/// because the image path has a third answer that changes which path
+/// the coordinator uses next, not merely whether this attempt worked.
+///
+/// Mirrors the `no_vision` key Go adds to the shared envelope — see
+/// `core/cmd/libhowl/screenctx_image_export.go`.
+public enum ScreenImageExtractionResult: Equatable, Sendable {
+    /// The vision model answered. Payload is identical in shape and
+    /// meaning to the text path's, so both converge on the same
+    /// sanitize → prompt → apply chain.
+    case success(ScreenKeywordExtraction)
+
+    /// An ordinary failure — timeout, rate limit, auth, unreachable
+    /// provider, malformed response, a bad image. Nothing is cached on
+    /// either side of the ABI, so the caller keeps using the image
+    /// path and simply gets no keywords this time.
+    case failed
+
+    /// This provider+model rejected the image, or silently dropped it
+    /// (Go plants a canary token to catch backends that accept an
+    /// `images` field and ignore it). Go caches that verdict in memory
+    /// for the session, keyed on provider+model, so a settings change
+    /// re-probes and a restart forgets.
+    ///
+    /// The caller's response is to fall back to the Accessibility text
+    /// path for this refresh. NEVER returned for a timeout, rate limit
+    /// or auth failure — those are `.failed`.
+    case noVision
+}

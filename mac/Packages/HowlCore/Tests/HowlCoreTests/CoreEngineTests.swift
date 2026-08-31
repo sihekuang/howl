@@ -54,9 +54,13 @@ final class SpyCoreEngine: CoreEngine, @unchecked Sendable {
     }
 
     var stubExtraction: ScreenKeywordExtraction? = ScreenKeywordExtraction(raw: "", keywords: [], dropped: [])
+    var stubImageExtraction: ScreenImageExtractionResult = .success(
+        ScreenKeywordExtraction(raw: "", keywords: [], dropped: [])
+    )
     var stubPreview: ScreenContextPreview?
 
     func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction? { stubExtraction }
+    func extractScreenKeywords(image: Data) async -> ScreenImageExtractionResult { stubImageExtraction }
     func setScreenKeywords(_ keywords: [String]) async {}
     func screenContextPreview() async -> ScreenContextPreview? { stubPreview }
 }

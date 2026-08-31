@@ -64,11 +64,12 @@ public final class CompositionRoot {
 
     let screenContextCache = ScreenContextCache()
 
-    // One denylist source, shared by the readers AND the coordinator.
-    // The readers need their own copy because the guarantee is enforced
-    // at the point of reading — a reader that refuses a denylisted app is
-    // safe by construction, whereas a check only in the coordinator can be
-    // outrun when the user switches apps between the gate and the read.
+    // One denylist source, shared by the capturer, the fallback reader
+    // AND the coordinator. The capturer and reader need their own copy
+    // because the guarantee is enforced at the point of capture — a
+    // capturer that refuses a denylisted app is safe by construction,
+    // whereas a check only in the coordinator can be outrun when the
+    // user switches apps between the gate and the capture.
     //
     // Fail-closed on a settings read failure — deliberately NOT the same
     // `(try? settings.get())?.… ?? default` shape `isEnabled` below uses.
@@ -100,10 +101,11 @@ public final class CompositionRoot {
     public lazy var screenContextActivityStore = ScreenContextActivityStore()
 
     lazy var screenContextCoordinator = ScreenContextCoordinator(
-        reader: FallbackWindowTextReader(
-            primary: AXWindowTextReader(denylist: screenContextDenylistProvider),
-            fallback: OCRWindowTextReader(denylist: screenContextDenylistProvider)
-        ),
+        // Primary path: a screenshot straight to the vision model.
+        capturer: ScreenCaptureKitWindowCapturer(denylist: screenContextDenylistProvider),
+        // Fallback path, used only when the provider reports that the
+        // configured model cannot accept images.
+        textReader: AXWindowTextReader(denylist: screenContextDenylistProvider),
         cache: screenContextCache,
         denylist: screenContextDenylistProvider,
         isEnabled: { [settings] in
@@ -111,16 +113,17 @@ public final class CompositionRoot {
         },
         // MUST hop to the main actor. Every other
         // NSWorkspace.frontmostApplication access in this feature does
-        // (see AXWindowTextReader, whose comment explicitly says not to
+        // (see defaultFrontmostApp, whose comment explicitly says not to
         // remove the hop as "redundant"), and `refresh()` runs on the
         // coordinator's own actor, not main. Do NOT "simplify" this to a
         // bare synchronous NSWorkspace read — it would compile, every
         // unit test would still pass, and it would silently violate the
-        // invariant the readers depend on.
+        // invariant the capturer and reader depend on.
         frontmostBundleID: {
             await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
         },
-        extract: { [engine] text in await engine.extractScreenKeywords(text: text) },
+        extractImage: { [engine] png in await engine.extractScreenKeywords(image: png) },
+        extractText: { [engine] text in await engine.extractScreenKeywords(text: text) },
         apply: { [engine] keywords in await engine.setScreenKeywords(keywords) },
         // `record(_:)` is `@MainActor`-isolated (the whole store is);
         // this `await` is the hop off the coordinator's own actor onto

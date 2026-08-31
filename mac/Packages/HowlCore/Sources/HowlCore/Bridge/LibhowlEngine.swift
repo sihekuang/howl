@@ -277,6 +277,72 @@ public actor LibhowlEngine: CoreEngine {
         )
     }
 
+    /// `nonisolated` and routed through `screenContextQueue`, for
+    /// exactly the reasons spelled out on `extractScreenKeywords(text:)`
+    /// above: `howl_extract_keywords_image` carries the identical
+    /// contract — "BLOCKING... Callers MUST invoke it off the main
+    /// thread... does not hold e.mu across the network call"
+    /// (`core/cmd/libhowl/screenctx_image_export.go`) — so it is safe
+    /// to exempt from the actor's serialized executor, and must not
+    /// park a cooperative-pool thread for the duration.
+    ///
+    /// The image crosses as raw bytes rather than base64 inside the
+    /// JSON envelope: base64 inflates ~33% on a payload sent once per
+    /// debounced focus change. Go copies out of this buffer before it
+    /// returns (`C.GoBytes`), so the `Data` need only stay alive for
+    /// the call itself, which `withUnsafeBytes` guarantees.
+    public nonisolated func extractScreenKeywords(image: Data) async -> ScreenImageExtractionResult {
+        struct DroppedWire: Decodable { let term: String; let reason: String }
+        struct Response: Decodable {
+            let raw: String?
+            let keywords: [String]?
+            let dropped: [DroppedWire]?
+            let error: String?
+            let noVision: Bool?
+
+            enum CodingKeys: String, CodingKey {
+                case raw, keywords, dropped, error
+                case noVision = "no_vision"
+            }
+        }
+        // An empty buffer has no base address to pass, and Go answers
+        // `{"error":"empty image"}` for it anyway — skip the round trip.
+        guard !image.isEmpty else { return .failed }
+
+        let raw: String? = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            LibhowlEngine.screenContextQueue.async {
+                let result = image.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) -> String? in
+                    guard let base = buffer.baseAddress, buffer.count > 0 else { return nil }
+                    let bytes = UnsafeMutablePointer(mutating: base.assumingMemoryBound(to: UInt8.self))
+                    guard let out = howl_extract_keywords_image(bytes, Int32(buffer.count)) else { return nil }
+                    defer { howl_free_string(out) }
+                    return String(cString: out)
+                }
+                continuation.resume(returning: result)
+            }
+        }
+
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return .failed }
+        // A non-nil `error` is a FAILURE signal, and `no_vision`
+        // separates the two kinds: true means this provider+model
+        // rejects images and the caller must use the text path;
+        // false means an ordinary blip (timeout, rate limit, auth) and
+        // the caller should keep using this one. Never log
+        // `decoded.error` itself — on the vision-rejection branch it
+        // embeds the provider's HTTP response body, which can quote the
+        // request back and therefore the user's screen.
+        if decoded.error != nil {
+            return decoded.noVision == true ? .noVision : .failed
+        }
+        return .success(ScreenKeywordExtraction(
+            raw: decoded.raw ?? "",
+            keywords: decoded.keywords ?? [],
+            dropped: (decoded.dropped ?? []).map { ScreenContextDroppedTerm(term: $0.term, reason: $0.reason) }
+        ))
+    }
+
     public func setScreenKeywords(_ keywords: [String]) async {
         struct Request: Encodable { let keywords: [String] }
         guard let json = try? JSONEncoder().encode(Request(keywords: keywords)),

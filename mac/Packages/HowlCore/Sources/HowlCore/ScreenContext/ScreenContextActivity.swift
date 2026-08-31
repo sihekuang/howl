@@ -12,6 +12,19 @@ public enum ScreenContextLimits {
     public static let maxWindowTextBytesForExtraction = 8192
 }
 
+/// Which path actually fed the model on a given refresh — the answer
+/// to "did the vision model see my screen, or did we fall back to
+/// reading text?", which is otherwise unrecoverable from the record.
+public enum ScreenContextSource: String, Equatable, Sendable {
+    /// The primary path: a PNG screenshot of the focused window went
+    /// straight to the provider's vision model.
+    case screenshot
+    /// The fallback path: the Accessibility API's text, used only
+    /// after the provider reported that this model cannot accept
+    /// images (`no_vision`). See `AXWindowTextReader`.
+    case accessibility
+}
+
 /// One outcome of `ScreenContextCoordinator.refresh()`, captured for
 /// the diagnostic inspector.
 ///
@@ -31,7 +44,13 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     public let bundleID: String?
     public let outcome: Outcome
 
-    /// The window text actually read. Populated only for `.cacheHit`,
+    /// Which path produced the payload the model saw. Populated for
+    /// `.cacheHit`, `.extractionSucceeded` and `.extractionFailed` —
+    /// the outcomes reached only after a capture or read succeeded.
+    public let source: ScreenContextSource?
+
+    /// The window text actually read. Populated only on the
+    /// `.accessibility` fallback path, and only for `.cacheHit`,
     /// `.extractionSucceeded`, and `.extractionFailed` — the three
     /// outcomes reached only after a real read succeeded.
     ///
@@ -43,8 +62,18 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// would quietly defeat the one guarantee that gate exists to
     /// provide.
     public let capturedText: String?
-    public let capturedTextSource: WindowTextSource?
     public let capturedTextLength: Int?
+
+    /// Size of the PNG handed to the vision model, in bytes.
+    /// Populated only on the `.screenshot` path.
+    ///
+    /// The byte count and nothing more, on purpose. The image itself
+    /// is the user's screen; unlike window text, there is no version
+    /// of showing it in a diagnostic panel that is worth the risk of
+    /// it being retained, screenshotted or pasted onward — so the
+    /// bytes are never held past the extraction call, here or
+    /// anywhere.
+    public let capturedImageBytes: Int?
 
     /// The LLM's raw response, verbatim. Populated only for
     /// `.extractionSucceeded` — the whole reason this field exists is
@@ -75,7 +104,10 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         /// denylisted. Defense in depth, not redundant with the
         /// pre-read gate.
         case skippedPostReadDenylist
-        /// Both readers (AX and OCR) came up with nothing usable.
+        /// Nothing usable to send: the screenshot could not be taken
+        /// (no Screen Recording permission, no on-screen window, the
+        /// window vanished mid-capture), or — on the no-vision
+        /// fallback — the AX read came up empty.
         case noReadableWindowText
         /// This window's content was already in cache; no LLM call.
         case cacheHit
@@ -97,9 +129,10 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         timestamp: Date,
         bundleID: String?,
         outcome: Outcome,
+        source: ScreenContextSource? = nil,
         capturedText: String? = nil,
-        capturedTextSource: WindowTextSource? = nil,
         capturedTextLength: Int? = nil,
+        capturedImageBytes: Int? = nil,
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = [],
         appliedKeywords: [String] = []
@@ -108,9 +141,10 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         self.timestamp = timestamp
         self.bundleID = bundleID
         self.outcome = outcome
+        self.source = source
         self.capturedText = capturedText
-        self.capturedTextSource = capturedTextSource
         self.capturedTextLength = capturedTextLength
+        self.capturedImageBytes = capturedImageBytes
         self.rawResponse = rawResponse
         self.dropped = dropped
         self.appliedKeywords = appliedKeywords

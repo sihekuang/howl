@@ -1,18 +1,30 @@
 import Foundation
 import OSLog
 
-/// Orchestrates frontmost-app gate → denylist → read → denylist (again)
+/// Orchestrates enabled gate → denylist → capture → denylist (again)
 /// → cache → extract → apply.
 ///
+/// The primary path sends a screenshot of the focused window to a
+/// vision model. When the configured provider+model turns out to
+/// reject images, Go reports `no_vision` and this falls back — for that
+/// refresh — to the Accessibility text path, which is otherwise
+/// unreachable. Nothing else in the chain differs: both paths produce
+/// the same term list and feed the same sanitize → prompt → apply
+/// chain.
+///
 /// Dependencies arrive as closures so the whole policy is testable
-/// without AppKit, a live engine, or a network.
+/// without AppKit, ScreenCaptureKit, a live engine, or a network.
 public actor ScreenContextCoordinator {
-    private let reader: any WindowTextReader
+    private let capturer: any WindowImageCapturing
+    /// The `no_vision` fallback only. See `AXWindowTextReader` for why
+    /// it is still here and must stay healthy.
+    private let textReader: any WindowTextReader
     private let cache: ScreenContextCache
     private let denylist: @Sendable () -> ScreenContextDenylist
     private let isEnabled: @Sendable () -> Bool
     private let frontmostBundleID: @Sendable () async -> String?
-    private let extract: @Sendable (String) async -> ScreenKeywordExtraction?
+    private let extractImage: @Sendable (Data) async -> ScreenImageExtractionResult
+    private let extractText: @Sendable (String) async -> ScreenKeywordExtraction?
     private let apply: @Sendable ([String]) async -> Void
     /// Fires once per `refresh()` outcome, carrying the full diagnostic
     /// record for the "before/after" inspector. Follows the same
@@ -22,12 +34,13 @@ public actor ScreenContextCoordinator {
     private let onActivity: @Sendable (ScreenContextActivity) async -> Void
 
     // `.notice` and above persist in the unified log; `.debug`/`.info` do
-    // not survive past the live stream. These four lines are the entire
+    // not survive past the live stream. These log lines are the entire
     // diagnostic trail for "is screen context working, and if not why",
     // so they must be readable after the fact from a user's machine:
     //   /usr/bin/log show --predicate 'subsystem == "com.howl.app"' --last 10m
-    // They carry only counts and fixed strings — never window text, never a
-    // provider error body. Anything below is internals and stays at .debug.
+    // They carry only counts and fixed strings — never window text, never
+    // image bytes, never a provider error body. Anything below is
+    // internals and stays at .debug.
     private let log = Logger(subsystem: "com.howl.app", category: "screencontext")
     private var inFlight: Task<Void, Never>?
 
@@ -43,21 +56,25 @@ public actor ScreenContextCoordinator {
     private var generation: UInt64 = 0
 
     public init(
-        reader: any WindowTextReader,
+        capturer: any WindowImageCapturing,
+        textReader: any WindowTextReader,
         cache: ScreenContextCache,
         denylist: @escaping @Sendable () -> ScreenContextDenylist,
         isEnabled: @escaping @Sendable () -> Bool,
         frontmostBundleID: @escaping @Sendable () async -> String?,
-        extract: @escaping @Sendable (String) async -> ScreenKeywordExtraction?,
+        extractImage: @escaping @Sendable (Data) async -> ScreenImageExtractionResult,
+        extractText: @escaping @Sendable (String) async -> ScreenKeywordExtraction?,
         apply: @escaping @Sendable ([String]) async -> Void,
         onActivity: @escaping @Sendable (ScreenContextActivity) async -> Void
     ) {
-        self.reader = reader
+        self.capturer = capturer
+        self.textReader = textReader
         self.cache = cache
         self.denylist = denylist
         self.isEnabled = isEnabled
         self.frontmostBundleID = frontmostBundleID
-        self.extract = extract
+        self.extractImage = extractImage
+        self.extractText = extractText
         self.apply = apply
         self.onActivity = onActivity
     }
@@ -71,7 +88,7 @@ public actor ScreenContextCoordinator {
 
         // Disabled must CLEAR any previously-applied keywords, not just
         // skip applying new ones — mirroring the denylist path four
-        // lines below. Returning bare here would stop the reading but
+        // lines below. Returning bare here would stop the capture but
         // not the effect: whatever was applied before the user unticked
         // the setting would keep biasing whisper on every subsequent
         // dictation until the app relaunches, since `howl_start_capture`
@@ -82,25 +99,29 @@ public actor ScreenContextCoordinator {
             return
         }
 
-        // Gate BEFORE any read happens. `frontmostBundleID` is queried
-        // from the OS directly (no AX walk, no screenshot) so a
-        // denylisted app's window is never touched at all — not by AX,
-        // and never falls through to OCR. `shouldSkip` fails closed on
+        // Gate BEFORE anything is captured. `frontmostBundleID` is
+        // queried from the OS directly (no screenshot, no AX walk) so a
+        // denylisted app's window is never touched at all — and, since
+        // this precedes every ScreenCaptureKit call, never triggers the
+        // Screen Recording prompt either. `shouldSkip` fails closed on
         // nil, so "we don't know what's focused" also skips.
         //
         // `async` because `NSWorkspace.frontmostApplication` has to be
-        // read on the main actor (see `AXWindowTextReader.read()`, whose
-        // hop is documented as NOT removable), and `refresh` runs on
-        // this actor rather than the main one — so the caller needs
+        // read on the main actor (see `defaultFrontmostApp`, whose hop
+        // is documented as NOT removable), and `refresh` runs on this
+        // actor rather than the main one — so the caller needs
         // somewhere to put that hop. A synchronous closure would leave
         // the wiring no option but a bare off-main `NSWorkspace` read.
         //
         // The suspension means the frontmost app can change before the
-        // read below, so this gate is a best-effort early-out, not the
-        // authoritative one. It always was: the reader performs its own
-        // frontmost lookup, so the two observations were never atomic
-        // even when this call was synchronous. The authoritative check
-        // is the post-read gate on the snapshot's own bundle ID.
+        // capture below, so this gate is a best-effort early-out, not
+        // the authoritative one. It always was: the capturer performs
+        // its own frontmost lookup, so the two observations were never
+        // atomic even when this call was synchronous. The
+        // authoritative check is `resolveReadableFrontmostApp` inside
+        // the capturer — which resolves identity and applies the
+        // denylist with no suspension in between — backed by the
+        // post-capture gate on the capture's own bundle ID.
         let frontID = await frontmostBundleID()
         if denylist().shouldSkip(bundleID: frontID) {
             log.notice("screen context skipped for denylisted app")
@@ -108,23 +129,103 @@ public actor ScreenContextCoordinator {
             return
         }
 
-        guard let snapshot = await reader.read() else {
-            // No readable window — clear rather than leave the previous
-            // window's keywords armed.
+        guard let capture = await capturer.capture() else {
+            // No screenshot — no permission, no on-screen window, or
+            // the window vanished mid-capture. Clear rather than leave
+            // the previous window's keywords armed.
+            //
+            // Deliberately does NOT fall back to the AX text path: that
+            // path exists for models that cannot see, not as a second
+            // chance at capturing. Blurring the two would mean a user
+            // who denied Screen Recording silently gets a different
+            // (and differently-priced) pipeline than the one they think
+            // is off.
             await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: frontID, outcome: .noReadableWindowText)
             return
         }
 
-        // Second, authoritative gate: the snapshot's own bundle ID.
-        // The frontmost-app lookup above and this read aren't atomic
-        // with each other, so re-check against the ID the text
+        // Second, authoritative gate: the capture's own bundle ID.
+        // The frontmost-app lookup above and this capture aren't atomic
+        // with each other, so re-check against the ID the pixels
         // actually came from — defence in depth, not redundant.
         //
-        // The activity recorded here deliberately omits the captured
-        // text even though a read may already have happened — see
-        // `ScreenContextActivity.capturedText`'s doc comment: this gate
-        // is the actual guarantee, and leaking the text into an
-        // in-memory diagnostic would defeat it.
+        // The activity recorded here deliberately omits every trace of
+        // what was captured — see `ScreenContextActivity.capturedText`'s
+        // doc comment: this gate is the actual guarantee, and leaking
+        // the payload into an in-memory diagnostic would defeat it.
+        if denylist().shouldSkip(bundleID: capture.bundleID) {
+            log.notice("screen context skipped for denylisted app")
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: capture.bundleID, outcome: .skippedPostReadDenylist)
+            return
+        }
+
+        let imageBytes = capture.pngData.count
+        let key = cache.key(
+            bundleID: capture.bundleID,
+            windowTitle: capture.windowTitle,
+            imageData: capture.pngData
+        )
+        if let cached = cache.value(for: key, now: now) {
+            await recordAndApply(
+                cached, myGeneration: myGeneration, now: now, bundleID: capture.bundleID, outcome: .cacheHit,
+                source: .screenshot, capturedImageBytes: imageBytes
+            )
+            return
+        }
+
+        switch await extractImage(capture.pngData) {
+        case .success(let extraction):
+            cache.store(extraction.keywords, for: key, now: now)
+            let applied = await recordAndApply(
+                extraction.keywords, myGeneration: myGeneration, now: now, bundleID: capture.bundleID,
+                outcome: .extractionSucceeded, source: .screenshot, capturedImageBytes: imageBytes,
+                rawResponse: extraction.raw, dropped: extraction.dropped
+            )
+            if applied {
+                // Deliberately logs the COUNT, never the terms.
+                log.notice("screen context applied \(extraction.keywords.count, privacy: .public) keyword(s)")
+            }
+
+        case .failed:
+            // Extraction FAILED (provider unreachable, rate-limited,
+            // timed out, malformed response) — distinct from "the model
+            // ran and found nothing". Never cache a failure: doing so
+            // would disable screen context for this exact screenshot
+            // for the full cache TTL over one transient blip. Still
+            // clear rather than leave a stale window's keywords armed
+            // for the next dictation.
+            log.notice("screen context extraction failed")
+            await recordAndApply(
+                [], myGeneration: myGeneration, now: now, bundleID: capture.bundleID,
+                outcome: .extractionFailed, source: .screenshot, capturedImageBytes: imageBytes
+            )
+
+        case .noVision:
+            // This provider+model cannot accept images. Go has cached
+            // that verdict for the session (keyed on provider+model, so
+            // a settings change re-probes), which is why this is not
+            // also cached here: a Swift-side latch would survive a
+            // model change that Go correctly re-probes, and would be
+            // wrong for the rest of the session. The screenshot we just
+            // took is wasted, but only the encode — no round trip.
+            log.notice("screen context vision unavailable; using accessibility text")
+            await refreshFromAccessibilityText(myGeneration: myGeneration, now: now, frontID: frontID)
+        }
+    }
+
+    /// The `no_vision` fallback: read the focused window's text through
+    /// the Accessibility API and extract from that instead.
+    ///
+    /// Runs the same gate → cache → extract → apply shape as the image
+    /// path, with its own reader-enforced denylist check inside
+    /// `AXWindowTextReader.read()` and its own post-read gate here, so
+    /// the fallback is no weaker a guarantee than the primary path.
+    private func refreshFromAccessibilityText(myGeneration: UInt64, now: Date, frontID: String?) async {
+        guard let snapshot = await textReader.read() else {
+            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: frontID, outcome: .noReadableWindowText)
+            return
+        }
+
         if denylist().shouldSkip(bundleID: snapshot.bundleID) {
             log.notice("screen context skipped for denylisted app")
             await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .skippedPostReadDenylist)
@@ -139,34 +240,27 @@ public actor ScreenContextCoordinator {
         if let cached = cache.value(for: key, now: now) {
             await recordAndApply(
                 cached, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .cacheHit,
-                capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count
+                source: .accessibility, capturedText: snapshot.text, capturedTextLength: snapshot.text.count
             )
             return
         }
 
-        guard let extraction = await extract(snapshot.text) else {
-            // Extraction FAILED (provider unreachable, rate-limited,
-            // timed out, malformed response) — distinct from "the LLM
-            // ran and found nothing". Never cache a failure: doing so
-            // would disable screen context for this exact window
-            // content for the full cache TTL over one transient blip.
-            // Still clear rather than leave a stale window's keywords
-            // armed for the next dictation.
+        guard let extraction = await extractText(snapshot.text) else {
             log.notice("screen context extraction failed")
             await recordAndApply(
                 [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionFailed,
-                capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count
+                source: .accessibility, capturedText: snapshot.text, capturedTextLength: snapshot.text.count
             )
             return
         }
         cache.store(extraction.keywords, for: key, now: now)
         let applied = await recordAndApply(
-            extraction.keywords, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionSucceeded,
-            capturedText: snapshot.text, capturedTextSource: snapshot.source, capturedTextLength: snapshot.text.count,
+            extraction.keywords, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID,
+            outcome: .extractionSucceeded, source: .accessibility,
+            capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
             rawResponse: extraction.raw, dropped: extraction.dropped
         )
         if applied {
-            // Deliberately logs the COUNT, never the terms or window text.
             log.notice("screen context applied \(extraction.keywords.count, privacy: .public) keyword(s)")
         }
     }
@@ -199,9 +293,10 @@ public actor ScreenContextCoordinator {
         now: Date,
         bundleID: String?,
         outcome: ScreenContextActivity.Outcome,
+        source: ScreenContextSource? = nil,
         capturedText: String? = nil,
-        capturedTextSource: WindowTextSource? = nil,
         capturedTextLength: Int? = nil,
+        capturedImageBytes: Int? = nil,
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = []
     ) async -> Bool {
@@ -210,9 +305,10 @@ public actor ScreenContextCoordinator {
             timestamp: now,
             bundleID: bundleID,
             outcome: applied ? outcome : .superseded,
+            source: source,
             capturedText: capturedText,
-            capturedTextSource: capturedTextSource,
             capturedTextLength: capturedTextLength,
+            capturedImageBytes: capturedImageBytes,
             rawResponse: rawResponse,
             dropped: dropped,
             appliedKeywords: applied ? keywords : []
