@@ -1,7 +1,67 @@
 # Vision-based screen context — design
 
-**Status:** approved, superseding the OCR capture path in
-`2026-08-29-screen-context-whisper-biasing-design.md`.
+**Status: SUPERSEDED as the default (2026-09-01), not deleted.** Local
+Vision OCR is the shipping strategy again; the vision model is now one
+interchangeable strategy behind the `ScreenContentSource` seam. This
+document still describes that strategy accurately — everything below
+about the capture, the denylist guarantee, the empirical `no_vision`
+probe, the canary and the Go image path is live code — but "the primary
+path" throughout now means "the path you get by naming
+`VisionModelScreenContentSource` in `CompositionRoot`".
+
+## What changed, and why
+
+The user's call: read the screen locally by default. Nothing about the
+vision path was found wrong — the argument above still holds — but OCR
+costs no tokens, no round trip and no provider capability, and it keeps
+the window's contents on the machine.
+
+Reversing the "Why" above honestly:
+
+- **Portability** was the strongest argument for the model, and it is
+  the one this costs. The Swift-side OCR is platform-specific again.
+  Everything downstream is still shared Go: OCR feeds
+  `screenctx.Extract` — the SAME text path `AXWindowTextReader` feeds —
+  so a future shell still inherits extraction, sanitization and the
+  whisper prompt budget by supplying either text or bytes.
+- **Layout** remains a real advantage of the model, and remains
+  available: switching back is one expression in `CompositionRoot`.
+
+What made this a swap rather than a rewrite is the seam:
+`ScreenContentSource` yields either `.text` (OCR, AX) or `.image` (a
+vision model), and the coordinator picks the Go extractor from that
+shape alone. The three strategies compose —
+`FallbackScreenContentSource(primary:secondary:)` is how "OCR, falling
+back to accessibility text when there is no screenshot" is expressed —
+and no strategy can weaken the denylist, because each resolves identity
+and applies the denylist in one MainActor hop via
+`resolveReadableFrontmostApp`.
+
+### Measured facts behind the OCR strategy
+
+Measured on a real 1568x1323 Chrome capture containing six invented
+identifiers, and re-verified by
+`OCRWindowTextRecognizerVisionTests`:
+
+- A whole-image `VNRecognizeTextRequest` at `.accurate` returns **zero**
+  observations — not partial, nothing, silently. Vision downsamples
+  large inputs to a fixed working resolution, so small text stops being
+  legible. A naive implementation compiles, looks correct, and produces
+  nothing forever.
+- Tiling into overlapping bands sized in **pixels** fixes it: 512px
+  bands with 96px overlap recovered 6/6 in ~0.5s.
+- `.fast` is forbidden. It returns text and garbles exactly what
+  matters (`PLQ-B8231-ZAPII` for `PLQ-88231-ZARN`).
+  `usesLanguageCorrection` stays false: identifiers must never be
+  "corrected".
+- The capture is **not** downscaled before OCR. The 1568px long-edge cap
+  below exists to cut vision-model token cost and now applies to
+  `VisionModelScreenContentSource` only.
+- Wide captures need splitting on X as well as Y: a 5120px-wide desktop
+  grab yields ~200 characters as full-width bands and ~5400 once it is
+  also split across X.
+
+## Original design (still accurate for the vision strategy)
 
 **Goal:** move screen-context capture from "Swift does OCR, Go gets text"
 to "Swift grabs a screenshot, Go asks a vision model for keywords."
@@ -27,7 +87,7 @@ The reasons are architectural:
 
 | Component | Fate |
 |---|---|
-| `OCRWindowTextReader` | **deleted** — its job is now the model's |
+| `OCRWindowTextReader` | deleted then **replaced** by `OCRWindowTextRecognizer` + `OCRScreenContentSource` (2026-09-01), which tile — the original never did, which is why it read nothing on a large capture |
 | `FallbackWindowTextReader`, `WindowTextReading.minimumUsefulChars` | **deleted** — no AX→OCR ladder |
 | `AXWindowTextReader` | **kept, demoted** — reachable whenever pixels are unavailable: no vision model, or no screenshot |
 | `resolveReadableFrontmostApp` | **kept and reused by the capturer** — see Privacy |
