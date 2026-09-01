@@ -101,9 +101,14 @@ struct ScreenContextActivityDetail: View {
                 Text(activity.bundleID ?? "Unknown app")
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
-                Text(timestampLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Same clock as the list's rows, for the same reason
+                // — see `ScreenContextActivityList`. The pane can sit
+                // on one selection for minutes.
+                TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                    Text(timestampLabel(now: context.date))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             ScreenContextOutcomeChip(outcome: activity.outcome)
@@ -113,8 +118,8 @@ struct ScreenContextActivityDetail: View {
     /// Relative time for scanning plus the wall clock for correlating
     /// against a dictation — the list rows only carry the relative
     /// half, and several refreshes can share one "just now".
-    private var timestampLabel: String {
-        let relative = RelativeTime.string(now: Date(), then: activity.timestamp)
+    private func timestampLabel(now: Date) -> String {
+        let relative = RelativeTime.string(now: now, then: activity.timestamp, granularity: .seconds)
         let exact = activity.timestamp.formatted(.dateTime.hour().minute().second())
         return "\(relative) · \(exact) · \(activity.outcome.label)"
     }

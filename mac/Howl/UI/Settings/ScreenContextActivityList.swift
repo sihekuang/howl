@@ -52,14 +52,36 @@ struct ScreenContextActivityList: View {
             Spacer(minLength: 0)
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(activities) { activity in
-                        ScreenContextActivityRow(
-                            activity: activity,
-                            isSelected: selectedID == activity.id,
-                            onTap: { selectedID = activity.id }
-                        )
-                        Divider()
+                // The relative labels have to AGE while this pane sits
+                // open. A row's body is only re-evaluated when its own
+                // data changes, so a row drawn at t=0 keeps saying
+                // "just now" forever however many newer entries pile
+                // up above it — which is exactly what a screen-context
+                // list does, since it only ever grows at the top.
+                //
+                // Each row is aged from its own `activity.timestamp`
+                // against `context.date`, never from an elapsed offset
+                // captured when the row first appeared.
+                //
+                // Ticking at `RelativeTime.subMinuteBucket` (5s) is
+                // deliberate on both sides: slower and a label sits
+                // visibly stale, faster and every extra tick recomputes
+                // a string identical to the last one. It is 12 text
+                // relayouts a minute, and only while this settings page
+                // is on screen — the page is switched in structurally,
+                // and SwiftUI suspends timeline schedules for views
+                // that aren't visible.
+                TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(activities) { activity in
+                            ScreenContextActivityRow(
+                                activity: activity,
+                                now: context.date,
+                                isSelected: selectedID == activity.id,
+                                onTap: { selectedID = activity.id }
+                            )
+                            Divider()
+                        }
                     }
                 }
             }
@@ -70,13 +92,17 @@ struct ScreenContextActivityList: View {
 /// One row. Selection is the parent's business; this only renders.
 private struct ScreenContextActivityRow: View {
     let activity: ScreenContextActivity
+    /// Current time, supplied by the list's `TimelineView` so the
+    /// label ages. Never `Date()` read inside the row — that is the
+    /// version of this that freezes at first render.
+    let now: Date
     let isSelected: Bool
     let onTap: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(RelativeTime.string(now: Date(), then: activity.timestamp))
+                Text(RelativeTime.string(now: now, then: activity.timestamp, granularity: .seconds))
                     .font(.caption.bold())
                     .foregroundStyle(isSelected ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
                 Spacer()

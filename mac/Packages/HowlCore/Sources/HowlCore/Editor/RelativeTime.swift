@@ -5,11 +5,43 @@ import Foundation
 /// "just now" / "5 min ago" / "3 hours ago" / "May 3". Used by the
 /// session list to surface staleness at a glance.
 public enum RelativeTime {
+    /// How finely to describe an age of less than one minute.
+    public enum Granularity: Sendable {
+        /// Everything under a minute is "just now". The original
+        /// behaviour, and the default, because the session list this
+        /// helper was written for stamps sessions minutes apart.
+        case minutes
+        /// Under a minute, count in `subMinuteBucket`-second steps.
+        /// For lists whose entries arrive seconds apart — screen
+        /// context refreshes fire on every focus change — where
+        /// collapsing a whole minute into one label makes distinct
+        /// entries look like duplicates.
+        case seconds
+    }
+
+    /// Step size for `.seconds` labels, and the interval a caller
+    /// should re-render at to keep them honest. Exported so the two
+    /// cannot drift: a view ticking slower than this shows stale
+    /// labels, and one ticking faster just recomputes the same string.
+    public static let subMinuteBucket: TimeInterval = 5
+
     /// Build a relative label from a known `now` and a past instant.
-    /// `now` is injected for testability; production callers pass `Date()`.
-    public static func string(now: Date, then: Date) -> String {
+    /// `now` is injected for testability; production callers pass
+    /// `Date()` — or, in a list whose labels must age while it sits on
+    /// screen, a `TimelineView` context date.
+    ///
+    /// `granularity` defaults to `.minutes`, so every pre-existing
+    /// caller's output is unchanged.
+    public static func string(now: Date, then: Date, granularity: Granularity = .minutes) -> String {
         let diff = now.timeIntervalSince(then)
-        if diff < 60 { return "just now" }
+        if diff < 60 {
+            guard granularity == .seconds else { return "just now" }
+            // Floored to the bucket, and non-positive ages (a clock
+            // that moved backwards, a timestamp from the future) read
+            // "just now" rather than "-5 sec ago".
+            let bucket = Int(diff / subMinuteBucket) * Int(subMinuteBucket)
+            return bucket <= 0 ? "just now" : "\(bucket) sec ago"
+        }
         if diff < 3600 {
             let m = Int(diff / 60)
             return "\(m) min ago"
