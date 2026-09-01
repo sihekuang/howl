@@ -12,17 +12,24 @@ public enum ScreenContextLimits {
     public static let maxWindowTextBytesForExtraction = 8192
 }
 
-/// Which path actually fed the model on a given refresh — the answer
-/// to "did the vision model see my screen, or did we fall back to
-/// reading text?", which is otherwise unrecoverable from the record.
+/// Which read actually produced what the model saw on a given refresh
+/// — the answer to "was my screen read, or did we fall back to the
+/// accessibility tree?", which is otherwise unrecoverable from the
+/// record.
+///
+/// Set by the `ScreenContentSource` that did the reading, never
+/// inferred: the coordinator deliberately cannot tell which strategy is
+/// installed.
 public enum ScreenContextSource: String, Equatable, Sendable {
-    /// The primary path: a PNG screenshot of the focused window went
-    /// straight to the provider's vision model.
+    /// The focused window was photographed. Either Vision OCR read
+    /// those pixels locally (`OCRScreenContentSource`, the default) or
+    /// the PNG went to the provider's vision model
+    /// (`VisionModelScreenContentSource`) — `capturedText` is present
+    /// for the first and `capturedImageBytes` for the second.
     case screenshot
-    /// The fallback path: the Accessibility API's text, used whenever
-    /// pixels are unavailable — either the provider reported that this
-    /// model cannot accept images (`no_vision`), or no screenshot could
-    /// be taken at all. `ScreenContextFallbackReason` says which. See
+    /// The Accessibility API's text, from `AXScreenContentSource`.
+    /// Usually a fallback — `ScreenContextFallbackReason` says why —
+    /// but it is also a strategy in its own right. See
     /// `AXWindowTextReader`.
     case accessibility
 }
@@ -98,10 +105,13 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// the outcomes reached only after a capture or read succeeded.
     public let source: ScreenContextSource?
 
-    /// The window text actually read. Populated only on the
-    /// `.accessibility` fallback path, and only for `.cacheHit`,
-    /// `.extractionSucceeded`, and `.extractionFailed` — the three
-    /// outcomes reached only after a real read succeeded.
+    /// The window text actually read — Vision OCR's output on the
+    /// `.screenshot` path, the accessibility tree's on the
+    /// `.accessibility` one. Either way it is exactly the string sent
+    /// to the LLM, which is the whole point of showing it. Populated
+    /// for `.cacheHit`, `.extractionSucceeded`, and `.extractionFailed`
+    /// — the three outcomes reached only after a real read succeeded —
+    /// and never on the vision-model path, which sends no text at all.
     ///
     /// Deliberately NOT populated for `.skippedPostReadDenylist`, even
     /// though a read may have already happened by the time that gate
@@ -167,14 +177,12 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         /// denylisted. Defense in depth, not redundant with the
         /// pre-read gate.
         case skippedPostReadDenylist
-        /// The Accessibility read ran and came up empty — no AX text
-        /// at all, or nothing but whitespace.
-        ///
-        /// This means exactly that one fact. A failed screenshot is no
-        /// longer recorded here: it falls through to the AX path and
-        /// is reported by `fallbackReason` instead, so a record
-        /// carrying both says "the screenshot failed AND there was no
-        /// text either" rather than blurring the two into one case.
+        /// The window was read and came up empty: OCR recognized
+        /// nothing in the screenshot, the Accessibility read found no
+        /// text at all, or the installed strategy could not read the
+        /// window by any route it has. `source` says which read it was,
+        /// and is nil in the last case because no read got far enough
+        /// to have a source.
         case noReadableWindowText
         /// This window's content was already in cache; no LLM call.
         case cacheHit

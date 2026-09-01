@@ -24,12 +24,17 @@ import SwiftUI
 /// the model saw, but can never show the picture back. See
 /// `ScreenContextActivity.capturedImageBytes`.
 ///
-/// Both capture paths are reachable in normal operation — a screenshot
-/// to a vision model, or accessibility text when there are no pixels to
-/// send — so every row that describes a capture names which one it was,
-/// and the Captured row spells out why the fallback happened. "This
-/// model can't read images" and "the screenshot failed" are the two
-/// reasons, and they call for opposite fixes.
+/// Every read path is reachable in normal operation — a screenshot read
+/// locally by OCR (the default), a screenshot sent to a vision model,
+/// or accessibility text when there are no pixels at all — so every row
+/// that describes a capture names which one it was, and the Captured
+/// row spells out why a fallback happened. "This model can't read
+/// images" and "the screenshot failed" are the two reasons, and they
+/// call for opposite fixes.
+///
+/// A `.screenshot` row with a character count was read by OCR; one with
+/// a byte count was sent to a vision model. Which strategy is installed
+/// is `CompositionRoot`'s business, not this view's.
 struct ScreenContextInspectorView: View {
     let engine: any CoreEngine
     var activityStore: ScreenContextActivityStore

@@ -12,15 +12,15 @@ private final class SpyEngine: @unchecked Sendable {
     // The image path's three-way answer. `.success` is the norm;
     // `.failed` is a transient provider problem; `.noVision` is the
     // verdict that this provider+model cannot see, and is the ONLY
-    // thing that may reach the text path below.
+    // thing that may make the coordinator ask for another reading.
     var stubbedImageResult: ScreenImageExtractionResult = .success(
         ScreenKeywordExtraction(raw: "SpeakerGate, DeepFilterNet", keywords: ["SpeakerGate"], dropped: [])
     )
     // nil simulates a text extraction FAILURE (provider unreachable,
     // rate-limited, timed out); [] simulates a successful call that
     // genuinely found nothing.
-    var stubbedTextKeywords: [String]? = ["AXKeyword"]
-    var stubbedTextRaw = "AXKeyword"
+    var stubbedTextKeywords: [String]? = ["TextKeyword"]
+    var stubbedTextRaw = "TextKeyword"
     var stubbedTextDropped: [ScreenContextDroppedTerm] = []
 
     func extractImage(_ png: Data) async -> ScreenImageExtractionResult {
@@ -50,44 +50,38 @@ private actor ActivityRecorder {
     }
 }
 
-private final class StubCapturer: WindowImageCapturing, @unchecked Sendable {
-    let capture_: WindowImageCapture?
+/// A stub strategy. Returns a fixed reading, counts how often it was
+/// asked for one, and can offer an alternate shape — the whole surface
+/// of `ScreenContentSource`, and nothing else the coordinator could
+/// possibly learn about how the window gets read.
+private final class StubSource: ScreenContentSource, @unchecked Sendable {
+    let content: ScreenContent?
+    let alternate: ScreenContent?
     private let lock = NSLock()
-    private var _captureCount = 0
-    var captureCount: Int { withLock { _captureCount } }
+    private var _readCount = 0
+    private var _alternateCount = 0
+    var readCount: Int { withLock { _readCount } }
+    var alternateCount: Int { withLock { _alternateCount } }
 
-    init(_ capture: WindowImageCapture?) { self.capture_ = capture }
+    init(_ content: ScreenContent?, alternate: ScreenContent? = nil) {
+        self.content = content
+        self.alternate = alternate
+    }
 
-    func capture() async -> WindowImageCapture? {
-        recordCapture()
-        return capture_
+    func read() async -> ScreenContent? {
+        recordRead()
+        return content
+    }
+
+    func readAlternate() async -> ScreenContent? {
+        recordAlternate()
+        return alternate
     }
 
     // NSLock's lock()/unlock() are unavailable directly from an async
     // context in this toolchain; hop through a plain sync method.
-    private func recordCapture() { withLock { _captureCount += 1 } }
-
-    private func withLock<T>(_ body: () -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return body()
-    }
-}
-
-private final class StubReader: WindowTextReader, @unchecked Sendable {
-    let snapshot: WindowSnapshot?
-    private let lock = NSLock()
-    private var _readCount = 0
-    var readCount: Int { withLock { _readCount } }
-
-    init(snapshot: WindowSnapshot?) { self.snapshot = snapshot }
-
-    func read() async -> WindowSnapshot? {
-        recordRead()
-        return snapshot
-    }
-
     private func recordRead() { withLock { _readCount += 1 } }
+    private func recordAlternate() { withLock { _alternateCount += 1 } }
 
     private func withLock<T>(_ body: () -> T) -> T {
         lock.lock()
@@ -96,20 +90,20 @@ private final class StubReader: WindowTextReader, @unchecked Sendable {
     }
 }
 
-/// Returns a fixed sequence of captures, one per `capture()` call, then
+/// Returns a fixed sequence of readings, one per `read()` call, then
 /// nil. Simulates focus moving between windows across successive
-/// coordinator refreshes — `StubCapturer` can't do this since it always
-/// returns the same capture.
-private final class SequenceCapturer: WindowImageCapturing, @unchecked Sendable {
+/// coordinator refreshes — `StubSource` can't do this since it always
+/// returns the same reading.
+private final class SequenceSource: ScreenContentSource, @unchecked Sendable {
     private let lock = NSLock()
-    private var captures: [WindowImageCapture?]
-    init(_ captures: [WindowImageCapture?]) { self.captures = captures }
-    func capture() async -> WindowImageCapture? { pop() }
-    private func pop() -> WindowImageCapture? {
+    private var readings: [ScreenContent?]
+    init(_ readings: [ScreenContent?]) { self.readings = readings }
+    func read() async -> ScreenContent? { pop() }
+    private func pop() -> ScreenContent? {
         lock.lock()
         defer { lock.unlock() }
-        guard !captures.isEmpty else { return nil }
-        return captures.removeFirst()
+        guard !readings.isEmpty else { return nil }
+        return readings.removeFirst()
     }
 }
 
@@ -178,31 +172,51 @@ private func png(_ marker: String) -> Data { Data(marker.utf8) }
 
 private func shot(
     _ bundleID: String, _ title: String, _ marker: String,
-    pixels: ScreenContextPixelSize = ScreenContextPixelSize(width: 1568, height: 980)
+    pixels: ScreenContextPixelSize = ScreenContextPixelSize(width: 1568, height: 980),
+    fallbackReason: ScreenContextFallbackReason? = nil
 ) -> WindowImageCapture {
-    WindowImageCapture(bundleID: bundleID, windowTitle: title, pngData: png(marker), pixelSize: pixels)
+    WindowImageCapture(bundleID: bundleID, windowTitle: title, pngData: png(marker),
+                       pixelSize: pixels, fallbackReason: fallbackReason)
+}
+
+/// A pixels reading — what `VisionModelScreenContentSource` produces.
+private func imageContent(
+    _ bundleID: String, _ title: String, _ marker: String,
+    pixels: ScreenContextPixelSize = ScreenContextPixelSize(width: 1568, height: 980),
+    fallbackReason: ScreenContextFallbackReason? = nil
+) -> ScreenContent {
+    .image(shot(bundleID, title, marker, pixels: pixels, fallbackReason: fallbackReason))
+}
+
+/// A text reading — what `OCRScreenContentSource` (`.screenshot`) and
+/// `AXScreenContentSource` (`.accessibility`) produce.
+private func textContent(
+    _ bundleID: String, _ title: String, _ text: String,
+    source: ScreenContextSource = .screenshot,
+    fallbackReason: ScreenContextFallbackReason? = nil
+) -> ScreenContent {
+    .text(WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text,
+                         source: source, fallbackReason: fallbackReason))
 }
 
 /// - Parameter frontmostBundleID: what the (fake) frontmost-app lookup
-///   reports, checked BEFORE `capturer.capture()` is ever called. Passed
+///   reports, checked BEFORE `source.read()` is ever called. Passed
 ///   explicitly (no default) since it now gates a privacy guarantee —
-///   an accidental default here would be exactly how Finding 1 (capture
+///   an accidental default here would be exactly how Finding 1 (read
 ///   precedes the denylist check) went unnoticed the first time.
 private func makeCoordinator(
     engine: SpyEngine,
-    capture: WindowImageCapture?,
-    snapshot: WindowSnapshot? = nil,
+    content: ScreenContent?,
+    alternate: ScreenContent? = nil,
     frontmostBundleID: String?,
     enabled: Bool = true,
     denylist: [String] = [],
     cache: ScreenContextCache = ScreenContextCache(),
     activityRecorder: ActivityRecorder = ActivityRecorder()
-) -> (ScreenContextCoordinator, StubCapturer, StubReader) {
-    let capturer = StubCapturer(capture)
-    let reader = StubReader(snapshot: snapshot)
+) -> (ScreenContextCoordinator, StubSource) {
+    let source = StubSource(content, alternate: alternate)
     let coordinator = ScreenContextCoordinator(
-        capturer: capturer,
-        textReader: reader,
+        source: source,
         cache: cache,
         denylist: { ScreenContextDenylist(userAdditions: denylist) },
         isEnabled: { enabled },
@@ -212,81 +226,135 @@ private func makeCoordinator(
         apply: { await engine.set($0) },
         onActivity: { await activityRecorder.record($0) }
     )
-    return (coordinator, capturer, reader)
+    return (coordinator, source)
 }
 
 private let t0 = Date(timeIntervalSince1970: 2_000_000)
 
-@Suite("ScreenContextCoordinator")
-struct ScreenContextCoordinatorTests {
+/// The point of the `ScreenContentSource` seam: the coordinator picks
+/// the Go extractor from the SHAPE of the reading and nothing else. It
+/// cannot see which strategy produced it, so swapping OCR for a vision
+/// model (or for the accessibility tree) is a composition-root edit and
+/// no change in here at all.
+@Suite("ScreenContextCoordinator content routing")
+struct ScreenContextCoordinatorRoutingTests {
 
-    @Test func extracts_and_applies_keywords_from_the_screenshot() async {
+    @Test func a_text_reading_goes_to_the_text_extractor_only() async {
         let engine = SpyEngine()
-        let (c, _, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "png-bytes"),
+            content: textContent("com.a", "Doc", "OCR read this", source: .screenshot),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
+        #expect(source.readCount == 1)
+        #expect(engine.textExtractCalls == 1)
+        #expect(engine.lastExtractText == "OCR read this")
+        #expect(engine.imageExtractCalls == 0)
+        #expect(engine.setCalls == [["TextKeyword"]])
+    }
+
+    @Test func an_image_reading_goes_to_the_image_extractor_only() async {
+        // Same coordinator construction as the test above — only the
+        // shape of what the source hands back differs.
+        let engine = SpyEngine()
+        let (c, source) = makeCoordinator(
+            engine: engine,
+            content: imageContent("com.a", "Doc", "png-bytes"),
+            frontmostBundleID: "com.a"
+        )
+        await c.refresh(now: t0)
+        #expect(source.readCount == 1)
         #expect(engine.imageExtractCalls == 1)
-        #expect(engine.setCalls == [["SpeakerGate"]])
-        // The AX reader is the no-vision fallback ONLY — a healthy
-        // vision path must never touch it.
-        #expect(reader.readCount == 0)
         #expect(engine.textExtractCalls == 0)
+        #expect(engine.setCalls == [["SpeakerGate"]])
+    }
+
+    @Test func the_same_text_shape_is_handled_identically_whichever_read_produced_it() async {
+        // OCR text and accessibility text are the same shape, and the
+        // pipeline from here on must not care which is which — only
+        // the RECORD distinguishes them, for the inspector's sake.
+        for source in [ScreenContextSource.screenshot, .accessibility] {
+            let engine = SpyEngine()
+            let recorder = ActivityRecorder()
+            let (c, _) = makeCoordinator(
+                engine: engine,
+                content: textContent("com.a", "Doc", "same text", source: source),
+                frontmostBundleID: "com.a",
+                activityRecorder: recorder
+            )
+            await c.refresh(now: t0)
+            #expect(engine.textExtractCalls == 1)
+            #expect(engine.setCalls == [["TextKeyword"]])
+            let activities = await recorder.activities
+            #expect(activities.first?.source == source)
+        }
     }
 
     @Test func image_bytes_are_forwarded_verbatim_to_the_extractor() async {
         let engine = SpyEngine()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "the exact bytes"),
+            content: imageContent("com.a", "Doc", "the exact bytes"),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
         #expect(engine.lastExtractImage == png("the exact bytes"))
     }
 
+    @Test func text_is_forwarded_verbatim_to_the_extractor() async {
+        let engine = SpyEngine()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", "the exact text"),
+            frontmostBundleID: "com.a"
+        )
+        await c.refresh(now: t0)
+        #expect(engine.lastExtractText == "the exact text")
+    }
+}
+
+@Suite("ScreenContextCoordinator")
+struct ScreenContextCoordinatorTests {
+
     @Test func does_nothing_when_disabled() async {
         // Disabled must clear any previously-applied keywords, not just
         // skip reapplying new ones — otherwise turning the feature off
-        // stops the CAPTURE but not the biasing: whatever was applied
+        // stops the READ but not the biasing: whatever was applied
         // before the toggle flip keeps affecting every dictation until
         // the app relaunches. `setCalls == [[]]` (an explicit clear),
         // not `.isEmpty` (no call at all).
         let engine = SpyEngine()
-        let (c, capturer, _) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "bytes"),
+            content: imageContent("com.a", "Doc", "bytes"),
             frontmostBundleID: "com.a",
             enabled: false
         )
         await c.refresh(now: t0)
         #expect(engine.imageExtractCalls == 0)
-        #expect(capturer.captureCount == 0)
+        #expect(source.readCount == 0)
         #expect(engine.setCalls == [[]])
     }
 
-    @Test func denylisted_app_is_never_captured_or_extracted() async {
+    @Test func denylisted_app_is_never_read_or_extracted() async {
         // The bundle ID the (fake) frontmost-app lookup reports is
-        // ALSO the denylisted one, so the pre-capture gate must catch
-        // this before `capturer.capture()` is ever called — not just
-        // before `extract`. `captureCount` is the assertion that
-        // actually distinguishes "never photographed" from
-        // "photographed, then discarded", which `imageExtractCalls == 0`
-        // alone does not — and it is also what keeps a denylisted app
-        // from triggering the Screen Recording prompt.
+        // ALSO the denylisted one, so the pre-read gate must catch this
+        // before `source.read()` is ever called — not just before
+        // `extract`. `readCount` is the assertion that actually
+        // distinguishes "never read" from "read, then discarded", which
+        // `imageExtractCalls == 0` alone does not — and it is also what
+        // keeps a denylisted app from triggering the Screen Recording
+        // prompt.
         let engine = SpyEngine()
-        let (c, capturer, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.1password.1password", "Vault", "secret pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            content: imageContent("com.1password.1password", "Vault", "secret pixels"),
             frontmostBundleID: "com.1password.1password",
             denylist: []
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 0)
-        #expect(reader.readCount == 0)
+        #expect(source.readCount == 0)
         #expect(engine.imageExtractCalls == 0)
         #expect(engine.textExtractCalls == 0)
     }
@@ -295,9 +363,9 @@ struct ScreenContextCoordinatorTests {
         // Focusing a denylisted app must not leave the previous
         // window's keywords armed for the next dictation.
         let engine = SpyEngine()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.1password.1password", "Vault", "secret pixels"),
+            content: imageContent("com.1password.1password", "Vault", "secret pixels"),
             frontmostBundleID: "com.1password.1password",
             denylist: []
         )
@@ -305,30 +373,33 @@ struct ScreenContextCoordinatorTests {
         #expect(engine.setCalls == [[]])
     }
 
-    @Test func post_capture_gate_still_catches_a_denylisted_window_even_when_the_frontmost_lookup_disagrees() async {
-        // Defence in depth: the frontmost-app lookup and the capture
-        // aren't atomic with each other, so even when the pre-capture
-        // gate sees a benign app, the capture's own (authoritative)
-        // bundle ID must still be checked and must still clear rather
-        // than send the pixels anywhere.
-        let engine = SpyEngine()
-        let (c, capturer, _) = makeCoordinator(
-            engine: engine,
-            capture: shot("com.1password.1password", "Vault", "secret pixels"),
-            frontmostBundleID: "com.a"
-        )
-        await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)     // pre-capture gate passed, so the capture DID happen
-        #expect(engine.imageExtractCalls == 0)  // but the post-capture gate still caught it
-        #expect(engine.setCalls == [[]])
+    @Test func post_read_gate_still_catches_a_denylisted_window_even_when_the_frontmost_lookup_disagrees() async {
+        // Defence in depth: the frontmost-app lookup and the read
+        // aren't atomic with each other, so even when the pre-read gate
+        // sees a benign app, the reading's own (authoritative) bundle
+        // ID must still be checked and must still clear rather than
+        // send anything anywhere. Holds for BOTH shapes, since the gate
+        // is written once against `ScreenContent.bundleID`.
+        for content in [imageContent("com.1password.1password", "Vault", "secret pixels"),
+                        textContent("com.1password.1password", "Vault", "hunter2")] {
+            let engine = SpyEngine()
+            let (c, source) = makeCoordinator(
+                engine: engine, content: content, frontmostBundleID: "com.a"
+            )
+            await c.refresh(now: t0)
+            #expect(source.readCount == 1)          // pre-read gate passed, so the read DID happen
+            #expect(engine.imageExtractCalls == 0)  // but the post-read gate still caught it
+            #expect(engine.textExtractCalls == 0)
+            #expect(engine.setCalls == [[]])
+        }
     }
 
     @Test func second_refresh_of_an_identical_screenshot_hits_cache() async {
         let engine = SpyEngine()
         let cache = ScreenContextCache()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "unchanged pixels"),
+            content: imageContent("com.a", "Doc", "unchanged pixels"),
             frontmostBundleID: "com.a",
             cache: cache
         )
@@ -340,16 +411,33 @@ struct ScreenContextCoordinatorTests {
         #expect(engine.setCalls.count == 2)        // but keywords re-applied
     }
 
+    @Test func second_refresh_of_identical_text_hits_cache() async {
+        let engine = SpyEngine()
+        let cache = ScreenContextCache()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", "unchanged text"),
+            frontmostBundleID: "com.a",
+            cache: cache
+        )
+
+        await c.refresh(now: t0)
+        await c.refresh(now: t0)
+
+        #expect(engine.textExtractCalls == 1)
+        #expect(engine.setCalls.count == 2)
+    }
+
     @Test func a_changed_screenshot_of_the_same_window_misses_cache() async {
-        // The cache is keyed on image CONTENT, not window identity —
+        // The cache is keyed on the CONTENT, not window identity —
         // scrolling or editing must re-extract rather than serve the
         // previous screen's keywords.
         let engine = SpyEngine()
         let cache = ScreenContextCache()
-        let capturer = SequenceCapturer([shot("com.a", "Doc", "pixels v1"), shot("com.a", "Doc", "pixels v2")])
+        let source = SequenceSource([imageContent("com.a", "Doc", "pixels v1"),
+                                     imageContent("com.a", "Doc", "pixels v2")])
         let c = ScreenContextCoordinator(
-            capturer: capturer,
-            textReader: StubReader(snapshot: nil),
+            source: source,
             cache: cache,
             denylist: { ScreenContextDenylist(userAdditions: []) },
             isEnabled: { true },
@@ -365,67 +453,95 @@ struct ScreenContextCoordinatorTests {
         #expect(engine.imageExtractCalls == 2)
     }
 
-    @Test func nil_capture_falls_back_to_the_accessibility_text_path() async {
-        // frontmostBundleID reports a benign app so the pre-capture
-        // gate passes and the capture genuinely happens (and genuinely
-        // returns nil) — Screen Recording denied, no on-screen window,
-        // or the window vanished mid-capture.
+    @Test func a_reading_the_strategy_could_not_produce_clears_keywords() async {
+        // The installed strategy — including, for a composed one, its
+        // fallback — could not read this window at all. Keywords are
+        // cleared rather than left armed from the previous window.
+        let engine = SpyEngine()
+        let (c, source) = makeCoordinator(engine: engine, content: nil, frontmostBundleID: "com.a")
+        await c.refresh(now: t0)
+        #expect(source.readCount == 1)
+        #expect(engine.textExtractCalls == 0)
+        #expect(engine.imageExtractCalls == 0)
+        #expect(engine.setCalls == [[]])
+    }
+
+    @Test func an_empty_text_reading_is_an_answer_not_a_failure() async {
+        // A window that was read successfully and had nothing legible
+        // in it. Nothing further is tried — the alternate exists for a
+        // shape the extractor cannot consume, not for a blank answer —
+        // and no extraction is spent on an empty string.
+        let engine = SpyEngine()
+        let (c, source) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", ""),
+            alternate: textContent("com.a", "Doc", "AX text", source: .accessibility),
+            frontmostBundleID: "com.a"
+        )
+        await c.refresh(now: t0)
+        #expect(engine.textExtractCalls == 0)
+        #expect(source.alternateCount == 0)
+        #expect(engine.setCalls == [[]])
+    }
+
+    @Test func the_composed_fallback_is_invisible_to_the_coordinator() async {
+        // A real `FallbackScreenContentSource`, not a stub: the primary
+        // yields nothing (no screenshot — Screen Recording denied, no
+        // on-screen window, or the window vanished mid-capture) and the
+        // secondary's accessibility text is what arrives. The
+        // coordinator extracts from it exactly as it would from any
+        // other text reading, and the only trace of the fallback is the
+        // reason stamped on the record.
         //
-        // No pixels means the AX path, not a dead end. An earlier rule
+        // No pixels means the fallback, not a dead end. An earlier rule
         // cleared and returned here; that silently and permanently
         // killed screen context for everyone who declines the Screen
         // Recording prompt, while the feature's own toggle — the thing
         // that actually says "off" — was still on.
         let engine = SpyEngine()
-        let (c, capturer, reader) = makeCoordinator(
-            engine: engine,
-            capture: nil,
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX text instead"),
-            frontmostBundleID: "com.a"
+        let recorder = ActivityRecorder()
+        let composed = FallbackScreenContentSource(
+            primary: StubSource(nil),
+            secondary: StubSource(textContent("com.a", "Doc", "AX text instead", source: .accessibility)),
+            reasonWhenSecondaryUsed: .screenshotUnavailable
+        )
+        let c = ScreenContextCoordinator(
+            source: composed,
+            cache: ScreenContextCache(),
+            denylist: { ScreenContextDenylist(userAdditions: []) },
+            isEnabled: { true },
+            frontmostBundleID: { "com.a" },
+            extractImage: { await engine.extractImage($0) },
+            extractText: { await engine.extractText($0) },
+            apply: { await engine.set($0) },
+            onActivity: { await recorder.record($0) }
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)
-        #expect(reader.readCount == 1)
-        // No screenshot exists, so the image extractor is never called;
-        // the text one is, with the AX text verbatim.
         #expect(engine.imageExtractCalls == 0)
         #expect(engine.textExtractCalls == 1)
         #expect(engine.lastExtractText == "AX text instead")
-        #expect(engine.setCalls == [["AXKeyword"]])
+        #expect(engine.setCalls == [["TextKeyword"]])
+        let activities = await recorder.activities
+        #expect(activities.first?.source == .accessibility)
+        #expect(activities.first?.fallbackReason == .screenshotUnavailable)
     }
 
-    @Test func nil_capture_fallback_still_clears_when_ax_has_nothing_either() async {
-        // Both paths dry: keywords are cleared rather than left armed
-        // from the previous window.
+    @Test func a_fallback_reading_is_still_subject_to_the_post_read_denylist_gate() async {
+        // The fallback route must be no weaker a guarantee than the
+        // primary one. `AXWindowTextReader.read()` enforces the
+        // denylist internally (via `resolveReadableFrontmostApp`, so
+        // identity and judgement are one main-actor hop); this covers
+        // the coordinator's own post-read gate, the second of the two,
+        // using a stub that deliberately hands back a denylisted
+        // reading the way a mid-flight app switch would.
         let engine = SpyEngine()
-        let (c, capturer, reader) = makeCoordinator(
-            engine: engine, capture: nil, snapshot: nil, frontmostBundleID: "com.a"
-        )
-        await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)
-        #expect(reader.readCount == 1)
-        #expect(engine.textExtractCalls == 0)
-        #expect(engine.setCalls == [[]])
-    }
-
-    @Test func nil_capture_fallback_never_extracts_from_a_denylisted_app() async {
-        // The screenshot-unavailable route must be no weaker a
-        // guarantee than the no-vision one. `AXWindowTextReader.read()`
-        // enforces the denylist internally (via
-        // `resolveReadableFrontmostApp`, so identity and judgement are
-        // one main-actor hop); this covers the coordinator's own
-        // post-read gate, the second of the two, using a stub reader
-        // that deliberately hands back a denylisted snapshot the way a
-        // mid-flight app switch would.
-        let engine = SpyEngine()
-        let (c, _, reader) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: nil,
-            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            content: textContent("com.1password.1password", "Vault", "hunter2",
+                                 source: .accessibility, fallbackReason: .screenshotUnavailable),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
-        #expect(reader.readCount == 1)
         #expect(engine.textExtractCalls == 0)
         #expect(engine.lastExtractText == "")
         #expect(engine.setCalls == [[]])
@@ -435,9 +551,9 @@ struct ScreenContextCoordinatorTests {
         let engine = SpyEngine()
         engine.stubbedImageResult = .failed   // a provider blip, not "found nothing"
         let cache = ScreenContextCache()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "flaky pixels"),
+            content: imageContent("com.a", "Doc", "flaky pixels"),
             frontmostBundleID: "com.a",
             cache: cache
         )
@@ -457,97 +573,121 @@ struct ScreenContextCoordinatorTests {
         #expect(engine.setCalls == [[], ["SpeakerGate"]])
     }
 
-    @Test func an_ordinary_failure_never_falls_back_to_the_accessibility_path() async {
+    @Test func failed_text_extraction_clears_keywords_without_caching_the_failure() async {
+        let engine = SpyEngine()
+        engine.stubbedTextKeywords = nil   // provider unreachable
+        let cache = ScreenContextCache()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", "flaky text"),
+            frontmostBundleID: "com.a",
+            cache: cache
+        )
+        await c.refresh(now: t0)
+        #expect(engine.setCalls == [[]])
+
+        engine.stubbedTextKeywords = ["TextKeyword"]
+        await c.refresh(now: t0)
+        #expect(engine.textExtractCalls == 2)
+        #expect(engine.setCalls == [[], ["TextKeyword"]])
+    }
+
+    @Test func an_ordinary_failure_never_asks_for_another_reading() async {
         // `.failed` is a timeout / rate limit / auth problem. Nothing
-        // is cached on either side of the ABI, so the image path stays
-        // in use — falling back here would silently switch a
-        // vision-capable setup onto the text pipeline over one blip.
+        // is cached on either side of the ABI, so the strategy stays in
+        // use — asking for an alternate here would silently switch a
+        // vision-capable setup onto a different pipeline over one blip.
         let engine = SpyEngine()
         engine.stubbedImageResult = .failed
-        let (c, _, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "flaky pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX text"),
+            content: imageContent("com.a", "Doc", "flaky pixels"),
+            alternate: textContent("com.a", "Doc", "AX text", source: .accessibility),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
-        #expect(reader.readCount == 0)
+        #expect(source.alternateCount == 0)
         #expect(engine.textExtractCalls == 0)
         #expect(engine.setCalls == [[]])
     }
 
-    @Test func no_vision_falls_back_to_the_accessibility_text_path() async {
-        // The one case that may reach the AX reader: the provider says
-        // this model cannot accept images at all.
+    @Test func no_vision_asks_the_source_for_another_reading() async {
+        // The one verdict that may reach the alternate: the provider
+        // says this model cannot accept images at all. That is a fact
+        // about the extractor, not the window, so no source could have
+        // discovered it on its own.
         let engine = SpyEngine()
         engine.stubbedImageResult = .noVision
-        let (c, capturer, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "the exact text"),
+            content: imageContent("com.a", "Doc", "pixels"),
+            alternate: textContent("com.a", "Doc", "the exact text", source: .accessibility),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)
+        #expect(source.readCount == 1)
         #expect(engine.imageExtractCalls == 1)
-        #expect(reader.readCount == 1)
+        #expect(source.alternateCount == 1)
         #expect(engine.textExtractCalls == 1)
         #expect(engine.lastExtractText == "the exact text")
-        #expect(engine.setCalls == [["AXKeyword"]])
+        #expect(engine.setCalls == [["TextKeyword"]])
     }
 
-    @Test func no_vision_fallback_still_clears_when_ax_has_nothing_to_read() async {
+    @Test func no_vision_still_clears_when_there_is_no_alternate_reading() async {
+        // A leaf source has no alternate at all (the protocol default),
+        // and a composed one may still come up empty. Either way the
+        // keywords are cleared rather than left armed.
         let engine = SpyEngine()
         engine.stubbedImageResult = .noVision
-        let (c, _, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
-            snapshot: nil,
+            content: imageContent("com.a", "Doc", "pixels"),
+            alternate: nil,
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
-        #expect(reader.readCount == 1)
+        #expect(source.alternateCount == 1)
         #expect(engine.textExtractCalls == 0)
         #expect(engine.setCalls == [[]])
     }
 
-    @Test func no_vision_fallback_still_honours_the_post_read_denylist_gate() async {
-        // The fallback must be no weaker a guarantee than the primary
-        // path: an AX snapshot whose own bundle ID is denylisted is
-        // dropped, not extracted, even though the pre-capture gate saw
-        // a benign app.
+    @Test func an_alternate_reading_still_honours_the_post_read_denylist_gate() async {
+        // The alternate must be no weaker a guarantee than the primary
+        // reading: content whose own bundle ID is denylisted is
+        // dropped, not extracted, even though the pre-read gate saw a
+        // benign app.
         let engine = SpyEngine()
         engine.stubbedImageResult = .noVision
-        let (c, _, reader) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.1password.1password", windowTitle: "Vault", text: "hunter2"),
+            content: imageContent("com.a", "Doc", "pixels"),
+            alternate: textContent("com.1password.1password", "Vault", "hunter2", source: .accessibility),
             frontmostBundleID: "com.a"
         )
         await c.refresh(now: t0)
-        #expect(reader.readCount == 1)
+        #expect(source.alternateCount == 1)
         #expect(engine.textExtractCalls == 0)
         #expect(engine.setCalls == [[]])
     }
 
-    @Test func no_vision_fallback_caches_on_the_text_key() async {
-        // Two refreshes of the same unchanged window: the fallback's
+    @Test func the_alternate_reading_caches_on_its_own_key() async {
+        // Two refreshes of the same unchanged window: the alternate's
         // own cache entry must hit, so a text-only model costs one
         // round trip, not one per focus event.
         let engine = SpyEngine()
         engine.stubbedImageResult = .noVision
         let cache = ScreenContextCache()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "unchanged text"),
+            content: imageContent("com.a", "Doc", "pixels"),
+            alternate: textContent("com.a", "Doc", "unchanged text", source: .accessibility),
             frontmostBundleID: "com.a",
             cache: cache
         )
         await c.refresh(now: t0)
         await c.refresh(now: t0)
         #expect(engine.textExtractCalls == 1)
-        #expect(engine.setCalls == [["AXKeyword"], ["AXKeyword"]])
+        #expect(engine.setCalls == [["TextKeyword"], ["TextKeyword"]])
     }
 
     @Test func scheduleRefresh_supersedes_a_slower_earlier_extraction() async throws {
@@ -571,21 +711,20 @@ struct ScreenContextCoordinatorTests {
 
         let activityRecorder = ActivityRecorder()
         let coordinator = ScreenContextCoordinator(
-            capturer: SequenceCapturer([captureX, captureY]),
-            textReader: StubReader(snapshot: nil),
+            source: SequenceSource([.image(captureX), .image(captureY)]),
             cache: cache,
             denylist: { ScreenContextDenylist(userAdditions: []) },
             isEnabled: { true },
-            frontmostBundleID: { "com.test" },   // any non-denylisted id; both captures pass the post-capture gate too
+            frontmostBundleID: { "com.test" },   // any non-denylisted id; both readings pass the post-read gate too
             extractImage: { await engine.extractImage($0) },
             extractText: { _ in nil },
             apply: { await engine.set($0) },
             onActivity: { await activityRecorder.record($0) }
         )
 
-        await coordinator.scheduleRefresh()   // starts X: capture -> miss -> extract() blocks on `proceed`
+        await coordinator.scheduleRefresh()   // starts X: read -> miss -> extract() blocks on `proceed`
         await engine.started.wait()           // deterministic: X's refresh() has now stamped its generation
-        await coordinator.scheduleRefresh()   // starts Y: capture -> cache hit -> applies almost immediately
+        await coordinator.scheduleRefresh()   // starts Y: read -> cache hit -> applies almost immediately
 
         // Deterministic, not a sleep: waits for Y's OWN `apply` call,
         // which cannot happen until Y's refresh() has itself stamped a
@@ -649,8 +788,7 @@ struct ScreenContextCoordinatorTests {
         cache.store(["Y"], for: yKey, now: Date())
 
         let coordinator = ScreenContextCoordinator(
-            capturer: SequenceCapturer([captureX, captureY]),
-            textReader: StubReader(snapshot: nil),
+            source: SequenceSource([.image(captureX), .image(captureY)]),
             cache: cache,
             denylist: { ScreenContextDenylist(userAdditions: []) },
             isEnabled: { true },
@@ -687,9 +825,9 @@ struct ScreenContextCoordinatorActivityTests {
     @Test func disabled_records_disabled_outcome_with_no_bundle_id() async {
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
+            content: imageContent("com.a", "Doc", "pixels"),
             frontmostBundleID: "com.a",
             enabled: false,
             activityRecorder: recorder
@@ -703,17 +841,17 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(activities.first?.capturedImageBytes == nil)
     }
 
-    @Test func pre_capture_denylist_skip_records_bundle_id_but_nothing_captured() async {
+    @Test func pre_read_denylist_skip_records_bundle_id_but_nothing_read() async {
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, capturer, _) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.1password.1password", "Vault", "secret pixels"),
+            content: imageContent("com.1password.1password", "Vault", "secret pixels"),
             frontmostBundleID: "com.1password.1password",
             activityRecorder: recorder
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 0)   // the capture never happened at all
+        #expect(source.readCount == 0)   // the read never happened at all
         let activities = await recorder.activities
         #expect(activities.count == 1)
         #expect(activities.first?.outcome == .skippedPreReadDenylist)
@@ -722,23 +860,23 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(activities.first?.capturedText == nil)
     }
 
-    @Test func post_capture_denylist_skip_records_bundle_id_but_never_what_it_captured() async {
-        // Mirrors `post_capture_gate_still_catches_a_denylisted_window_even_when_the_frontmost_lookup_disagrees`:
-        // the pre-capture gate sees a benign app, so the capture
-        // genuinely happens and genuinely returns a denylisted app's
-        // pixels — but nothing about them may reach the activity
-        // record. Recording even the byte count here would leak that
-        // the window was photographed at all.
+    @Test func post_read_denylist_skip_records_bundle_id_but_never_what_it_read() async {
+        // Mirrors `post_read_gate_still_catches_a_denylisted_window_even_when_the_frontmost_lookup_disagrees`:
+        // the pre-read gate sees a benign app, so the read genuinely
+        // happens and genuinely returns a denylisted app's content —
+        // but nothing about it may reach the activity record. Recording
+        // even the byte count here would leak that the window was
+        // photographed at all.
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, capturer, _) = makeCoordinator(
+        let (c, source) = makeCoordinator(
             engine: engine,
-            capture: shot("com.1password.1password", "Vault", "secret pixels"),
+            content: imageContent("com.1password.1password", "Vault", "secret pixels"),
             frontmostBundleID: "com.a",
             activityRecorder: recorder
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)   // the capture DID happen this time
+        #expect(source.readCount == 1)   // the read DID happen this time
         let activities = await recorder.activities
         #expect(activities.count == 1)
         #expect(activities.first?.outcome == .skippedPostReadDenylist)
@@ -749,43 +887,77 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(activities.first?.capturedTextLength == nil)
     }
 
-    @Test func no_capture_and_no_ax_text_records_both_facts_separately() async {
-        // The record must distinguish "no screenshot" from "no text":
-        // the outcome is the AX read's own result, and why the image
-        // path was skipped rides alongside it as `fallbackReason`.
-        // Collapsing them into one case is what makes an inspector
-        // unable to tell "grant Screen Recording" from "this app
-        // exposes no AX text".
+    @Test func a_denylisted_text_reading_never_records_the_text_it_read() async {
+        // Same guarantee for the OCR/AX shape: the post-read gate is
+        // the actual promise that a denylisted window's content goes no
+        // further, and recording the text here — even in memory, even
+        // for the user's own eyes — would quietly defeat it.
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, capturer, reader) = makeCoordinator(
-            engine: engine, capture: nil, snapshot: nil,
-            frontmostBundleID: "com.a", activityRecorder: recorder
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.1password.1password", "Vault", "hunter2"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
         )
         await c.refresh(now: t0)
-        #expect(capturer.captureCount == 1)
-        #expect(reader.readCount == 1)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .skippedPostReadDenylist)
+        #expect(activities.first?.capturedText == nil)
+        #expect(activities.first?.capturedTextLength == nil)
+    }
+
+    @Test func no_readable_content_at_all_records_one_outcome_and_no_payload() async {
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, source) = makeCoordinator(
+            engine: engine, content: nil, frontmostBundleID: "com.a", activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        #expect(source.readCount == 1)
         let activities = await recorder.activities
         #expect(activities.count == 1)
         #expect(activities.first?.outcome == .noReadableWindowText)
-        #expect(activities.first?.fallbackReason == .screenshotUnavailable)
         #expect(activities.first?.bundleID == "com.a")
+        // No read got far enough to have a source, or a payload.
+        #expect(activities.first?.source == nil)
         #expect(activities.first?.capturedImageBytes == nil)
         #expect(activities.first?.capturedImagePixelSize == nil)
     }
 
-    @Test func no_capture_fallback_records_the_accessibility_source_and_why() async {
-        // Exactly one record for the refresh, saying where the keywords
-        // came from (AX text) and why the image path was skipped
-        // (no screenshot) — the two together are what lets the
-        // inspector say "the screenshot failed, so this came from
-        // accessibility text".
+    @Test func an_empty_screenshot_reading_records_which_read_came_up_empty() async {
+        // The screenshot was taken and OCR'd and there was nothing in
+        // it. That is a different diagnosis from "no screenshot", and
+        // `source` is what distinguishes them.
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: nil,
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX window text"),
+            content: textContent("com.a", "Doc", "", source: .screenshot),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 1)
+        #expect(activities.first?.outcome == .noReadableWindowText)
+        #expect(activities.first?.source == .screenshot)
+        #expect(activities.first?.fallbackReason == nil)
+    }
+
+    @Test func a_fallback_reading_records_the_source_and_why() async {
+        // Exactly one record for the refresh, saying where the keywords
+        // came from (AX text) and why the primary was skipped (no
+        // screenshot) — the two together are what lets the inspector
+        // say "the screenshot failed, so this came from accessibility
+        // text".
+        let engine = SpyEngine()
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", "AX window text",
+                                 source: .accessibility, fallbackReason: .screenshotUnavailable),
             frontmostBundleID: "com.a",
             activityRecorder: recorder
         )
@@ -798,7 +970,7 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(a.fallbackReason == .screenshotUnavailable)
         #expect(a.capturedText == "AX window text")
         #expect(a.capturedImageBytes == nil)
-        #expect(a.appliedKeywords == ["AXKeyword"])
+        #expect(a.appliedKeywords == ["TextKeyword"])
     }
 
     @Test func cache_hit_records_the_image_size_and_applied_keywords_but_no_raw_or_dropped() async {
@@ -806,8 +978,9 @@ struct ScreenContextCoordinatorActivityTests {
         let cache = ScreenContextCache()
         let recorder = ActivityRecorder()
         let capture = shot("com.a", "Doc", "unchanged pixels")
-        let (c, _, _) = makeCoordinator(
-            engine: engine, capture: capture, frontmostBundleID: "com.a", cache: cache, activityRecorder: recorder
+        let (c, _) = makeCoordinator(
+            engine: engine, content: .image(capture), frontmostBundleID: "com.a",
+            cache: cache, activityRecorder: recorder
         )
 
         await c.refresh(now: t0)   // primes the cache (extraction)
@@ -820,13 +993,34 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(hit.bundleID == "com.a")
         #expect(hit.source == .screenshot)
         #expect(hit.capturedImageBytes == capture.pngData.count)
-        // The screenshot path has no window text at all — nothing here
-        // may pretend otherwise.
+        // The vision-model path sends no text at all — nothing here may
+        // pretend otherwise.
         #expect(hit.capturedText == nil)
         #expect(hit.capturedTextLength == nil)
         #expect(hit.appliedKeywords == ["SpeakerGate"])
         #expect(hit.rawResponse == nil)
         #expect(hit.dropped.isEmpty)
+    }
+
+    @Test func a_text_cache_hit_records_the_text_and_its_source() async {
+        let engine = SpyEngine()
+        let cache = ScreenContextCache()
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine, content: textContent("com.a", "Doc", "unchanged text"),
+            frontmostBundleID: "com.a", cache: cache, activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        #expect(activities.count == 2)
+        let hit = activities[1]
+        #expect(hit.outcome == .cacheHit)
+        #expect(hit.source == .screenshot)
+        #expect(hit.capturedText == "unchanged text")
+        #expect(hit.capturedTextLength == "unchanged text".count)
+        #expect(hit.capturedImageBytes == nil)
+        #expect(hit.appliedKeywords == ["TextKeyword"])
     }
 
     @Test func extraction_succeeded_records_raw_response_and_drops() async {
@@ -837,9 +1031,9 @@ struct ScreenContextCoordinatorActivityTests {
             dropped: [ScreenContextDroppedTerm(term: "123", reason: "numeric")]
         ))
         let recorder = ActivityRecorder()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
+            content: imageContent("com.a", "Doc", "pixels"),
             frontmostBundleID: "com.a",
             activityRecorder: recorder
         )
@@ -854,13 +1048,35 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(a.source == .screenshot)
     }
 
+    @Test func text_extraction_succeeded_records_raw_response_and_drops() async {
+        let engine = SpyEngine()
+        engine.stubbedTextRaw = "Thornwick, 42"
+        engine.stubbedTextKeywords = ["Thornwick"]
+        engine.stubbedTextDropped = [ScreenContextDroppedTerm(term: "42", reason: "numeric")]
+        let recorder = ActivityRecorder()
+        let (c, _) = makeCoordinator(
+            engine: engine,
+            content: textContent("com.a", "Doc", "Thornwick 42"),
+            frontmostBundleID: "com.a",
+            activityRecorder: recorder
+        )
+        await c.refresh(now: t0)
+        let activities = await recorder.activities
+        let a = activities[0]
+        #expect(a.outcome == .extractionSucceeded)
+        #expect(a.rawResponse == "Thornwick, 42")
+        #expect(a.dropped == [ScreenContextDroppedTerm(term: "42", reason: "numeric")])
+        #expect(a.capturedText == "Thornwick 42")
+        #expect(a.source == .screenshot)
+    }
+
     @Test func extraction_failed_records_the_image_size_but_no_raw_response() async {
         let engine = SpyEngine()
         engine.stubbedImageResult = .failed
         let recorder = ActivityRecorder()
         let capture = shot("com.a", "Doc", "flaky pixels")
-        let (c, _, _) = makeCoordinator(
-            engine: engine, capture: capture, frontmostBundleID: "com.a", activityRecorder: recorder
+        let (c, _) = makeCoordinator(
+            engine: engine, content: .image(capture), frontmostBundleID: "com.a", activityRecorder: recorder
         )
         await c.refresh(now: t0)
         let activities = await recorder.activities
@@ -872,17 +1088,17 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(activities.first?.appliedKeywords == [])
     }
 
-    @Test func no_vision_fallback_records_the_accessibility_source_and_its_text() async {
+    @Test func the_alternate_reading_records_its_own_source_and_the_no_vision_reason() async {
         // Exactly one activity for the whole refresh, describing where
-        // the keywords actually came from — the fallback must not
-        // emit a second, contradictory record for the image attempt.
+        // the keywords actually came from — the alternate must not emit
+        // a second, contradictory record for the image attempt.
         let engine = SpyEngine()
         engine.stubbedImageResult = .noVision
         let recorder = ActivityRecorder()
-        let (c, _, _) = makeCoordinator(
+        let (c, _) = makeCoordinator(
             engine: engine,
-            capture: shot("com.a", "Doc", "pixels"),
-            snapshot: WindowSnapshot(bundleID: "com.a", windowTitle: "Doc", text: "AX window text"),
+            content: imageContent("com.a", "Doc", "pixels"),
+            alternate: textContent("com.a", "Doc", "AX window text", source: .accessibility),
             frontmostBundleID: "com.a",
             activityRecorder: recorder
         )
@@ -895,18 +1111,19 @@ struct ScreenContextCoordinatorActivityTests {
         #expect(a.capturedText == "AX window text")
         #expect(a.capturedTextLength == "AX window text".count)
         #expect(a.capturedImageBytes == nil)
-        #expect(a.appliedKeywords == ["AXKeyword"])
-        // Same fallback, different reason — this one is the model's
-        // fault, not the screenshot's.
+        #expect(a.appliedKeywords == ["TextKeyword"])
+        // Same fallback shape, different reason — this one is the
+        // model's fault, not the screenshot's, and the coordinator is
+        // the only party that could have known that.
         #expect(a.fallbackReason == .noVision)
     }
 
-    @Test func the_screenshot_path_records_the_pixel_dimensions_and_no_fallback_reason() async {
+    @Test func the_image_path_records_the_pixel_dimensions_and_no_fallback_reason() async {
         let engine = SpyEngine()
         let recorder = ActivityRecorder()
         let capture = shot("com.a", "Doc", "pixels", pixels: ScreenContextPixelSize(width: 1568, height: 902))
-        let (c, _, _) = makeCoordinator(
-            engine: engine, capture: capture, frontmostBundleID: "com.a", activityRecorder: recorder
+        let (c, _) = makeCoordinator(
+            engine: engine, content: .image(capture), frontmostBundleID: "com.a", activityRecorder: recorder
         )
         await c.refresh(now: t0)
         let activities = await recorder.activities

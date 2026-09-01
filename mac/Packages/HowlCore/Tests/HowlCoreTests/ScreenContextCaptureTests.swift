@@ -120,6 +120,63 @@ struct WindowTextReaderDenylistTests {
         #expect(await capturer.capture() == nil)
         #expect(spy.consultCount == 1)
     }
+
+    @Test func every_content_source_declines_a_denylisted_app() async {
+        // The guarantee is per-STRATEGY, not per-coordinator: whichever
+        // source `CompositionRoot` installs, a denylisted app must be
+        // refused inside the source itself, before any capture or AX
+        // walk. A new strategy that forgot this would still pass every
+        // coordinator test, because the coordinator's own pre-read gate
+        // would mask it whenever the two observations happened to
+        // agree.
+        //
+        // Each gets its own spy, so `consultCount` gives the assertion
+        // teeth: "returned nil" alone cannot tell "the denylist stopped
+        // it" from "ScreenCaptureKit/AX failed against the synthetic
+        // pid these tests inject".
+        let axSpy = DenylistSpy()
+        let ocrSpy = DenylistSpy()
+        let visionSpy = DenylistSpy()
+        let sources: [(String, DenylistSpy, any ScreenContentSource)] = [
+            ("AX", axSpy, AXScreenContentSource(
+                reader: AXWindowTextReader(
+                    denylist: axSpy.provider, frontmostApp: lookup("com.1password.1password")))),
+            ("OCR", ocrSpy, OCRScreenContentSource(
+                capturer: ScreenCaptureKitWindowCapturer(
+                    denylist: ocrSpy.provider, frontmostApp: lookup("com.1password.1password")),
+                recognizer: OCRWindowTextRecognizer())),
+            ("vision model", visionSpy, VisionModelScreenContentSource(
+                capturer: ScreenCaptureKitWindowCapturer(
+                    denylist: visionSpy.provider, frontmostApp: lookup("com.1password.1password")))),
+        ]
+        for (name, spy, source) in sources {
+            let content = await source.read()
+            #expect(content == nil, "\(name) source read a denylisted app")
+            #expect(spy.consultCount == 1, "\(name) source never consulted the denylist")
+        }
+    }
+
+    @Test func the_composed_fallback_declines_a_denylisted_app_on_both_legs() async {
+        // Composition must not open a hole: if the primary refuses, the
+        // secondary is asked next, and it has to refuse for the same
+        // reason rather than treating "the primary declined" as
+        // permission to read.
+        let spy = DenylistSpy()
+        let composed = FallbackScreenContentSource(
+            primary: OCRScreenContentSource(
+                capturer: ScreenCaptureKitWindowCapturer(
+                    denylist: spy.provider, frontmostApp: lookup("com.1password.1password")),
+                recognizer: OCRWindowTextRecognizer()),
+            secondary: AXScreenContentSource(
+                reader: AXWindowTextReader(
+                    denylist: spy.provider, frontmostApp: lookup("com.1password.1password"))),
+            reasonWhenSecondaryUsed: .screenshotUnavailable
+        )
+        #expect(await composed.read() == nil)
+        // Teeth: both legs really consulted the denylist, rather than
+        // one of them returning nil for an unrelated reason.
+        #expect(spy.consultCount == 2)
+    }
 }
 
 /// The 1568px long-edge policy. Pure arithmetic, so it is pinned here
@@ -160,9 +217,15 @@ struct ScreenshotScalingTests {
     }
 }
 
-/// The image-production half of the capturer: the two pure steps
-/// between ScreenCaptureKit and the ABI. They can be exercised for
-/// real against a synthetic `CGImage`, unlike the capture itself.
+/// The image-production half of the VISION-MODEL strategy: the two
+/// pure steps between ScreenCaptureKit and the ABI. They can be
+/// exercised for real against a synthetic `CGImage`, unlike the
+/// capture itself.
+///
+/// They belong to `VisionModelScreenContentSource` alone. The OCR
+/// strategy reads the same capture in-process and must never pay for
+/// either step — encoding is waste there, and the downscale would
+/// destroy exactly the small glyphs it needs.
 @Suite("Screenshot encoding")
 struct ScreenshotEncodingTests {
 
@@ -180,7 +243,7 @@ struct ScreenshotEncodingTests {
     }
 
     @Test func downscale_resamples_an_oversize_image_to_the_cap() {
-        let scaled = ScreenCaptureKitWindowCapturer.downscale(
+        let scaled = VisionModelScreenContentSource.downscale(
             makeImage(width: 3200, height: 2000), maxLongEdge: 1568
         )
         #expect(scaled?.width == 1568)
@@ -190,7 +253,7 @@ struct ScreenshotEncodingTests {
     @Test func downscale_returns_nil_for_an_image_already_within_the_cap() {
         // nil is the "encode the original" signal — no needless
         // resample of glyphs that are already small.
-        #expect(ScreenCaptureKitWindowCapturer.downscale(
+        #expect(VisionModelScreenContentSource.downscale(
             makeImage(width: 800, height: 600), maxLongEdge: 1568
         ) == nil)
     }
@@ -200,7 +263,7 @@ struct ScreenshotEncodingTests {
         // (`llm.DetectImageMediaType`) — there is no format parameter on
         // the ABI to correct a wrong guess, so the signature is the
         // whole contract.
-        let data = try #require(ScreenCaptureKitWindowCapturer.encodePNG(makeImage(width: 64, height: 48)))
+        let data = try #require(VisionModelScreenContentSource.encodePNG(makeImage(width: 64, height: 48)))
         #expect(data.prefix(8) == Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
 
         // ...and that they really decode back to the same pixel size.

@@ -100,12 +100,29 @@ public final class CompositionRoot {
     /// (Settings → General). In-memory only — dies with the app.
     public lazy var screenContextActivityStore = ScreenContextActivityStore()
 
+    /// THE screen-context strategy, and the only place it is chosen.
+    ///
+    /// This one expression decides how the focused window is read.
+    /// `ScreenContentSource` is the seam: the coordinator sees only the
+    /// SHAPE of what comes back, so swapping strategies changes nothing
+    /// else anywhere.
+    ///
+    ///   - today: OCR the screenshot locally, and use the accessibility
+    ///     tree when there is no screenshot at all.
+    ///   - send the pixels to the provider's vision model instead:
+    ///     replace `OCRScreenContentSource` with
+    ///     `VisionModelScreenContentSource` — same arguments, nothing
+    ///     else edited.
+    ///   - accessibility only (no Screen Recording prompt, ever): drop
+    ///     the wrapper and pass `AXScreenContentSource` directly.
+    lazy var screenContentSource: any ScreenContentSource = FallbackScreenContentSource(
+        primary: OCRScreenContentSource(denylist: screenContextDenylistProvider),
+        secondary: AXScreenContentSource(denylist: screenContextDenylistProvider),
+        reasonWhenSecondaryUsed: .screenshotUnavailable
+    )
+
     lazy var screenContextCoordinator = ScreenContextCoordinator(
-        // Primary path: a screenshot straight to the vision model.
-        capturer: ScreenCaptureKitWindowCapturer(denylist: screenContextDenylistProvider),
-        // Fallback path, used only when the provider reports that the
-        // configured model cannot accept images.
-        textReader: AXWindowTextReader(denylist: screenContextDenylistProvider),
+        source: screenContentSource,
         cache: screenContextCache,
         denylist: screenContextDenylistProvider,
         isEnabled: { [settings] in

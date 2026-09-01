@@ -72,17 +72,45 @@ func resolveReadableFrontmostApp(
 /// Text read from the user's focused window, with the identity needed
 /// to cache and denylist it.
 ///
-/// Produced only by `AXWindowTextReader` — the one remaining text
-/// reader (see its header for why it is still here).
+/// Produced by every content source whose reading is TEXT — Vision OCR
+/// over a screenshot (`OCRScreenContentSource`) and the Accessibility
+/// tree (`AXScreenContentSource`) — which is why it carries `source`:
+/// downstream, the two are the same string and the inspector would
+/// otherwise have no way to say which read produced it.
 public struct WindowSnapshot: Equatable, Sendable {
     public let bundleID: String
     public let windowTitle: String
     public let text: String
+    /// Which read produced this text. Set by the source that made it,
+    /// never inferred by the coordinator — the whole point of the
+    /// `ScreenContentSource` seam is that the coordinator cannot tell
+    /// what strategy is installed.
+    public let source: ScreenContextSource
+    /// Why this reading is a fallback rather than the strategy's
+    /// primary one; nil when nothing fell back. Stamped by
+    /// `FallbackScreenContentSource` (or by the coordinator when an
+    /// extractor rejects the primary reading), not by the leaf source,
+    /// which has no way to know it is second in line.
+    public let fallbackReason: ScreenContextFallbackReason?
 
-    public init(bundleID: String, windowTitle: String, text: String) {
+    public init(
+        bundleID: String,
+        windowTitle: String,
+        text: String,
+        source: ScreenContextSource,
+        fallbackReason: ScreenContextFallbackReason? = nil
+    ) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.text = text
+        self.source = source
+        self.fallbackReason = fallbackReason
+    }
+
+    /// The same reading, marked as having come from a fallback.
+    public func marked(asFallback reason: ScreenContextFallbackReason) -> WindowSnapshot {
+        WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, text: text,
+                       source: source, fallbackReason: reason)
     }
 }
 

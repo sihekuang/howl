@@ -121,7 +121,7 @@ public struct AXWindowTextReader: WindowTextReader {
 
         let text = collected.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
-        return WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text)
+        return WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text, source: .accessibility)
     }
 
     /// Depth-first walk accumulating AXValue and AXTitle strings.
