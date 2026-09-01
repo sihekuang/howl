@@ -27,7 +27,45 @@ public struct ScreenContextDenylist: Sendable {
     private let skipAll: Bool
 
     public init(userAdditions: [String]) {
+        self.init(userAdditions: userAdditions, hostBundleID: Bundle.main.bundleIdentifier)
+    }
+
+    /// Injectable host bundle ID so the self-exclusion is testable.
+    /// `Bundle.main.bundleIdentifier` is nil under the SwiftPM test
+    /// runner, which would make an assertion against it vacuously pass
+    /// while proving nothing about the app.
+    init(userAdditions: [String], hostBundleID: String?) {
         var all = Set(ScreenContextDenylist.builtIn.map { $0.lowercased() })
+
+        // Never read our own windows. This is a correctness guard, not
+        // a privacy one, and it is not optional.
+        //
+        // Reading Howl's own AX tree means asking SwiftUI for
+        // `accessibilityChildren`, and SwiftUI answers that by running
+        // a view-graph update — a full layout pass — inside the
+        // synchronous AX call. Demanding main-thread work from a
+        // background thread that is itself blocking on the AX reply is
+        // a self-deadlock, and it froze the app: macOS's hang report
+        // showed the walk parked in
+        // `NSHostingView.accessibilityChildren()` →
+        // `ViewRendererHost.updateViewGraph` → `HostingScrollView`.
+        // The larger our own UI, the worse it gets, so the Settings
+        // window — the exact window a user has open while configuring
+        // this feature — is the worst possible target.
+        //
+        // Screenshotting ourselves is merely useless rather than
+        // dangerous, but it is excluded by the same entry: keywords
+        // scraped from Howl's own chrome would bias whisper toward tab
+        // names, and with the activity inspector on screen the feature
+        // would read its own previous output back in.
+        //
+        // Resolved rather than hardcoded: this project's bundle ID has
+        // already changed once (VoiceKeyboard → Howl) and the rename is
+        // still mid-migration, so a literal would silently rot into a
+        // no-op — which would look exactly like this bug coming back.
+        if let own = hostBundleID?.lowercased(), !own.isEmpty {
+            all.insert(own)
+        }
         for id in userAdditions {
             let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if !trimmed.isEmpty { all.insert(trimmed) }

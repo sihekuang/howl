@@ -56,3 +56,37 @@ struct ScreenContextDenylistTests {
         #expect(d.shouldSkip(bundleID: nil) == true)
     }
 }
+
+@Suite("ScreenContextDenylist self-exclusion")
+struct ScreenContextDenylistSelfExclusionTests {
+    /// Reading our own AX tree makes SwiftUI run a view-graph update
+    /// inside the synchronous AX call, which deadlocked the app. The
+    /// host bundle ID must be denied even though it appears in neither
+    /// `builtIn` nor the user's additions.
+    ///
+    /// The ID is injected rather than read from `Bundle.main`: under
+    /// the SwiftPM test runner that is nil, so asserting against it
+    /// would pass without exercising the guard at all.
+    @Test func skips_the_host_applications_own_bundle_id() {
+        let list = ScreenContextDenylist(userAdditions: [], hostBundleID: "com.howl.app")
+        #expect(list.shouldSkip(bundleID: "com.howl.app"))
+        // Case-insensitively too: the lookup lowercases both sides.
+        #expect(list.shouldSkip(bundleID: "COM.HOWL.APP"))
+    }
+
+    /// A host with no bundle ID must not poison the list — in
+    /// particular it must not insert an empty string that then matches
+    /// something it shouldn't.
+    @Test func a_nil_host_bundle_id_leaves_the_rest_of_the_list_intact() {
+        let list = ScreenContextDenylist(userAdditions: [], hostBundleID: nil)
+        #expect(list.shouldSkip(bundleID: "com.1password.1password"))
+        #expect(!list.shouldSkip(bundleID: "com.google.Chrome"))
+    }
+
+    /// The self-entry must not swallow the rest of the list.
+    @Test func still_skips_password_managers_and_still_allows_others() {
+        let list = ScreenContextDenylist(userAdditions: [], hostBundleID: "com.howl.app")
+        #expect(list.shouldSkip(bundleID: "com.1password.1password"))
+        #expect(!list.shouldSkip(bundleID: "com.google.Chrome"))
+    }
+}
