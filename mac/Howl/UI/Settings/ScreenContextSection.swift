@@ -21,7 +21,8 @@ struct ScreenContextSection: View {
 
     var body: some View {
         Group {
-            SettingsGroupHeader("Screen Context")
+            // No group header: this now lives on its own settings
+            // page, whose title already reads "Screen Context".
             Toggle("Use what's on screen to improve recognition", isOn: $enabled)
             // This paragraph is a privacy disclosure, not marketing
             // copy: it is the only place the user is told that a

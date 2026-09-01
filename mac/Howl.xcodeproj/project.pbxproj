@@ -34,6 +34,7 @@
 		55B63CA458D56967C9AD669B /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E92B8A651A352D9AA4CF02 /* EditorView.swift */; };
 		58970FD1991F3929712228D9 /* PipelineEditorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BE9E423BFFA43B7964D59C5 /* PipelineEditorState.swift */; };
 		5AA3C260FBC69B6290B3E379 /* ScreenContextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 716F51CB7870D820EC957567 /* ScreenContextSection.swift */; };
+		5B91675F5E52A1574F7C97EF /* ScreenContextTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 618278950B07853F0C4F82D9 /* ScreenContextTab.swift */; };
 		5CA59F85C70FDBB57CF1F856 /* HowlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E09796499424206A294D0B /* HowlApp.swift */; };
 		604D6E0F8B21C02F01A2A8F2 /* RecordingOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB6EBA0ED5CC4C29BAF817 /* RecordingOverlayController.swift */; };
 		63DD3FAC24B973737175F166 /* PresetDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */; };
@@ -93,6 +94,7 @@
 		5D6FA7659981634693F0DBA7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5E9C61491EA888B42D6D4941 /* AccessibilityPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPanel.swift; sourceTree = "<group>"; };
 		604BD0A68D3D7E74369F9935 /* TSELabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TSELabView.swift; sourceTree = "<group>"; };
+		618278950B07853F0C4F82D9 /* ScreenContextTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenContextTab.swift; sourceTree = "<group>"; };
 		6B15CA05B53A88BBF54B03CB /* AboutTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutTab.swift; sourceTree = "<group>"; };
 		6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		6D794B258F72EFD8EF74C73B /* LLMProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTab.swift; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				C8C4ED33724163E314CF5D88 /* PromptTab.swift */,
 				C15E4AF9905CFDB7312F9879 /* ScreenContextInspectorView.swift */,
 				716F51CB7870D820EC957567 /* ScreenContextSection.swift */,
+				618278950B07853F0C4F82D9 /* ScreenContextTab.swift */,
 				4645AD4550A9165E3D88094E /* SettingsComponents.swift */,
 				5D6FA7659981634693F0DBA7 /* SettingsView.swift */,
 				CEF5C65AF9893251E66B0AC8 /* VoiceTab.swift */,
@@ -544,6 +547,7 @@
 				B54FD99472E8C0E577169A16 /* ScreenContextActivityStore.swift in Sources */,
 				B0A9994002A2F64580F123BA /* ScreenContextInspectorView.swift in Sources */,
 				5AA3C260FBC69B6290B3E379 /* ScreenContextSection.swift in Sources */,
+				5B91675F5E52A1574F7C97EF /* ScreenContextTab.swift in Sources */,
 				2662BA697C2C4C8B5BDD7E88 /* SessionDetail.swift in Sources */,
 				3E8FF60BF6D2472A02692F2E /* SessionList.swift in Sources */,
 				78E5C3E0A2E29E851F941F53 /* SessionPaths.swift in Sources */,
