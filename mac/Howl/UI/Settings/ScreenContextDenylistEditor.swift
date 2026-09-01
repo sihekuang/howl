@@ -17,10 +17,10 @@ import SwiftUI
 /// the same constant the coordinator actually consults, so it can
 /// never drift into claiming coverage that isn't there.
 ///
-/// Behaviour is unchanged from when these rows lived inline in
-/// `ScreenContextSection`: the binding is still just
-/// `UserSettings.screenContextDenylist`, and the page's `onChange`
-/// still persists it.
+/// Behaviour is unchanged from when these rows lived inline on the
+/// page itself: the binding is still just
+/// `UserSettings.screenContextDenylist`, and `ScreenContextTab`'s
+/// `onChange` still persists it.
 struct ScreenContextDenylistEditor: View {
     @Binding var denylist: [String]
 

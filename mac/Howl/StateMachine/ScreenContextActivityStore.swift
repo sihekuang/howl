@@ -2,9 +2,9 @@ import Foundation
 import Observation
 import HowlCore
 
-/// In-memory ring buffer of recent `ScreenContextActivity`, backing the
-/// Screen Context inspector (`ScreenContextSection` /
-/// `ScreenContextInspectorView`).
+/// In-memory ring buffer of recent `ScreenContextActivity`, backing
+/// the Screen Context tab's master/detail panes
+/// (`ScreenContextActivityList` / `ScreenContextActivityDetail`).
 ///
 /// Lives in the app target rather than `HowlCore` — this project keeps
 /// UI-facing state in `mac/Howl` (see `AppState`, the pattern this

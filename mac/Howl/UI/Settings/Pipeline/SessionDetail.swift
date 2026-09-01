@@ -50,10 +50,10 @@ struct SessionDetail: View {
     /// screen-derived keywords that reached the prompt, and the exact
     /// `initial_prompt` string (dictionary + surviving screen terms)
     /// whisper received, with its real token count. This is the
-    /// per-dictation record — the live inspector in Settings → General
-    /// (`ScreenContextInspectorView`) shows the same chain for the
-    /// window in front of you right now; this shows what happened for
-    /// THIS past capture.
+    /// per-dictation record — Settings → Screen Context
+    /// (`ScreenContextActivityDetail`) shows the same chain for a
+    /// selected screen read; this shows what happened for THIS past
+    /// capture.
     @ViewBuilder
     private var screenContextSummary: some View {
         VStack(alignment: .leading, spacing: 6) {
