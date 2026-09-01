@@ -128,7 +128,8 @@ struct ScreenContextTab: View {
                 ScreenContextActivityDetail(
                     activity: selected,
                     preview: preview,
-                    isNewest: selected.id == activities.first?.id
+                    isNewest: selected.id == activities.first?.id,
+                    hasOlderEntries: selected.id != activities.last?.id
                 )
                 // Disclosure state (show text / show raw / show full
                 // prompt) belongs to the entry being read, not to the

@@ -70,6 +70,10 @@ struct ScreenContextActivityDetail: View {
     /// "this is not what that entry produced" warning on the live
     /// group — see the type comment.
     let isNewest: Bool
+    /// Whether there is anything older than `activity` to select.
+    /// Only used to decide whether the self-skip note can honestly
+    /// point at "the entry below this one".
+    let hasOlderEntries: Bool
 
     @State private var showCapturedText = false
     @State private var showRawResponse = false
@@ -78,6 +82,7 @@ struct ScreenContextActivityDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if isSelfSkip { selfSkipNote }
             SettingsGroupHeader("This capture")
             capturedRow(activity)
             llmReturnedRow(activity)
@@ -112,6 +117,42 @@ struct ScreenContextActivityDetail: View {
         let relative = RelativeTime.string(now: Date(), then: activity.timestamp)
         let exact = activity.timestamp.formatted(.dateTime.hour().minute().second())
         return "\(relative) · \(exact) · \(activity.outcome.label)"
+    }
+
+    // MARK: - Howl's own skip
+
+    /// Howl denylists its own bundle ID (see `ScreenContextDenylist` —
+    /// reading our own AX tree self-deadlocks the app), so bringing
+    /// this window to the front to inspect screen context necessarily
+    /// files a skip, and that skip is necessarily the newest entry in
+    /// the list. Without saying so, the very act of opening Settings
+    /// looks like a bug in the feature, and the reading the user came
+    /// to see looks like it never happened.
+    private var isSelfSkip: Bool {
+        switch activity.outcome {
+        case .skippedPreReadDenylist, .skippedPostReadDenylist:
+            guard let own = Bundle.main.bundleIdentifier?.lowercased(), !own.isEmpty,
+                  let seen = activity.bundleID?.lowercased() else { return false }
+            return own == seen
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var selfSkipNote: some View {
+        Label(
+            hasOlderEntries
+                ? "This is Howl skipping its own window. Opening Settings puts Howl in front, "
+                    + "so one of these lands on top every time — the reading you came to look at "
+                    + "is the entry below it."
+                : "This is Howl skipping its own window. Opening Settings puts Howl in front, so "
+                    + "one of these lands on top every time. Focus another window to capture a real "
+                    + "reading.",
+            systemImage: "info.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     // MARK: - Row 1: Captured
