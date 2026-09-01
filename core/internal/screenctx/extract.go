@@ -15,10 +15,26 @@ const (
 	// be arbitrarily large; this caps both cost and latency.
 	MaxWindowTextBytes = 8192
 
-	// ExtractTimeout bounds the provider call. Extraction is a
-	// best-effort background enhancement — it must never outlive the
-	// user's interest in the window it describes.
-	ExtractTimeout = 5 * time.Second
+	// ExtractTimeout bounds the provider call on the TEXT path.
+	//
+	// This is now the PRIMARY path, not a rare fallback: screen context
+	// reads the window by screenshotting it and OCRing it locally, and
+	// the OCR output goes here. So this timeout has to cover a realistic
+	// payload -- up to MaxWindowTextBytes of recognised text -- and not
+	// merely the short AX snippets it was originally sized for.
+	//
+	// Measured against ollama/qwen2.5:14b with an 8442-byte prompt (the
+	// shipped prompt plus a full-cap OCR payload): 10.3s on the first
+	// call, 1.6s once the prompt cache is warm. The old 5s therefore
+	// timed out every first extraction and produced nothing, silently and
+	// indistinguishably from "nothing on screen was worth extracting".
+	//
+	// 60s is deliberately generous for the same reason ExtractImageTimeout
+	// is: the cost is lopsided. Too short kills the feature invisibly on
+	// exactly the first impression a user gets. Too long costs at most one
+	// queued call -- extraction runs off the dictation path, and the
+	// coordinator cancels the previous in-flight task on every refresh.
+	ExtractTimeout = 60 * time.Second
 )
 
 // ExtractPrompt is the template handed to llm.Options.Prompt. It MUST

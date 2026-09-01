@@ -223,3 +223,41 @@ bug rather than surfacing it.
 - `core/internal/screenctx/vision.go` — the constant and its reasoning
 - `mac/Packages/HowlCore/Sources/HowlCore/ScreenContext/ScreenContextCoordinator.swift:381`
   — in-flight cancellation, which is what bounds the cost of a long timeout
+
+## 2026-09-01 — Text extraction timeout: 5s → 60s
+
+**Decision:** Raise `screenctx.ExtractTimeout` from 5 seconds to 60 seconds.
+
+**Trigger:** An end-to-end run of the OCR pipeline logged `screen context
+extraction failed` on every focus change. The capture and the OCR both
+succeeded; the provider call was being cut off.
+
+**Basis:** Measurement through the shipped prompt shape, not external practice.
+5s was sized when the text path was a rarely-used AX fallback carrying short
+snippets. The OCR rebuild made it the PRIMARY path, carrying up to
+`MaxWindowTextBytes` (8192) of recognised text — a different workload against
+the same clock.
+
+Measured against `ollama/qwen2.5:14b` with an 8442-byte prompt (shipped prompt
+plus a full-cap OCR payload):
+
+| Call | Latency |
+|---|---|
+| First (cold prompt cache) | 10.3s |
+| Second (warm) | 1.6s |
+
+So every *first* extraction timed out and produced nothing — silently, and
+indistinguishably from "nothing on screen was worth extracting". The model's
+answer was correct and complete when allowed to finish; this was never a
+quality problem, only a clock.
+
+60s is generous rather than fitted, for the same reason `ExtractImageTimeout`
+is 90s: the cost is lopsided. Too short kills the feature invisibly on exactly
+the first impression a user gets. Too long costs at most one queued call —
+extraction runs off the dictation path entirely, and `ScreenContextCoordinator`
+cancels the previous in-flight task on every refresh.
+
+**Sources:**
+- `core/internal/screenctx/extract.go` — the constant and its reasoning
+- `core/internal/screenctx/latency_live_test.go` — the harness and prior numbers
+- The 2026-08-31 entry above, which fixed the same defect class on the image path
