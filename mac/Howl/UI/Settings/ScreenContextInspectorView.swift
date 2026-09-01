@@ -122,7 +122,7 @@ struct ScreenContextInspectorView: View {
         if let bytes = activity.capturedImageBytes {
             var parts = [
                 app,
-                activity.source?.shortLabel ?? ScreenContextSource.screenshot.shortLabel,
+                activity.source?.shortLabel ?? ScreenContextOrigin.screenshot.shortLabel,
                 ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
             ]
             if let pixels = activity.capturedImagePixelSize {
@@ -393,7 +393,7 @@ private extension ScreenContextActivity.Outcome {
     }
 }
 
-private extension ScreenContextSource {
+private extension ScreenContextOrigin {
     var shortLabel: String {
         switch self {
         case .screenshot: return "screenshot"

@@ -85,7 +85,7 @@ public struct WindowSnapshot: Equatable, Sendable {
     /// never inferred by the coordinator — the whole point of the
     /// `ScreenContentSource` seam is that the coordinator cannot tell
     /// what strategy is installed.
-    public let source: ScreenContextSource
+    public let source: ScreenContextOrigin
     /// Why this reading is a fallback rather than the strategy's
     /// primary one; nil when nothing fell back. Stamped by
     /// `FallbackScreenContentSource` (or by the coordinator when an
@@ -97,7 +97,7 @@ public struct WindowSnapshot: Equatable, Sendable {
         bundleID: String,
         windowTitle: String,
         text: String,
-        source: ScreenContextSource,
+        source: ScreenContextOrigin,
         fallbackReason: ScreenContextFallbackReason? = nil
     ) {
         self.bundleID = bundleID

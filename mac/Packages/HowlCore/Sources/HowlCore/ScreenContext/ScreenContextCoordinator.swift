@@ -345,7 +345,7 @@ public actor ScreenContextCoordinator {
         now: Date,
         bundleID: String?,
         outcome: ScreenContextActivity.Outcome,
-        source: ScreenContextSource? = nil,
+        source: ScreenContextOrigin? = nil,
         fallbackReason: ScreenContextFallbackReason? = nil,
         capturedText: String? = nil,
         capturedTextLength: Int? = nil,

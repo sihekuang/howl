@@ -192,7 +192,7 @@ private func imageContent(
 /// `AXScreenContentSource` (`.accessibility`) produce.
 private func textContent(
     _ bundleID: String, _ title: String, _ text: String,
-    source: ScreenContextSource = .screenshot,
+    source: ScreenContextOrigin = .screenshot,
     fallbackReason: ScreenContextFallbackReason? = nil
 ) -> ScreenContent {
     .text(WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text,
@@ -274,7 +274,7 @@ struct ScreenContextCoordinatorRoutingTests {
         // OCR text and accessibility text are the same shape, and the
         // pipeline from here on must not care which is which — only
         // the RECORD distinguishes them, for the inspector's sake.
-        for source in [ScreenContextSource.screenshot, .accessibility] {
+        for source in [ScreenContextOrigin.screenshot, .accessibility] {
             let engine = SpyEngine()
             let recorder = ActivityRecorder()
             let (c, _) = makeCoordinator(

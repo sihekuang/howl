@@ -20,7 +20,7 @@ public enum ScreenContextLimits {
 /// Set by the `ScreenContentSource` that did the reading, never
 /// inferred: the coordinator deliberately cannot tell which strategy is
 /// installed.
-public enum ScreenContextSource: String, Equatable, Sendable {
+public enum ScreenContextOrigin: String, Equatable, Sendable {
     /// The focused window was photographed. Either Vision OCR read
     /// those pixels locally (`OCRScreenContentSource`, the default) or
     /// the PNG went to the provider's vision model
@@ -103,7 +103,7 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// Which path produced the payload the model saw. Populated for
     /// `.cacheHit`, `.extractionSucceeded` and `.extractionFailed` —
     /// the outcomes reached only after a capture or read succeeded.
-    public let source: ScreenContextSource?
+    public let source: ScreenContextOrigin?
 
     /// The window text actually read — Vision OCR's output on the
     /// `.screenshot` path, the accessibility tree's on the
@@ -204,7 +204,7 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         timestamp: Date,
         bundleID: String?,
         outcome: Outcome,
-        source: ScreenContextSource? = nil,
+        source: ScreenContextOrigin? = nil,
         capturedText: String? = nil,
         capturedTextLength: Int? = nil,
         capturedImageBytes: Int? = nil,
