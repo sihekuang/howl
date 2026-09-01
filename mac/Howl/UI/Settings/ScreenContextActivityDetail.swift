@@ -153,6 +153,7 @@ struct ScreenContextActivityDetail: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Row 1: Captured
@@ -164,11 +165,14 @@ struct ScreenContextActivityDetail: View {
                 rowLabel("Captured")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(capturedSummary(activity)).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let note = fallbackNote(activity) {
                         Text(note).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if let note = truncationNote(activity) {
                         Text(note).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer()
@@ -263,6 +267,7 @@ struct ScreenContextActivityDetail: View {
             HStack(alignment: .top) {
                 rowLabel("LLM returned")
                 Text(llmReturnedSummary(activity)).font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 if activity.rawResponse != nil {
                     Button(showRawResponse ? "Hide raw" : "Show raw") {
@@ -334,6 +339,11 @@ struct ScreenContextActivityDetail: View {
             Text(liveCaption)
                 .font(.caption)
                 .foregroundStyle(isNewest ? AnyShapeStyle(HierarchicalShapeStyle.secondary) : AnyShapeStyle(Color.orange))
+                // Without this the split view hands the column an
+                // ideal height of one line and SwiftUI truncates the
+                // sentence rather than wrapping it — which would clip
+                // exactly the clause that says these numbers are live.
+                .fixedSize(horizontal: false, vertical: true)
             if let preview {
                 dedupedRow(preview)
                 tokenTrimRow(preview)
@@ -352,9 +362,9 @@ struct ScreenContextActivityDetail: View {
                 + "refresh from the current dictionary plus the last stored screen keywords — "
                 + "not a stored part of the entry above."
         }
-        return "Not what this entry produced. The engine keeps one live prompt and later "
-            + "refreshes have rebuilt it since — including any denylist skip, which stores an "
-            + "empty keyword set. Select the newest entry to see the prompt its own read produced."
+        return "These numbers are the engine's, not this entry's. Later refreshes have rebuilt "
+            + "the prompt since this capture — including denylist skips, which apply an empty "
+            + "keyword set — so it may share nothing with what this read produced."
     }
 
     // MARK: - Row 4: Deduped (from the live preview)

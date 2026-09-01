@@ -47,6 +47,7 @@ struct ScreenContextActivityList: View {
             Text("No screen-context activity yet — focus another window to see it here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(8)
             Spacer(minLength: 0)
         } else {
