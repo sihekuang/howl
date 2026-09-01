@@ -1,16 +1,42 @@
 import HowlCore
 import SwiftUI
 
-/// The screen-context diagnostic inspector: the most recent activity's
-/// captured → LLM → sanitized chain, then the deduped → token-trimmed
-/// → whisper chain from the engine's live preview, then a compact
-/// recent-activity list.
+/// Right column of the Screen Context tab: the full diagnostic chain
+/// for ONE selected `ScreenContextActivity`.
 ///
-/// Rendered inside `ScreenContextSection`, under the toggle and
-/// denylist, and follows that file's own idiom: plain `HStack`/`Text`
-/// rows and `SettingsGroupHeader`, never `Section` or `LabeledContent`
-/// — `SettingsPane` is a plain `VStack`, not a `Form`/`List`, so those
-/// don't render here (see `ScreenContextSection`'s header comment).
+/// Mirrors `Pipeline/SessionDetail.swift` — a plain
+/// `VStack(alignment: .leading)` of labelled rows for whatever the
+/// list has selected, owning no selection state of its own.
+///
+/// Rendered inside `SettingsPane`, and follows that container's idiom:
+/// plain `HStack`/`Text` rows and `SettingsGroupHeader`, never
+/// `Section` or `LabeledContent` — `SettingsPane` is a `VStack`, not a
+/// `Form`/`List`, so those don't render here.
+///
+/// ## The two halves are not the same kind of fact
+///
+/// Rows 1-3 (Captured, LLM returned, Sanitized) are properties of the
+/// selected record: they describe what happened when that window was
+/// read, and they are as true a week later as they were at the time.
+///
+/// Rows 4-6 (Deduped, Token trim, → Whisper) come from
+/// `engine.screenContextPreview()`, which is **live engine state** —
+/// the prompt whisper would receive if you dictated right now, rebuilt
+/// by every refresh from the current dictionary and whatever keywords
+/// the LAST refresh stored. They were never a property of any single
+/// activity; the old single-entry layout just never had to admit it,
+/// because the only entry it could show was the newest one.
+///
+/// So they are presented as their own group, under their own heading,
+/// explicitly labelled as the engine's current state rather than part
+/// of the record above — and when the selection is not the newest
+/// entry, the heading says so outright. Showing them silently under a
+/// historical selection would be a straightforward lie, and a
+/// consequential one: a denylist skip applies an EMPTY keyword set, so
+/// the moment Settings comes to the front, the live prompt loses every
+/// screen keyword the entry you are reading actually produced.
+///
+/// ## Privacy
 ///
 /// Raw window text and the LLM's raw response are shown verbatim
 /// behind disclosures, by design — this is a diagnostic surface the
@@ -24,62 +50,68 @@ import SwiftUI
 /// the model saw, but can never show the picture back. See
 /// `ScreenContextActivity.capturedImageBytes`.
 ///
-/// Every read path is reachable in normal operation — a screenshot read
-/// locally by OCR (the default), a screenshot sent to a vision model,
-/// or accessibility text when there are no pixels at all — so every row
-/// that describes a capture names which one it was, and the Captured
-/// row spells out why a fallback happened. "This model can't read
-/// images" and "the screenshot failed" are the two reasons, and they
-/// call for opposite fixes.
+/// Every read path is reachable in normal operation — a screenshot
+/// read locally by OCR (the default), a screenshot sent to a vision
+/// model, or accessibility text when there are no pixels at all — so
+/// every row that describes a capture names which one it was, and the
+/// Captured row spells out why a fallback happened. "This model can't
+/// read images" and "the screenshot failed" are the two reasons, and
+/// they call for opposite fixes.
 ///
-/// A `.screenshot` row with a character count was read by OCR; one with
-/// a byte count was sent to a vision model. Which strategy is installed
-/// is `CompositionRoot`'s business, not this view's.
-struct ScreenContextInspectorView: View {
-    let engine: any CoreEngine
-    var activityStore: ScreenContextActivityStore
+/// A `.screenshot` row with a character count was read by OCR; one
+/// with a byte count was sent to a vision model. Which strategy is
+/// installed is `CompositionRoot`'s business, not this view's.
+struct ScreenContextActivityDetail: View {
+    let activity: ScreenContextActivity
+    /// Live engine state, refetched by the parent whenever new
+    /// activity lands. Nil when the preview could not be decoded.
+    let preview: ScreenContextPreview?
+    /// Whether `activity` is the newest entry in the list. Drives the
+    /// "this is not what that entry produced" warning on the live
+    /// group — see the type comment.
+    let isNewest: Bool
 
-    @State private var preview: ScreenContextPreview?
     @State private var showCapturedText = false
     @State private var showRawResponse = false
     @State private var showFullPrompt = false
 
-    private var latest: ScreenContextActivity? { activityStore.recentFirst.first }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsGroupHeader("Activity")
-            if let latest {
-                capturedRow(latest)
-                llmReturnedRow(latest)
-                sanitizedRow(latest)
-                if let preview {
-                    dedupedRow(preview)
-                    tokenTrimRow(preview)
-                    whisperRow(preview)
-                } else {
-                    Text("Whisper prompt preview unavailable.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text("No screen-context activity yet — focus a window to see it here.")
+            header
+            SettingsGroupHeader("This capture")
+            capturedRow(activity)
+            llmReturnedRow(activity)
+            sanitizedRow(activity)
+            Divider().padding(.vertical, 4)
+            liveEngineGroup
+        }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(activity.bundleID ?? "Unknown app")
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                Text(timestampLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Spacer()
+            ScreenContextOutcomeChip(outcome: activity.outcome)
+        }
+    }
 
-            if activityStore.entries.count > 1 {
-                Divider().padding(.vertical, 4)
-                SettingsGroupHeader("Recent activity")
-                recentActivityList
-            }
-        }
-        // Re-fetches whenever new activity lands — the preview reflects
-        // live engine state (current dictionary + stored screen
-        // keywords), which a new refresh may just have changed.
-        .task(id: activityStore.entries.count) {
-            preview = await engine.screenContextPreview()
-        }
+    /// Relative time for scanning plus the wall clock for correlating
+    /// against a dictation — the list rows only carry the relative
+    /// half, and several refreshes can share one "just now".
+    private var timestampLabel: String {
+        let relative = RelativeTime.string(now: Date(), then: activity.timestamp)
+        let exact = activity.timestamp.formatted(.dateTime.hour().minute().second())
+        return "\(relative) · \(exact) · \(activity.outcome.label)"
     }
 
     // MARK: - Row 1: Captured
@@ -223,7 +255,7 @@ struct ScreenContextInspectorView: View {
 
     @ViewBuilder
     private func sanitizedRow(_ activity: ScreenContextActivity) -> some View {
-        HStack {
+        HStack(alignment: .top) {
             rowLabel("Sanitized")
             Text(sanitizedSummary(activity)).font(.callout)
             Spacer()
@@ -241,11 +273,54 @@ struct ScreenContextInspectorView: View {
         return "\(kept) kept · \(droppedCount) dropped (\(reasons))"
     }
 
+    // MARK: - Rows 4-6: live engine state
+
+    /// The half of the chain that is NOT a property of the selected
+    /// record. See the type comment for why this is fenced off rather
+    /// than continuing the row list above.
+    @ViewBuilder
+    private var liveEngineGroup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                SettingsGroupHeader("Whisper prompt right now")
+                Text("LIVE")
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                    .foregroundStyle(Color.accentColor)
+            }
+            Text(liveCaption)
+                .font(.caption)
+                .foregroundStyle(isNewest ? AnyShapeStyle(HierarchicalShapeStyle.secondary) : AnyShapeStyle(Color.orange))
+            if let preview {
+                dedupedRow(preview)
+                tokenTrimRow(preview)
+                whisperRow(preview)
+            } else {
+                Text("Whisper prompt preview unavailable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var liveCaption: String {
+        if isNewest {
+            return "What the engine would send Whisper if you dictated now. Rebuilt on every "
+                + "refresh from the current dictionary plus the last stored screen keywords — "
+                + "not a stored part of the entry above."
+        }
+        return "Not what this entry produced. The engine keeps one live prompt and later "
+            + "refreshes have rebuilt it since — including any denylist skip, which stores an "
+            + "empty keyword set. Select the newest entry to see the prompt its own read produced."
+    }
+
     // MARK: - Row 4: Deduped (from the live preview)
 
     @ViewBuilder
     private func dedupedRow(_ preview: ScreenContextPreview) -> some View {
-        HStack {
+        HStack(alignment: .top) {
             rowLabel("Deduped")
             Text(dedupedSummary(preview)).font(.callout)
             Spacer()
@@ -267,7 +342,7 @@ struct ScreenContextInspectorView: View {
 
     @ViewBuilder
     private func tokenTrimRow(_ preview: ScreenContextPreview) -> some View {
-        HStack {
+        HStack(alignment: .top) {
             rowLabel("Token trim")
             Text(tokenTrimSummary(preview)).font(.callout)
             Spacer()
@@ -304,36 +379,6 @@ struct ScreenContextInspectorView: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
         }
-    }
-
-    // MARK: - Recent activity list
-
-    private var recentActivityList: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(activityStore.recentFirst.prefix(20)) { activity in
-                HStack {
-                    Text(activity.timestamp, format: .dateTime.hour().minute().second())
-                        .font(.caption.monospaced())
-                        .frame(width: 70, alignment: .leading)
-                    Text(activity.bundleID ?? "—")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(recentLabel(activity))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    /// Outcome plus, when the refresh fell back, why — so the list
-    /// distinguishes "AX found nothing" from "there was no screenshot
-    /// AND AX found nothing" at a glance.
-    private func recentLabel(_ activity: ScreenContextActivity) -> String {
-        guard let reason = activity.fallbackReason else { return activity.outcome.label }
-        return "\(activity.outcome.label) · \(reason.shortLabel)"
     }
 
     // MARK: - Shared row chrome
@@ -374,39 +419,6 @@ struct ScreenContextInspectorView: View {
         case "duplicate": return "duplicate"
         case "keyword_cap": return "over cap"
         default: return reason
-        }
-    }
-}
-
-private extension ScreenContextActivity.Outcome {
-    var label: String {
-        switch self {
-        case .disabled: return "Disabled"
-        case .skippedPreReadDenylist: return "Skipped (denylist)"
-        case .skippedPostReadDenylist: return "Skipped (denylist, post-read)"
-        case .noReadableWindowText: return "No readable text"
-        case .cacheHit: return "Cache hit"
-        case .extractionSucceeded: return "Extracted"
-        case .extractionFailed: return "Extraction failed"
-        case .superseded: return "Superseded"
-        }
-    }
-}
-
-private extension ScreenContextOrigin {
-    var shortLabel: String {
-        switch self {
-        case .screenshot: return "screenshot"
-        case .accessibility: return "AX text"
-        }
-    }
-}
-
-private extension ScreenContextFallbackReason {
-    var shortLabel: String {
-        switch self {
-        case .noVision: return "no vision"
-        case .screenshotUnavailable: return "no screenshot"
         }
     }
 }
