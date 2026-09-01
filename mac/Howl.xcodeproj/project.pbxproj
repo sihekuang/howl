@@ -61,6 +61,7 @@
 		CAB12963F431745F636EBF4B /* OpenAISection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */; };
 		D1F082E9368E7A8B6C10C85C /* CompareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB8B9543DEE1FC812E97AFD /* CompareView.swift */; };
 		DAEC0CE4326D117705234081 /* ComparePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274CB566D515AFF7AFABB596 /* ComparePane.swift */; };
+		E063502CD14710D733F4FA3E /* ScreenContextDenylistEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29832B856B5416AAB687A60A /* ScreenContextDenylistEditor.swift */; };
 		E907E73CE0876ECFA7F387BE /* PipelineTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96DAE47622718B513B8B584 /* PipelineTab.swift */; };
 		E971DE02D1A415D7DA606F49 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ED694E605A92B6C58EA4C3F /* WaveformView.swift */; };
 		EA367CE838A372E5777C22F4 /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E59955941D1FDC3B9EB246 /* MenuBarMenu.swift */; };
@@ -80,6 +81,7 @@
 		2326637738B87FC0C45EAFC9 /* AppRelaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRelaunch.swift; sourceTree = "<group>"; };
 		274CB566D515AFF7AFABB596 /* ComparePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComparePane.swift; sourceTree = "<group>"; };
 		28FB90FB6D3B5DB16C6643DE /* SessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionList.swift; sourceTree = "<group>"; };
+		29832B856B5416AAB687A60A /* ScreenContextDenylistEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenContextDenylistEditor.swift; sourceTree = "<group>"; };
 		2A966570B7133FF3A910732C /* WAVPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVPlayer.swift; sourceTree = "<group>"; };
 		33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDraft.swift; sourceTree = "<group>"; };
 		3478540033294914B4022332 /* CompareSourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareSourceLoader.swift; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				E5CA7CC77217D20E3DB636FA /* PlaygroundTab.swift */,
 				18BCBC4C5752A8C10E5EC6C0 /* PresetBanner.swift */,
 				C8C4ED33724163E314CF5D88 /* PromptTab.swift */,
+				29832B856B5416AAB687A60A /* ScreenContextDenylistEditor.swift */,
 				C15E4AF9905CFDB7312F9879 /* ScreenContextInspectorView.swift */,
 				716F51CB7870D820EC957567 /* ScreenContextSection.swift */,
 				618278950B07853F0C4F82D9 /* ScreenContextTab.swift */,
@@ -545,6 +548,7 @@
 				0B306B954E6F7D3FDAD70E72 /* RecordingOverlayView.swift in Sources */,
 				50A43871D999741C65AB727C /* SaveAsPresetSheet.swift in Sources */,
 				B54FD99472E8C0E577169A16 /* ScreenContextActivityStore.swift in Sources */,
+				E063502CD14710D733F4FA3E /* ScreenContextDenylistEditor.swift in Sources */,
 				B0A9994002A2F64580F123BA /* ScreenContextInspectorView.swift in Sources */,
 				5AA3C260FBC69B6290B3E379 /* ScreenContextSection.swift in Sources */,
 				5B91675F5E52A1574F7C97EF /* ScreenContextTab.swift in Sources */,
