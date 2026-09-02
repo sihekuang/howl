@@ -21,6 +21,14 @@ public struct ScreenContextDenylist: Sendable {
         "com.dashlane.dashlanephonefinal",
         "in.sinew.Enpass-Desktop",
         "com.apple.Passwords",
+        // The locked screen. Not a password manager, but it owns the
+        // frontmost "window" whenever the machine is locked — a
+        // full-screen surface that can hold the login field and any
+        // notification previews on the lock screen. It is also
+        // pointless to read: it never contains dictation context, and
+        // capturing it burns a screenshot and a model round trip on
+        // whatever the lock screen happens to be showing.
+        "com.apple.loginwindow",
     ]
 
     private let entries: Set<String>

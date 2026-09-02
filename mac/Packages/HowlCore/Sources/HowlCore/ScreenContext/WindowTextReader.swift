@@ -101,6 +101,10 @@ public struct WindowSnapshot: Equatable, Sendable {
     /// that genuinely had no text produce identical records, which is
     /// what made `chooseWindow`'s bug invisible for as long as it was.
     public let pixelSize: ScreenContextPixelSize?
+    /// How long the stages that produced this reading took. Filled in
+    /// by the source, which is the only place the capture/read split
+    /// is visible; the coordinator adds `extract` and `total` later.
+    public let timings: ScreenContextTimings
 
     public init(
         bundleID: String,
@@ -108,7 +112,8 @@ public struct WindowSnapshot: Equatable, Sendable {
         text: String,
         source: ScreenContextOrigin,
         fallbackReason: ScreenContextFallbackReason? = nil,
-        pixelSize: ScreenContextPixelSize? = nil
+        pixelSize: ScreenContextPixelSize? = nil,
+        timings: ScreenContextTimings = ScreenContextTimings()
     ) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
@@ -116,12 +121,14 @@ public struct WindowSnapshot: Equatable, Sendable {
         self.source = source
         self.fallbackReason = fallbackReason
         self.pixelSize = pixelSize
+        self.timings = timings
     }
 
     /// The same reading, marked as having come from a fallback.
     public func marked(asFallback reason: ScreenContextFallbackReason) -> WindowSnapshot {
         WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, text: text,
-                       source: source, fallbackReason: reason, pixelSize: pixelSize)
+                       source: source, fallbackReason: reason, pixelSize: pixelSize,
+                       timings: timings)
     }
 }
 

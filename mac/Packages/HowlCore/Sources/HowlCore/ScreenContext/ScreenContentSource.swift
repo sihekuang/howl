@@ -36,6 +36,36 @@ public enum ScreenContent: Sendable {
         }
     }
 
+    /// How long the stages that produced this reading took. Present in
+    /// both shapes for the same reason `bundleID` is: the coordinator
+    /// merges its own stages in without knowing which strategy ran.
+    public var timings: ScreenContextTimings {
+        switch self {
+        case .text(let snapshot): snapshot.timings
+        case .image(let capture): capture.timings
+        }
+    }
+
+    /// The same reading, carrying `seconds` of additional model time.
+    /// Used when a reading is retried through a different extractor and
+    /// the first attempt's cost must not be lost.
+    public func addingExtract(_ seconds: TimeInterval) -> ScreenContent {
+        switch self {
+        case .text(let s):
+            .text(WindowSnapshot(
+                bundleID: s.bundleID, windowTitle: s.windowTitle, text: s.text,
+                source: s.source, fallbackReason: s.fallbackReason,
+                pixelSize: s.pixelSize, timings: s.timings.addingExtract(seconds)
+            ))
+        case .image(let c):
+            .image(WindowImageCapture(
+                bundleID: c.bundleID, windowTitle: c.windowTitle, pngData: c.pngData,
+                pixelSize: c.pixelSize, fallbackReason: c.fallbackReason,
+                timings: c.timings.addingExtract(seconds)
+            ))
+        }
+    }
+
     /// The same reading, marked as having come from a fallback.
     public func marked(asFallback reason: ScreenContextFallbackReason) -> ScreenContent {
         switch self {
@@ -100,8 +130,17 @@ public struct AXScreenContentSource: ScreenContentSource {
     public func read() async -> ScreenContent? {
         // The reader enforces the denylist itself, in one main-actor
         // hop, before it walks anything.
-        guard let snapshot = await reader.read() else { return nil }
-        return .text(snapshot)
+        let (snapshot, seconds) = await measuringDuration { await reader.read() }
+        guard let snapshot else { return nil }
+        // `capture` stays nil rather than zero: this strategy takes no
+        // screenshot at all, which is a different fact from taking one
+        // instantly.
+        return .text(WindowSnapshot(
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            text: snapshot.text, source: snapshot.source,
+            fallbackReason: snapshot.fallbackReason, pixelSize: snapshot.pixelSize,
+            timings: snapshot.timings.merging(ScreenContextTimings(read: seconds))
+        ))
     }
 }
 
@@ -129,7 +168,8 @@ public struct OCRScreenContentSource: ScreenContentSource {
     public func read() async -> ScreenContent? {
         // The capturer enforces the denylist itself, in one main-actor
         // hop, before ScreenCaptureKit is touched at all.
-        guard let captured = await capturer.capture() else {
+        let (capturedOrNil, captureSeconds) = await measuringDuration { await capturer.capture() }
+        guard let captured = capturedOrNil else {
             // NO PIXELS. This is the one outcome that means "ask
             // somebody else": there was nothing to read. Screen
             // Recording denied, no on-screen window, or the window
@@ -144,14 +184,18 @@ public struct OCRScreenContentSource: ScreenContentSource {
         // stops a composed fallback from firing on it — the fallback
         // exists for missing pixels, not for a blank answer — and lets
         // the coordinator record which read came up empty.
-        let text = await recognizer.recognizeText(in: captured) ?? ""
+        let (recognized, readSeconds) = await measuringDuration {
+            await recognizer.recognizeText(in: captured)
+        }
+        let text = recognized ?? ""
         return .text(WindowSnapshot(
             bundleID: captured.bundleID,
             windowTitle: captured.windowTitle,
             text: text,
             source: .screenshot,
             // Recorded even when `text` is empty — especially then.
-            pixelSize: captured.pixelSize
+            pixelSize: captured.pixelSize,
+            timings: ScreenContextTimings(capture: captureSeconds, read: readSeconds)
         ))
     }
 }

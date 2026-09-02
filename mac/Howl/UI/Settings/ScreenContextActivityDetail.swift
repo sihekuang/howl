@@ -87,6 +87,7 @@ struct ScreenContextActivityDetail: View {
             capturedRow(activity)
             llmReturnedRow(activity)
             sanitizedRow(activity)
+            timingRows(activity)
             Divider().padding(.vertical, 4)
             liveEngineGroup
         }
@@ -452,6 +453,62 @@ struct ScreenContextActivityDetail: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - Timing
+
+    /// Per-stage wall-clock for this refresh.
+    ///
+    /// Only stages that actually ran are shown. A strategy that takes
+    /// no screenshot has no capture row at all, rather than a capture
+    /// row reading "0 ms" — the second would claim a stage happened
+    /// instantly when it never happened.
+    @ViewBuilder
+    private func timingRows(_ activity: ScreenContextActivity) -> some View {
+        let t = activity.timings
+        if !t.isEmpty {
+            Divider().padding(.vertical, 4)
+            SettingsGroupHeader("Timing")
+            VStack(alignment: .leading, spacing: 3) {
+                timingRow("Capture", t.capture)
+                timingRow("Read", t.read)
+                timingRow("Model", t.extract)
+                // Separated from the stages above: it is a residual,
+                // not something anyone measured directly.
+                if t.unaccounted != nil || t.total != nil {
+                    Divider().padding(.vertical, 2)
+                }
+                timingRow("Waiting", t.unaccounted, emphasised: false)
+                timingRow("Total", t.total, emphasised: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func timingRow(_ label: String, _ seconds: TimeInterval?, emphasised: Bool = false) -> some View {
+        if let seconds {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                rowLabel(label)
+                Text(formatDuration(seconds))
+                    .font(emphasised ? .caption.monospaced().bold() : .caption.monospaced())
+                    // Digits line up down the column so the slow stage
+                    // is findable without reading every number.
+                    .monospacedDigit()
+                Spacer()
+            }
+        }
+    }
+
+    /// Milliseconds below a second, seconds above it.
+    ///
+    /// Stages here span roughly 20ms to 60s, and one unit across that
+    /// whole range reads badly at one end or the other: "0.018 s" hides
+    /// the magnitude, "10300 ms" is unreadable.
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        if seconds < 1 {
+            return "\(Int((seconds * 1000).rounded())) ms"
+        }
+        return String(format: "%.2f s", seconds)
     }
 
     // MARK: - Shared row chrome

@@ -149,11 +149,37 @@ struct VisionModelScreenContentSourceTests {
 @Suite("AXScreenContentSource")
 struct AXScreenContentSourceTests {
 
-    @Test func yields_the_readers_snapshot_unchanged() async {
+    @Test func yields_the_readers_content_unchanged() async {
         let snapshot = WindowSnapshot(bundleID: "com.a", windowTitle: "Doc",
                                       text: "AX text", source: .accessibility)
         let content = await AXScreenContentSource(reader: StubTextReader(snapshot: snapshot)).read()
-        #expect(text(content) == snapshot)
+        let got = text(content)
+        // Every content field passes through untouched. Compared field
+        // by field rather than by whole-value equality because the
+        // source now stamps a `read` duration, which is a measurement
+        // of this call and cannot equal a value the test supplied.
+        #expect(got?.bundleID == snapshot.bundleID)
+        #expect(got?.windowTitle == snapshot.windowTitle)
+        #expect(got?.text == snapshot.text)
+        #expect(got?.source == snapshot.source)
+        #expect(got?.fallbackReason == snapshot.fallbackReason)
+        #expect(got?.pixelSize == snapshot.pixelSize)
+    }
+
+    @Test func times_the_accessibility_walk_and_takes_no_screenshot() async {
+        let snapshot = WindowSnapshot(bundleID: "com.a", windowTitle: "Doc",
+                                      text: "AX text", source: .accessibility)
+        let content = await AXScreenContentSource(reader: StubTextReader(snapshot: snapshot)).read()
+        let timings = text(content)?.timings
+        // The walk is the `read` stage and it always runs.
+        #expect(timings?.read != nil)
+        // nil, NOT zero: this strategy takes no screenshot at all,
+        // which is a different fact from taking one instantly.
+        #expect(timings?.capture == nil)
+        // Stages the source cannot know about stay unset for the
+        // coordinator to fill in.
+        #expect(timings?.extract == nil)
+        #expect(timings?.total == nil)
     }
 
     @Test func no_readable_text_is_a_missing_reading() async {
@@ -275,6 +301,48 @@ struct OCRReadingPixelSizeTests {
             Issue.record("expected a text reading"); return
         }
         #expect(snapshot.pixelSize == ScreenContextPixelSize(width: 2560, height: 2160))
+    }
+
+    @Test("OCR reports both the screenshot and the recognition separately")
+    func ocrReportsCaptureAndReadSeparately() async {
+        let source = OCRScreenContentSource(
+            capturer: StubCapturer(captured: CapturedWindow(
+                bundleID: "com.example.app", windowTitle: "",
+                image: blankImage(width: 800, height: 600)
+            )),
+            recognizer: StubRecognizer(text: "text")
+        )
+
+        guard case .text(let snapshot)? = await source.read() else {
+            Issue.record("expected a text reading"); return
+        }
+        // The split is the whole reason timing lives in the source
+        // rather than at the coordinator boundary: only here can the
+        // screenshot be told apart from the recognition.
+        #expect(snapshot.timings.capture != nil)
+        #expect(snapshot.timings.read != nil)
+        // Not the source's to know.
+        #expect(snapshot.timings.extract == nil)
+        #expect(snapshot.timings.total == nil)
+    }
+
+    @Test("a capture that recognised nothing still reports both stages")
+    func emptyOCRStillReportsStages() async {
+        let source = OCRScreenContentSource(
+            capturer: StubCapturer(captured: CapturedWindow(
+                bundleID: "com.example.app", windowTitle: "",
+                image: blankImage(width: 159, height: 22)
+            )),
+            recognizer: StubRecognizer(text: nil)
+        )
+
+        guard case .text(let snapshot)? = await source.read() else {
+            Issue.record("expected a text reading"); return
+        }
+        // The failing case from the wrong-window bug: it has to carry
+        // its timings, because a suspiciously fast read is the signal.
+        #expect(snapshot.timings.capture != nil)
+        #expect(snapshot.timings.read != nil)
     }
 
     @Test("a reading with no pixels behind it reports no size")

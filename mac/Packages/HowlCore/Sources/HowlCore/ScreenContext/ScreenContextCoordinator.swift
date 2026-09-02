@@ -90,6 +90,11 @@ public actor ScreenContextCoordinator {
     public func refresh(now: Date = Date()) async {
         generation &+= 1
         let myGeneration = generation
+        // Threaded rather than stored, for the same reason
+        // `myGeneration` is: `refresh` suspends, so a newer refresh
+        // would overwrite a stored instant and every in-flight older
+        // one would then report a total measured from the wrong start.
+        let startedAt = ContinuousClock().now
 
         // Disabled must CLEAR any previously-applied keywords, not just
         // skip applying new ones — mirroring the denylist path four
@@ -100,7 +105,7 @@ public actor ScreenContextCoordinator {
         // applies the engine's last-set `screenKeywords` unconditionally
         // on every capture and nothing else ever clears them.
         guard isEnabled() else {
-            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: nil, outcome: .disabled)
+            await recordAndApply([], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: nil, outcome: .disabled)
             return
         }
 
@@ -130,7 +135,7 @@ public actor ScreenContextCoordinator {
         let frontID = await frontmostBundleID()
         if denylist().shouldSkip(bundleID: frontID) {
             log.notice("screen context skipped for denylisted app")
-            await recordAndApply([], myGeneration: myGeneration, now: now, bundleID: frontID, outcome: .skippedPreReadDenylist)
+            await recordAndApply([], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: frontID, outcome: .skippedPreReadDenylist)
             return
         }
 
@@ -140,12 +145,12 @@ public actor ScreenContextCoordinator {
             // is nothing left to try and nothing to extract from.
             log.notice("screen context found no readable window content")
             await recordAndApply(
-                [], myGeneration: myGeneration, now: now, bundleID: frontID,
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: frontID,
                 outcome: .noReadableWindowText
             )
             return
         }
-        await extract(content, myGeneration: myGeneration, now: now, allowAlternate: true)
+        await extract(content, myGeneration: myGeneration, startedAt: startedAt, now: now, allowAlternate: true)
     }
 
     /// Gate, cache, extract and apply one reading — whatever shape it
@@ -154,7 +159,8 @@ public actor ScreenContextCoordinator {
     /// `allowAlternate` is false for a reading that IS the alternate,
     /// so a source that kept answering `.image` could not loop.
     private func extract(
-        _ content: ScreenContent, myGeneration: UInt64, now: Date, allowAlternate: Bool
+        _ content: ScreenContent, myGeneration: UInt64,
+        startedAt: ContinuousClock.Instant, now: Date, allowAlternate: Bool
     ) async {
         // Second, authoritative gate: the reading's own bundle ID. The
         // frontmost-app lookup in `refresh` and this read aren't atomic
@@ -168,7 +174,7 @@ public actor ScreenContextCoordinator {
         if denylist().shouldSkip(bundleID: content.bundleID) {
             log.notice("screen context skipped for denylisted app")
             await recordAndApply(
-                [], myGeneration: myGeneration, now: now, bundleID: content.bundleID,
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: content.bundleID,
                 outcome: .skippedPostReadDenylist, fallbackReason: content.fallbackReason
             )
             return
@@ -178,9 +184,9 @@ public actor ScreenContextCoordinator {
         // output: which extractor its shape calls for.
         switch content {
         case .text(let snapshot):
-            await extractFromText(snapshot, myGeneration: myGeneration, now: now)
+            await extractFromText(snapshot, myGeneration: myGeneration, startedAt: startedAt, now: now)
         case .image(let capture):
-            await extractFromImage(capture, myGeneration: myGeneration, now: now, allowAlternate: allowAlternate)
+            await extractFromImage(capture, myGeneration: myGeneration, startedAt: startedAt, now: now, allowAlternate: allowAlternate)
         }
     }
 
@@ -188,7 +194,8 @@ public actor ScreenContextCoordinator {
     /// Accessibility tree. `snapshot.source` says which; the pipeline
     /// from here on is identical, which is the point.
     private func extractFromText(
-        _ snapshot: WindowSnapshot, myGeneration: UInt64, now: Date
+        _ snapshot: WindowSnapshot, myGeneration: UInt64,
+        startedAt: ContinuousClock.Instant, now: Date
     ) async {
         let reason = snapshot.fallbackReason
         guard !snapshot.text.isEmpty else {
@@ -196,9 +203,10 @@ public actor ScreenContextCoordinator {
             // legible in it. Not a reason to try anything else: this is
             // an answer, not a missing one.
             await recordAndApply(
-                [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID,
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID,
                 outcome: .noReadableWindowText, source: snapshot.source, fallbackReason: reason,
-                capturedImagePixelSize: snapshot.pixelSize
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: snapshot.timings
             )
             return
         }
@@ -210,15 +218,23 @@ public actor ScreenContextCoordinator {
         )
         if let cached = cache.value(for: key, now: now) {
             await recordAndApply(
-                cached, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .cacheHit,
+                cached, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID, outcome: .cacheHit,
                 source: snapshot.source, fallbackReason: reason,
                 capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
-                capturedImagePixelSize: snapshot.pixelSize
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: snapshot.timings
             )
             return
         }
 
-        guard let extraction = await extractText(snapshot.text) else {
+        let extractStart = ContinuousClock().now
+        let extractionOrNil = await extractText(snapshot.text)
+        let extractSeconds = (ContinuousClock().now - extractStart).timeInterval
+        // Carried on EVERY outcome below, not just the successful one:
+        // a refresh that spent nine seconds in the model and then
+        // failed is the case worth seeing.
+        let staged = snapshot.timings.addingExtract(extractSeconds)
+        guard let extraction = extractionOrNil else {
             // Extraction FAILED (provider unreachable, rate-limited,
             // timed out, malformed response) — distinct from "the model
             // ran and found nothing". Never cache a failure: doing so
@@ -228,20 +244,22 @@ public actor ScreenContextCoordinator {
             // armed for the next dictation.
             log.notice("screen context extraction failed")
             await recordAndApply(
-                [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionFailed,
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID, outcome: .extractionFailed,
                 source: snapshot.source, fallbackReason: reason,
                 capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
-                capturedImagePixelSize: snapshot.pixelSize
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: staged
             )
             return
         }
         cache.store(extraction.keywords, for: key, now: now)
         let applied = await recordAndApply(
-            extraction.keywords, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID,
+            extraction.keywords, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID,
             outcome: .extractionSucceeded, source: snapshot.source, fallbackReason: reason,
             capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
             capturedImagePixelSize: snapshot.pixelSize,
-            rawResponse: extraction.raw, dropped: extraction.dropped
+            rawResponse: extraction.raw, dropped: extraction.dropped,
+            timings: staged
         )
         if applied {
             // Deliberately logs the COUNT, never the terms.
@@ -251,7 +269,8 @@ public actor ScreenContextCoordinator {
 
     /// Pixels for the provider's vision model, which reads them itself.
     private func extractFromImage(
-        _ capture: WindowImageCapture, myGeneration: UInt64, now: Date, allowAlternate: Bool
+        _ capture: WindowImageCapture, myGeneration: UInt64,
+        startedAt: ContinuousClock.Instant, now: Date, allowAlternate: Bool
     ) async {
         let reason = capture.fallbackReason
         let imageBytes = capture.pngData.count
@@ -263,21 +282,27 @@ public actor ScreenContextCoordinator {
         )
         if let cached = cache.value(for: key, now: now) {
             await recordAndApply(
-                cached, myGeneration: myGeneration, now: now, bundleID: capture.bundleID, outcome: .cacheHit,
+                cached, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: capture.bundleID, outcome: .cacheHit,
                 source: .screenshot, fallbackReason: reason,
-                capturedImageBytes: imageBytes, capturedImagePixelSize: imagePixels
+                capturedImageBytes: imageBytes, capturedImagePixelSize: imagePixels,
+                timings: capture.timings
             )
             return
         }
 
-        switch await extractImage(capture.pngData) {
+        let extractStart = ContinuousClock().now
+        let imageResult = await extractImage(capture.pngData)
+        let probeSeconds = (ContinuousClock().now - extractStart).timeInterval
+        let staged = capture.timings.addingExtract(probeSeconds)
+        switch imageResult {
         case .success(let extraction):
             cache.store(extraction.keywords, for: key, now: now)
             let applied = await recordAndApply(
-                extraction.keywords, myGeneration: myGeneration, now: now, bundleID: capture.bundleID,
+                extraction.keywords, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: capture.bundleID,
                 outcome: .extractionSucceeded, source: .screenshot, fallbackReason: reason,
                 capturedImageBytes: imageBytes, capturedImagePixelSize: imagePixels,
-                rawResponse: extraction.raw, dropped: extraction.dropped
+                rawResponse: extraction.raw, dropped: extraction.dropped,
+                timings: staged
             )
             if applied {
                 log.notice("screen context applied \(extraction.keywords.count, privacy: .public) keyword(s)")
@@ -289,9 +314,10 @@ public actor ScreenContextCoordinator {
             // answer this time.
             log.notice("screen context extraction failed")
             await recordAndApply(
-                [], myGeneration: myGeneration, now: now, bundleID: capture.bundleID,
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: capture.bundleID,
                 outcome: .extractionFailed, source: .screenshot, fallbackReason: reason,
-                capturedImageBytes: imageBytes, capturedImagePixelSize: imagePixels
+                capturedImageBytes: imageBytes, capturedImagePixelSize: imagePixels,
+                timings: staged
             )
 
         case .noVision:
@@ -309,14 +335,17 @@ public actor ScreenContextCoordinator {
             log.notice("screen context vision unavailable; asking the source for another reading")
             guard allowAlternate, let alternate = await source.readAlternate() else {
                 await recordAndApply(
-                    [], myGeneration: myGeneration, now: now, bundleID: capture.bundleID,
-                    outcome: .noReadableWindowText, fallbackReason: .noVision
+                    [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: capture.bundleID,
+                    outcome: .noReadableWindowText, fallbackReason: .noVision,
+                    timings: staged
                 )
                 return
             }
             await extract(
-                alternate.marked(asFallback: .noVision),
-                myGeneration: myGeneration, now: now, allowAlternate: false
+                // The no-vision probe was a real round trip; carry its
+                // cost onto the retry so it is not lost.
+                alternate.marked(asFallback: .noVision).addingExtract(probeSeconds),
+                myGeneration: myGeneration, startedAt: startedAt, now: now, allowAlternate: false
             )
         }
     }
@@ -346,6 +375,7 @@ public actor ScreenContextCoordinator {
     private func recordAndApply(
         _ keywords: [String],
         myGeneration: UInt64,
+        startedAt: ContinuousClock.Instant,
         now: Date,
         bundleID: String?,
         outcome: ScreenContextActivity.Outcome,
@@ -356,9 +386,17 @@ public actor ScreenContextCoordinator {
         capturedImageBytes: Int? = nil,
         capturedImagePixelSize: ScreenContextPixelSize? = nil,
         rawResponse: String? = nil,
-        dropped: [ScreenContextDroppedTerm] = []
+        dropped: [ScreenContextDroppedTerm] = [],
+        timings: ScreenContextTimings = ScreenContextTimings()
     ) async -> Bool {
         let applied = await applyIfCurrent(keywords, myGeneration: myGeneration)
+        // Total is stamped here rather than by the caller so it covers
+        // the apply too, and so every outcome gets one — including the
+        // early returns, where knowing a refresh was abandoned after
+        // 9 seconds is the whole diagnosis.
+        let stamped = timings.merging(
+            ScreenContextTimings(total: (ContinuousClock().now - startedAt).timeInterval)
+        )
         let activity = ScreenContextActivity(
             timestamp: now,
             bundleID: bundleID,
@@ -371,7 +409,8 @@ public actor ScreenContextCoordinator {
             fallbackReason: fallbackReason,
             rawResponse: rawResponse,
             dropped: dropped,
-            appliedKeywords: applied ? keywords : []
+            appliedKeywords: applied ? keywords : [],
+            timings: stamped
         )
         await onActivity(activity)
         return applied

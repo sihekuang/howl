@@ -161,6 +161,10 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// including `.superseded` — a superseded refresh's keywords, by
     /// definition, never reached the engine.
     public let appliedKeywords: [String]
+    /// How long each stage of this refresh took. Stages the installed
+    /// strategy does not run stay nil rather than zero — see
+    /// `ScreenContextTimings`.
+    public let timings: ScreenContextTimings
 
     public enum Outcome: Equatable, Sendable {
         /// Screen context is off. Keywords were cleared, not merely
@@ -212,7 +216,8 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         fallbackReason: ScreenContextFallbackReason? = nil,
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = [],
-        appliedKeywords: [String] = []
+        appliedKeywords: [String] = [],
+        timings: ScreenContextTimings = ScreenContextTimings()
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -227,5 +232,6 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         self.rawResponse = rawResponse
         self.dropped = dropped
         self.appliedKeywords = appliedKeywords
+        self.timings = timings
     }
 }

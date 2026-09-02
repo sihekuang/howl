@@ -23,25 +23,31 @@ public struct WindowImageCapture: Equatable, Sendable {
     /// primary one; nil when nothing fell back. See
     /// `WindowSnapshot.fallbackReason`.
     public let fallbackReason: ScreenContextFallbackReason?
+    /// How long the stages that produced this reading took. The vision
+    /// strategy has no `read` stage — the model does that itself, and
+    /// the time lands in `extract`.
+    public let timings: ScreenContextTimings
 
     public init(
         bundleID: String,
         windowTitle: String,
         pngData: Data,
         pixelSize: ScreenContextPixelSize,
-        fallbackReason: ScreenContextFallbackReason? = nil
+        fallbackReason: ScreenContextFallbackReason? = nil,
+        timings: ScreenContextTimings = ScreenContextTimings()
     ) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.pngData = pngData
         self.pixelSize = pixelSize
         self.fallbackReason = fallbackReason
+        self.timings = timings
     }
 
     /// The same reading, marked as having come from a fallback.
     public func marked(asFallback reason: ScreenContextFallbackReason) -> WindowImageCapture {
         WindowImageCapture(bundleID: bundleID, windowTitle: windowTitle, pngData: pngData,
-                           pixelSize: pixelSize, fallbackReason: reason)
+                           pixelSize: pixelSize, fallbackReason: reason, timings: timings)
     }
 }
 
@@ -112,6 +118,11 @@ public struct VisionModelScreenContentSource: ScreenContentSource {
     public func read() async -> ScreenContent? {
         // The capturer enforces the denylist itself, in one main-actor
         // hop, before ScreenCaptureKit is touched at all.
+        // Measured across capture AND the resample/encode below: all
+        // three are what it costs to produce the pixels the model is
+        // shown, and the clock stops where the reading is ready.
+        let clock = ContinuousClock()
+        let start = clock.now
         guard let captured = await capturer.capture() else { return nil }
 
         // Resample AFTER capture rather than asking ScreenCaptureKit
@@ -128,7 +139,14 @@ public struct VisionModelScreenContentSource: ScreenContentSource {
             bundleID: captured.bundleID,
             windowTitle: captured.windowTitle,
             pngData: png,
-            pixelSize: ScreenContextPixelSize(width: sized.width, height: sized.height)
+            pixelSize: ScreenContextPixelSize(width: sized.width, height: sized.height),
+            // The downscale and PNG encode are inside `capture`
+            // rather than given a stage of their own: they are part of
+            // producing the pixels the model is shown, and splitting
+            // them out would invent a stage the other two strategies
+            // have no counterpart for. `read` stays nil — this
+            // strategy never turns the window into text locally.
+            timings: ScreenContextTimings(capture: (clock.now - start).timeInterval)
         ))
     }
 
