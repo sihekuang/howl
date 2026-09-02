@@ -40,7 +40,12 @@ struct SessionList: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("SESSIONS").font(.caption2).bold().foregroundStyle(.secondary)
-                Text(headerCaption).font(.caption2).foregroundStyle(.tertiary)
+                // "refreshed 2 minutes ago" has to age for the same
+                // reason the rows do — nothing else re-renders it.
+                TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                    Text(headerCaption(now: context.date))
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             Button {
@@ -55,11 +60,11 @@ struct SessionList: View {
         .padding(8)
     }
 
-    private var headerCaption: String {
+    private func headerCaption(now: Date) -> String {
         let count = sessionList.count
         let countLabel = "\(count) captured"
         if lastRefreshedAt == .distantPast { return countLabel }
-        return "\(countLabel) · refreshed \(RelativeTime.string(now: Date(), then: lastRefreshedAt))"
+        return "\(countLabel) · refreshed \(RelativeTime.string(now: now, then: lastRefreshedAt))"
     }
 
     // MARK: - List
@@ -75,14 +80,22 @@ struct SessionList: View {
                 .padding(8)
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(sessionList) { s in
-                        SessionRow(
-                            manifest: s,
-                            isSelected: selectedID == s.id,
-                            onTap: { selectedID = s.id }
-                        )
-                        Divider()
+                // A row body is re-evaluated only when its own data
+                // changes, so a list that grows at the top leaves every
+                // existing row frozen at whatever it said when it was
+                // drawn. Ticking here ages them all against a single
+                // clock; each row still measures from its own timestamp.
+                TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(sessionList) { s in
+                            SessionRow(
+                                manifest: s,
+                                now: context.date,
+                                isSelected: selectedID == s.id,
+                                onTap: { selectedID = s.id }
+                            )
+                            Divider()
+                        }
                     }
                 }
             }
@@ -166,6 +179,10 @@ struct SessionList: View {
 /// highlighted state.
 private struct SessionRow: View {
     let manifest: SessionManifest
+    /// Current time, supplied by the list's `TimelineView` so the label
+    /// ages. Never `Date()` read inside the row — that is the version
+    /// of this that freezes at first render.
+    let now: Date
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -205,7 +222,10 @@ private struct SessionRow: View {
 
     private var relativeTime: String {
         guard let d = RelativeTime.parse(manifest.id) else { return manifest.id }
-        return RelativeTime.string(now: Date(), then: d)
+        // Default `.minutes` granularity, unlike the screen-context
+        // list: sessions are captured a dictation at a time, not on
+        // every focus change, so second-level steps would be noise.
+        return RelativeTime.string(now: now, then: d)
     }
 
     private var previewText: String {

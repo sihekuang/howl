@@ -76,21 +76,27 @@ struct CompareView: View {
     private var toolbar: some View {
         HStack(spacing: 10) {
             Text("Source:").foregroundStyle(.secondary).font(.callout)
-            Picker("Source", selection: Binding(
-                get: { selectedSourceID ?? sessionList.first?.id ?? "" },
-                set: { if !$0.isEmpty { selectedSourceID = $0 } }
-            )) {
-                if sessionList.isEmpty {
-                    Text("(no sessions)").tag("")
-                } else {
-                    ForEach(sessionList) { s in
-                        Text("\(relativeTime(s.id)) · \(s.preset.isEmpty ? "—" : s.preset)")
-                            .tag(s.id)
+            // Wraps the Picker rather than its ForEach: the rows have
+            // to stay direct children of the Picker for `.tag` to bind.
+            // Without a clock here the menu labels freeze at whatever
+            // they read when the toolbar was first drawn.
+            TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                Picker("Source", selection: Binding(
+                    get: { selectedSourceID ?? sessionList.first?.id ?? "" },
+                    set: { if !$0.isEmpty { selectedSourceID = $0 } }
+                )) {
+                    if sessionList.isEmpty {
+                        Text("(no sessions)").tag("")
+                    } else {
+                        ForEach(sessionList) { s in
+                            Text("\(relativeTime(s.id, now: context.date)) · \(s.preset.isEmpty ? "—" : s.preset)")
+                                .tag(s.id)
+                        }
                     }
                 }
+                .labelsHidden()
+                .frame(maxWidth: 260)
             }
-            .labelsHidden()
-            .frame(maxWidth: 260)
 
             Text("Preset:").foregroundStyle(.secondary).font(.callout)
             Picker("Preset", selection: Binding(
@@ -207,9 +213,9 @@ struct CompareView: View {
         return "\(preset) · \(String(format: "%.1fs", m.durationSec))"
     }
 
-    private func relativeTime(_ id: String) -> String {
+    private func relativeTime(_ id: String, now: Date) -> String {
         guard let d = RelativeTime.parse(id) else { return id }
-        return RelativeTime.string(now: Date(), then: d)
+        return RelativeTime.string(now: now, then: d)
     }
 
     // MARK: - Actions

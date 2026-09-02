@@ -89,6 +89,7 @@
 		33701D22E4BAE2DFD67E2DF9 /* PresetDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDraft.swift; sourceTree = "<group>"; };
 		3478540033294914B4022332 /* CompareSourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareSourceLoader.swift; sourceTree = "<group>"; };
 		373562A2CF06C33869CD616E /* ScreenContextActivitySelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenContextActivitySelection.swift; sourceTree = "<group>"; };
+		457BC522792C2802F6F0F594 /* heartbeat */ = {isa = PBXFileReference; path = heartbeat; sourceTree = "<group>"; };
 		4645AD4550A9165E3D88094E /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
 		4D757AC5076042E1A6195982 /* StageDetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageDetailPane.swift; sourceTree = "<group>"; };
 		4E17A99080A23B794802A97F /* OllamaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaSection.swift; sourceTree = "<group>"; };
@@ -208,6 +209,7 @@
 				A2BB970189EEA653E0F283F3 /* TerminalStageBodies.swift */,
 				604BD0A68D3D7E74369F9935 /* TSELabView.swift */,
 				2A966570B7133FF3A910732C /* WAVPlayer.swift */,
+				7AFE127A519018224AB06545 /* .layercake */,
 			);
 			path = Pipeline;
 			sourceTree = "<group>";
@@ -243,6 +245,14 @@
 				EB90CC13B20CC997D6FBE210 /* LaunchAtLogin.swift */,
 			);
 			path = Engine;
+			sourceTree = "<group>";
+		};
+		7AFE127A519018224AB06545 /* .layercake */ = {
+			isa = PBXGroup;
+			children = (
+				457BC522792C2802F6F0F594 /* heartbeat */,
+			);
+			path = .layercake;
 			sourceTree = "<group>";
 		};
 		8195E7942ED5B7E8C19D0EC6 /* Howl */ = {
