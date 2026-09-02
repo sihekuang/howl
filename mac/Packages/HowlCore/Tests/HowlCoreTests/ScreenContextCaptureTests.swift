@@ -273,3 +273,65 @@ struct ScreenshotEncodingTests {
         #expect(decoded.height == 48)
     }
 }
+
+/// Which of an app's windows gets photographed.
+///
+/// The bug these pin down was found from the app's own logs: three
+/// captures came back with no recognized text, and the retry pass took
+/// ~18ms. Measured against the shipped recognizer, ~18ms per pass
+/// corresponds to an image about 159x22 — a 800x600 capture already
+/// costs 3.5x that. The capture had succeeded; it had simply
+/// photographed the wrong window.
+@Suite("Window choice among an app's on-screen windows")
+struct WindowChoiceTests {
+    private func candidate(
+        _ pid: pid_t, _ width: CGFloat, _ height: CGFloat, onScreen: Bool = true
+    ) -> WindowCandidate {
+        WindowCandidate(pid: pid, isOnScreen: onScreen, width: width, height: height)
+    }
+
+    @Test("the real window wins over a transient that sorts ahead of it")
+    func prefersTheLargestWindow() {
+        // Exactly the shape observed live: Chrome's link-preview bubble
+        // ahead of the browser window it belongs to.
+        let windows = [
+            candidate(3246, 159, 22),
+            candidate(3246, 2560, 2160),
+            candidate(3246, 1538, 1080),
+        ]
+        #expect(chooseWindow(from: windows, pid: 3246) == 1)
+    }
+
+    @Test("another app's larger window is never chosen")
+    func ignoresOtherApps() {
+        let windows = [
+            candidate(3246, 159, 22),
+            candidate(9999, 5120, 4320),
+        ]
+        #expect(chooseWindow(from: windows, pid: 3246) == 0)
+    }
+
+    @Test("an off-screen window is never chosen, however large")
+    func ignoresOffScreenWindows() {
+        let windows = [
+            candidate(3246, 400, 300),
+            candidate(3246, 5120, 4320, onScreen: false),
+        ]
+        #expect(chooseWindow(from: windows, pid: 3246) == 0)
+    }
+
+    @Test("equal areas keep the front-most window")
+    func tiesKeepTheEarlierWindow() {
+        let windows = [
+            candidate(3246, 800, 600),
+            candidate(3246, 800, 600),
+        ]
+        #expect(chooseWindow(from: windows, pid: 3246) == 0)
+    }
+
+    @Test("no on-screen window for this app means nothing to photograph")
+    func noMatchIsNil() {
+        let windows = [candidate(9999, 800, 600)]
+        #expect(chooseWindow(from: windows, pid: 3246) == nil)
+    }
+}

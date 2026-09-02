@@ -44,6 +44,48 @@ public protocol WindowImageCapturing: Sendable {
     func capture() async -> CapturedWindow?
 }
 
+/// One of an app's on-screen windows, reduced to just what choosing
+/// between them needs. `SCWindow` cannot be constructed in a test, so
+/// the choice is made over this instead and the capturer maps into it.
+struct WindowCandidate: Equatable, Sendable {
+    let pid: pid_t
+    let isOnScreen: Bool
+    let width: CGFloat
+    let height: CGFloat
+
+    var area: CGFloat { width * height }
+}
+
+/// Picks which of an app's windows to photograph, returning its index
+/// in `candidates`.
+///
+/// Apps routinely have more than one on-screen window, and several of
+/// them are tiny transients that contain no text worth extracting:
+/// Chrome's 159x22 link-preview bubble is the one that prompted this.
+/// Taking whichever matching window happened to come first meant that
+/// while such a transient existed, the capture was a coin flip between
+/// the user's actual window and a scrap of chrome — and the failure was
+/// invisible, because a successfully-photographed 159x22 bubble OCRs to
+/// nothing and is indistinguishable in the log from a window that
+/// genuinely had no text.
+///
+/// Largest-area wins. It is not a proxy for "focused" and does not try
+/// to be: when an app has a real window and a transient, the real one
+/// is larger by orders of magnitude, which is the case that was
+/// breaking. Ties resolve to the earlier index, preserving the caller's
+/// front-to-back order.
+func chooseWindow(from candidates: [WindowCandidate], pid: pid_t) -> Int? {
+    var best: (index: Int, area: CGFloat)?
+    for (index, candidate) in candidates.enumerated() {
+        guard candidate.pid == pid, candidate.isOnScreen else { continue }
+        // Strictly greater, so equal areas keep the earlier window.
+        if best == nil || candidate.area > best!.area {
+            best = (index, candidate.area)
+        }
+    }
+    return best?.index
+}
+
 /// Screenshots the focused window. Shared by every pixel-based content
 /// source — the OCR one and the vision-model one — so the denylist
 /// discipline below is written once and cannot drift between them.
@@ -88,9 +130,20 @@ public struct ScreenCaptureKitWindowCapturer: WindowImageCapturing {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false, onScreenWindowsOnly: true
             )
-            guard let window = content.windows.first(where: {
-                $0.owningApplication?.processID == pid && $0.isOnScreen
-            }) else { return nil }
+            // NOT `first(where:)`. An app commonly has several
+            // on-screen windows, and the tiny transient ones carry no
+            // text — see `chooseWindow`, which this defers to so the
+            // policy is unit-testable without a live SCWindow.
+            let candidates = content.windows.map {
+                WindowCandidate(
+                    pid: $0.owningApplication?.processID ?? -1,
+                    isOnScreen: $0.isOnScreen,
+                    width: $0.frame.width,
+                    height: $0.frame.height
+                )
+            }
+            guard let index = chooseWindow(from: candidates, pid: pid) else { return nil }
+            let window = content.windows[index]
 
             // `SCStreamConfiguration.width/height` are measured in
             // pixels, but `window.frame` is in points — on a 2x Retina
