@@ -8,7 +8,7 @@ import "testing"
 // mis-buckets the diagnostic panel, so pin them here.
 //
 // If you genuinely need to rename one, update this test AND the Swift
-// bucketing in ScreenContextSection together.
+// bucketing in ScreenContextActivityDetail together.
 func TestSanitizeDropReasons_WireContract(t *testing.T) {
 	want := map[string]string{
 		"DropEmpty":      "empty",

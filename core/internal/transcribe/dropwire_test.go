@@ -13,7 +13,7 @@ import "testing"
 // quietly wrong diagnostic panel.
 //
 // If you genuinely need to rename one, update this test AND the Swift
-// bucketing in ScreenContextSection together.
+// bucketing in ScreenContextActivityDetail together.
 func TestPromptDropStages_WireContract(t *testing.T) {
 	want := map[string]string{
 		"DropEmptyTerm":             "empty",
