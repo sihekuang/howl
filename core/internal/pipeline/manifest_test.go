@@ -17,14 +17,14 @@ import (
 // Optionally exposes LastSimilarity to exercise the TSE similarity
 // branch in WriteSessionManifest.
 type fakeChunkStage struct {
-	name        string
-	outputRate  int
-	withSim     bool
-	simValue    float32
+	name       string
+	outputRate int
+	withSim    bool
+	simValue   float32
 }
 
-func (f *fakeChunkStage) Name() string                                       { return f.name }
-func (f *fakeChunkStage) OutputRate() int                                    { return f.outputRate }
+func (f *fakeChunkStage) Name() string    { return f.name }
+func (f *fakeChunkStage) OutputRate() int { return f.outputRate }
 func (f *fakeChunkStage) Process(_ context.Context, in []float32) ([]float32, error) {
 	return in, nil
 }
@@ -112,6 +112,31 @@ func TestWriteSessionManifest_NoChunkStages_OmitsThem(t *testing.T) {
 	}
 }
 
+func TestWriteSessionManifest_RoundTripsScreenKeywords(t *testing.T) {
+	// Guards pipeline/manifest.go's ScreenKeywords: p.ScreenKeywords ->
+	// sessions.Manifest.ScreenKeywords wiring — previously untested
+	// (a grep for ScreenKeywords across the repo found no test file).
+	dir := t.TempDir()
+	p := New(nil, nil, nil)
+	p.ScreenKeywords = []string{"SpeakerGate", "DeepFilterNet"}
+
+	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
+		t.Fatalf("WriteSessionManifest: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatalf("read session.json: %v", err)
+	}
+	var m sessions.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(m.ScreenKeywords) != 2 || m.ScreenKeywords[0] != "SpeakerGate" || m.ScreenKeywords[1] != "DeepFilterNet" {
+		t.Errorf("ScreenKeywords = %v, want [SpeakerGate DeepFilterNet]", m.ScreenKeywords)
+	}
+}
+
 func TestWriteSessionManifest_NonTSEChunkSkipsSimilarity(t *testing.T) {
 	// A future chunk stage with a different name should not get
 	// TSESimilarity populated even if it happens to expose
@@ -130,5 +155,36 @@ func TestWriteSessionManifest_NonTSEChunkSkipsSimilarity(t *testing.T) {
 	_ = json.Unmarshal(data, &m)
 	if m.Stages[0].TSESimilarity != nil {
 		t.Errorf("expected nil TSESimilarity for non-tse stage, got %v", *m.Stages[0].TSESimilarity)
+	}
+}
+
+// TestWriteSessionManifest_RoundTripsWhisperPrompt guards the
+// p.WhisperPrompt/WhisperPromptTokens -> sessions.Manifest wiring. The
+// manifest's existing `prompt` field is the LLM CLEANUP prompt
+// (transcripts.prompt -> prompt.txt); this is the ASR initial_prompt,
+// which was previously recorded nowhere at all.
+func TestWriteSessionManifest_RoundTripsWhisperPrompt(t *testing.T) {
+	dir := t.TempDir()
+	p := New(nil, nil, nil)
+	p.WhisperPrompt = "MCP, SpeakerGate"
+	p.WhisperPromptTokens = 7
+
+	if err := p.WriteSessionManifest(dir, "id", "default"); err != nil {
+		t.Fatalf("WriteSessionManifest: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatalf("read session.json: %v", err)
+	}
+	var m sessions.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m.WhisperPrompt != "MCP, SpeakerGate" {
+		t.Errorf("WhisperPrompt = %q, want %q", m.WhisperPrompt, "MCP, SpeakerGate")
+	}
+	if m.WhisperPromptTokens != 7 {
+		t.Errorf("WhisperPromptTokens = %d, want 7", m.WhisperPromptTokens)
 	}
 }

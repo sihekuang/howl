@@ -39,4 +39,16 @@ char* howl_replay(const char* source_id, const char* presets_csv);
 // Returns 0 on success, non-zero on failure (use howl_last_error for detail).
 int howl_tse_extract_file(char* inputPath, char* outputPath, char* modelsDir, char* voiceDir, char* onnxLibPath);
 
+// Screen-context whisper biasing. See core/cmd/libhowl/screenctx_export.go.
+char* howl_extract_keywords(char* jsonC);
+int howl_set_screen_keywords(char* jsonC);
+char* howl_screen_context_preview(void);
+
+// Vision screen-context: keywords straight from a screenshot, no OCR.
+// See core/cmd/libhowl/screenctx_image_export.go. The media type is
+// sniffed from the bytes, so there is deliberately no format argument.
+// BLOCKING (network call) — invoke off the main thread. Free the result
+// with howl_free_string.
+char* howl_extract_keywords_image(unsigned char* bytes, int length);
+
 #endif

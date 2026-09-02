@@ -40,15 +40,28 @@ type Manifest struct {
 	DurationSec float64           `json:"duration_sec"` // total dictation length
 	Stages      []StageEntry      `json:"stages"`
 	Transcripts TranscriptEntries `json:"transcripts"`
+	// ScreenKeywords are the screen-derived terms that reached whisper's
+	// initial prompt. omitempty so existing manifests are unaffected.
+	ScreenKeywords []string `json:"screen_keywords,omitempty"`
+	// WhisperPrompt is the exact initial_prompt handed to the ASR for
+	// this dictation — the custom dictionary plus the surviving screen
+	// keywords, after token-budget trimming. Distinct from
+	// Transcripts.Prompt, which is the LLM CLEANUP prompt; before this
+	// field the ASR prompt was recorded nowhere. WhisperPromptTokens is
+	// its length as whisper_token_count measured it against the loaded
+	// model, not an estimate. Both omitempty so existing manifests are
+	// unaffected.
+	WhisperPrompt       string `json:"whisper_prompt,omitempty"`
+	WhisperPromptTokens int    `json:"whisper_prompt_tokens,omitempty"`
 }
 
 // StageEntry describes one captured stage. WavRel is the path of the
 // stage's WAV relative to the session folder (e.g. "denoise.wav").
 type StageEntry struct {
-	Name          string  `json:"name"`
-	Kind          string  `json:"kind"`                     // "frame" | "chunk"
-	WavRel        string  `json:"wav"`                      // relative path inside session folder
-	RateHz        int     `json:"rate_hz"`                  // output sample rate of this stage
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`    // "frame" | "chunk"
+	WavRel string `json:"wav"`     // relative path inside session folder
+	RateHz int    `json:"rate_hz"` // output sample rate of this stage
 	// TSESimilarity is the cosine similarity between the extracted
 	// source's ECAPA embedding and the enrolled reference, populated
 	// only for the TSE chunk stage. nil = stage didn't run / didn't

@@ -38,6 +38,14 @@ public struct UserSettings: Codable, Equatable, Sendable {
     /// individual fields after applying a preset (we don't detect drift
     /// today; the picker just shows whatever was last applied).
     public var selectedPresetName: String?
+    /// Whether Howl reads the focused window to bias whisper's
+    /// recognition. Default ON. Reading uses the Accessibility API Howl
+    /// already holds; the Screen Recording prompt only appears if an
+    /// app needs the OCR fallback.
+    public var screenContextEnabled: Bool
+    /// Extra bundle IDs never read for screen context, on top of
+    /// ScreenContextDenylist.builtIn.
+    public var screenContextDenylist: [String]
 
     public init(
         whisperModelSize: String = "small",
@@ -55,7 +63,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         tseThreshold: Float? = nil,
         tseBackend: String = "",
         pipelineTimeoutSec: Int = 10,
-        selectedPresetName: String? = nil
+        selectedPresetName: String? = nil,
+        screenContextEnabled: Bool = true,
+        screenContextDenylist: [String] = []
     ) {
         self.whisperModelSize = whisperModelSize
         self.language = language
@@ -73,6 +83,8 @@ public struct UserSettings: Codable, Equatable, Sendable {
         self.tseBackend = tseBackend
         self.pipelineTimeoutSec = pipelineTimeoutSec
         self.selectedPresetName = selectedPresetName
+        self.screenContextEnabled = screenContextEnabled
+        self.screenContextDenylist = screenContextDenylist
     }
 
     public init(from decoder: any Decoder) throws {
@@ -93,6 +105,9 @@ public struct UserSettings: Codable, Equatable, Sendable {
         tseBackend = try c.decodeIfPresent(String.self, forKey: .tseBackend) ?? ""
         pipelineTimeoutSec = try c.decodeIfPresent(Int.self, forKey: .pipelineTimeoutSec) ?? 10
         selectedPresetName = try c.decodeIfPresent(String.self, forKey: .selectedPresetName)
+        // New in the screen-context feature; absent in existing installs.
+        screenContextEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenContextEnabled) ?? true
+        screenContextDenylist = try c.decodeIfPresent([String].self, forKey: .screenContextDenylist) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -100,6 +115,7 @@ public struct UserSettings: Codable, Equatable, Sendable {
         case llmProvider, llmModel, llmBaseURL, llmPrompt, customDict, hotkey, hidBinding, inputDeviceUID, tseEnabled
         case tseThreshold, tseBackend, pipelineTimeoutSec
         case selectedPresetName
+        case screenContextEnabled, screenContextDenylist
     }
 
     /// Returns a copy with the preset-driven fields stamped in.

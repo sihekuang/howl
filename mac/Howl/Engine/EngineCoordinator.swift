@@ -228,12 +228,14 @@ public final class EngineCoordinator {
         // Pre-warm Ollama if it's the active provider so the user's
         // first dictation isn't blocked by a 5–15 s cold model load.
         await prewarmOllamaIfActive()
+        syncScreenContextObserver()
     }
 
     public func stop() {
         composition.cancelKeyMonitor.stop()
         composition.hotkey.stop()
         composition.hidTrigger.stop()
+        composition.screenContextObserver.stop()
         pollTask?.cancel()
         pollTask = nil
     }
@@ -249,6 +251,11 @@ public final class EngineCoordinator {
         composition.appState.engineLoading = true
         await applyConfig()
         composition.appState.engineLoading = false
+        // Ahead of the hotkeyPaused guard below on purpose: toggling
+        // screenContextEnabled is unrelated to hotkey-shortcut recording,
+        // so it must take effect on every settings save regardless of
+        // whether the user happens to be mid-recording a new shortcut.
+        syncScreenContextObserver()
         guard !hotkeyPaused else {
             log.info("reapplyConfig: hotkey paused for recording — skipping hotkey restart")
             return
@@ -528,6 +535,31 @@ public final class EngineCoordinator {
     private func applyConfig() async {
         let settings = (try? composition.settings.get()) ?? UserSettings()
         await applyConfig(for: settings)
+    }
+
+    /// Starts or stops `screenContextObserver` to match the current
+    /// `screenContextEnabled` setting. Called on launch (`start()`) and
+    /// on every settings save (`reapplyConfig()`), so toggling the
+    /// feature off actually detaches the AX/NSWorkspace observer rather
+    /// than leaving it attached and only changing what the coordinator
+    /// does with what it reads. `start()`/`stop()` are each idempotent
+    /// (see `ScreenContextObserver`), so calling either when already in
+    /// that state is a harmless no-op.
+    ///
+    /// Fail-open (`?? true`) to match `screenContextCoordinator`'s own
+    /// `isEnabled` closure in `CompositionRoot` — deliberately, not an
+    /// oversight. If settings are unreadable the observer may start, but
+    /// `screenContextDenylistProvider` fails CLOSED in that same
+    /// condition (see its doc comment), so every `refresh()` this
+    /// triggers finds `denylist().shouldSkip(...) == true` immediately
+    /// and reads nothing regardless of which way this defaults.
+    private func syncScreenContextObserver() {
+        let enabled = (try? composition.settings.get())?.screenContextEnabled ?? true
+        if enabled {
+            composition.screenContextObserver.start()
+        } else {
+            composition.screenContextObserver.stop()
+        }
     }
 
     /// Reconfigure the engine using a caller-supplied UserSettings — does

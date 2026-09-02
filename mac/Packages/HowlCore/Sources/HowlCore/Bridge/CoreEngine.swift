@@ -96,4 +96,56 @@ public protocol CoreEngine: Sendable {
     /// pipeline. Returns the C ABI return code (0 = success); on failure
     /// callers should consult `lastError()` for the description.
     func tseExtractFile(inputPath: String, outputPath: String, modelsDir: String, voiceDir: String, onnxLibPath: String) async -> Int32
+
+    /// Derive whisper biasing keywords from focused-window text via the
+    /// configured LLM provider. Blocking on the C side, so the actor
+    /// hop matters: never call this from a latency-sensitive path.
+    ///
+    /// Returns nil when the extraction itself FAILED (provider
+    /// unreachable, rate-limited, timed out, malformed response) —
+    /// distinct from a successful call that found nothing
+    /// (`.keywords == []`). Callers must not cache a nil result:
+    /// caching it would silently disable screen context for that
+    /// window's content for a whole cache TTL over one transient blip.
+    /// Either way this is best-effort — never throws, never blocks the
+    /// dictation path.
+    ///
+    /// The richer `ScreenKeywordExtraction` (vs. a bare `[String]?`)
+    /// exists so the diagnostic inspector can show the LLM's raw
+    /// response and every sanitizer rejection, not just the surviving
+    /// keywords — see `ScreenContextActivity`.
+    func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction?
+
+    /// Derive whisper biasing keywords from a PNG screenshot of the
+    /// focused window, by asking the configured provider's VISION
+    /// model to read it directly. The primary screen-context path;
+    /// `extractScreenKeywords(text:)` is now reachable only as its
+    /// `.noVision` fallback.
+    ///
+    /// Blocking on the C side (a network call), so the same rule
+    /// applies: never call this from a latency-sensitive path.
+    ///
+    /// Three-way rather than optional because `.noVision` — this
+    /// provider+model rejects images — changes which path the caller
+    /// uses next, whereas `.failed` (timeout, rate limit, auth) means
+    /// only that this attempt did not work. Never throws; the caller
+    /// degrades to dictionary-only biasing on anything but `.success`.
+    func extractScreenKeywords(image: Data) async -> ScreenImageExtractionResult
+
+    /// Store the keyword list applied at the next startCapture.
+    /// Instant; no network.
+    func setScreenKeywords(_ keywords: [String]) async
+
+    /// Reports exactly how the NEXT capture's whisper `initial_prompt`
+    /// would be composed from the engine's current custom dictionary
+    /// and stored screen keywords — the complete before/after of the
+    /// whisper-biasing chain, up to and including the string whisper
+    /// would actually receive.
+    ///
+    /// Instant; no network. Read-only: does not mutate engine state,
+    /// so calling it cannot change what the next capture sees. Returns
+    /// nil when the engine isn't initialized, isn't configured yet, or
+    /// the response fails to decode — best-effort, like every other
+    /// screen-context method: never throws.
+    func screenContextPreview() async -> ScreenContextPreview?
 }

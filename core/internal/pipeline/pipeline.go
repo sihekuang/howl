@@ -69,6 +69,21 @@ type Pipeline struct {
 	// a session artifact (prompt.txt).
 	Prompt string
 
+	// ScreenKeywords are the screen-derived biasing terms applied to
+	// the transcriber for this capture. Recorded in the session
+	// manifest so a captured session shows what biased recognition.
+	// The window TEXT they came from is deliberately never stored.
+	ScreenKeywords []string
+
+	// WhisperPrompt is the exact initial_prompt this capture handed to
+	// the transcriber, and WhisperPromptTokens its real token count.
+	// Recorded in the session manifest because nothing else records it:
+	// the manifest's existing `prompt` artifact is the LLM cleanup
+	// prompt, so before this the string that actually biased
+	// recognition was invisible after the fact.
+	WhisperPrompt       string
+	WhisperPromptTokens int
+
 	ChunkerOpts ChunkerOpts
 }
 

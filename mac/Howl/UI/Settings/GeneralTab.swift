@@ -14,7 +14,6 @@ struct GeneralTab: View {
     /// Playground and Pipeline only show it (Playground read-only,
     /// Pipeline picks editing targets — neither activates).
     let presets: any PresetsClient
-
     @State private var devices: [AudioInputDevice] = []
     @State private var downloader = ModelDownloader()
     /// Bumps every time we want SwiftUI to re-evaluate isDownloaded

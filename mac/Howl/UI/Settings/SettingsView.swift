@@ -13,6 +13,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case provider
     case prompt
     case dictionary
+    case screenContext
     case playground
     case pipeline   // NEW
     case about
@@ -27,6 +28,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return "LLM Provider"
         case .prompt:     return "Prompt"
         case .dictionary: return "Dictionary"
+        case .screenContext: return "Screen Context"
         case .playground: return "Playground"
         case .pipeline:   return "Pipeline"   // NEW
         case .about:      return "About"
@@ -44,6 +46,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return "key"
         case .prompt:     return "text.bubble"
         case .dictionary: return "books.vertical"
+        case .screenContext: return "text.viewfinder"
         case .playground: return "waveform"
         case .pipeline:   return "rectangle.connected.to.line.below"   // NEW
         case .about:      return "info.circle"
@@ -61,6 +64,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .provider:   return .orange
         case .prompt:     return .teal
         case .dictionary: return .green
+        case .screenContext: return .mint
         case .playground: return .pink
         case .pipeline:   return .indigo   // NEW
         case .about:      return .cyan
@@ -233,6 +237,13 @@ private struct DetailView: View {
             )
         case .dictionary:
             DictionaryTab(settings: $settings, onSave: save)
+        case .screenContext:
+            ScreenContextTab(
+                settings: $settings,
+                onSave: save,
+                engine: composition.engine,
+                screenContextActivity: composition.screenContextActivityStore
+            )
         case .playground:
             PlaygroundTab(
                 appState: composition.appState,

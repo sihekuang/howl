@@ -126,3 +126,50 @@ type nonClosingTranscriber struct {
 }
 
 func (n nonClosingTranscriber) Close() error { return nil }
+
+// SetContextPrompt forwards to the wrapped transcriber when it supports
+// re-biasing, returning what the wrapped call returns — the screen
+// terms that actually survived trimming. Returns nil when the wrapped
+// transcriber does not implement PromptSetter, so a caller stamping the
+// return value into a session manifest never records terms as applied
+// when nothing was actually re-biased.
+//
+// Unreachable today — not fixing a live bug. nonClosingTranscriber is
+// only constructed on the replay path (replay.Run, via
+// SharedTranscriber), and nothing on that path calls SetContextPrompt.
+// The only caller of SetContextPrompt is howl_start_capture, which
+// always operates on the live, unwrapped pipeline (buildPipeline never
+// sets SharedTranscriber). Kept anyway as defensive plumbing: without
+// this override, embedding transcribe.Transcriber (an interface) only
+// promotes methods THAT interface declares, so a future
+// pipe.Transcriber.(transcribe.PromptSetter) assertion on a
+// replay-built pipeline would silently fail even when the WRAPPED
+// concrete transcriber implements PromptSetter. This method exists so
+// that trap isn't waiting for whoever adds such a caller later.
+func (n nonClosingTranscriber) SetContextPrompt(dictTerms, screenTerms []string) []string {
+	if ps, ok := n.Transcriber.(transcribe.PromptSetter); ok {
+		return ps.SetContextPrompt(dictTerms, screenTerms)
+	}
+	return nil
+}
+
+// PreviewContextPrompt forwards to the wrapped transcriber when it
+// supports re-biasing. Explicit for the same reason SetContextPrompt
+// above is: embedding transcribe.Transcriber (an interface) promotes
+// only the methods THAT interface declares, so without this the
+// PromptSetter assertion would fail on a replay-built pipeline even
+// when the wrapped concrete transcriber implements it.
+//
+// The zero plan returned when the wrapped transcriber is not a
+// PromptSetter still carries the caps: they are compile-time constants,
+// and a diagnostic reporting a budget of 0 tokens would be a worse lie
+// than reporting an empty prompt against the real budget.
+func (n nonClosingTranscriber) PreviewContextPrompt(dictTerms, screenTerms []string) transcribe.ContextPromptPlan {
+	if ps, ok := n.Transcriber.(transcribe.PromptSetter); ok {
+		return ps.PreviewContextPrompt(dictTerms, screenTerms)
+	}
+	return transcribe.ContextPromptPlan{
+		MaxScreenPromptTokens: transcribe.MaxScreenPromptTokens,
+		MaxPromptTokens:       transcribe.MaxPromptTokens,
+	}
+}

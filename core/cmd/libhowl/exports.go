@@ -24,6 +24,7 @@ import (
 	"github.com/voice-keyboard/core/internal/presets"
 	"github.com/voice-keyboard/core/internal/recorder"
 	"github.com/voice-keyboard/core/internal/sessions"
+	"github.com/voice-keyboard/core/internal/transcribe"
 )
 
 // openSessionRecorder constructs a recorder.Session for the next capture
@@ -180,6 +181,57 @@ func howl_start_capture() C.int {
 	pushCh := make(chan []float32, pushBufferFrames)
 	ctx, cancelWithCause := context.WithCancelCause(context.Background())
 	pipe := e.pipeline
+	// Re-bias whisper for this capture. The guarantee here is narrower
+	// than it looks: at this point `e.pushCh == nil`, i.e. no audio is
+	// currently being accepted for a NEW capture — NOT "no capture
+	// pipeline is running". `howl_stop_capture` nils `pushCh` the
+	// instant PTT is released, while the PREVIOUS capture's goroutine
+	// keeps running for seconds after that (whisper drain + LLM
+	// cleanup), and nothing on the Swift side prevents the next
+	// `onPress` from firing during that window (`EngineCoordinator.onPress`
+	// only guards on `engineLoading`, not `engineState == .processing`).
+	// So this call and a still-in-flight Transcribe on the SAME
+	// `*WhisperCpp` CAN overlap in time; see `WhisperCpp.Transcribe`'s
+	// own `w.mu`-guarded snapshot of `initialPrompt` for why that's
+	// memory-safe. What is NOT protected is `pipe.ScreenKeywords` below:
+	// it's a field on the long-lived `*pipeline.Pipeline` the engine
+	// reuses across captures, so if capture N+1's `howl_start_capture`
+	// reaches this line before capture N's goroutine has read
+	// `pipe.ScreenKeywords` for `WriteSessionManifest`, capture N's
+	// `session.json` can end up recording capture N+1's keywords
+	// instead of its own.
+	//
+	// A transcriber that doesn't implement PromptSetter keeps whatever
+	// prompt it was constructed with — and pipe.ScreenKeywords is left
+	// unset in that case, so the manifest never claims keywords were
+	// applied when nothing was actually re-biased.
+	//
+	// pipe.ScreenKeywords is stamped from SetContextPrompt's RETURN
+	// value, not e.screenKeywords (the offered list) — the return value
+	// is what actually survived whisper's token-budget trimming, which
+	// is what the session manifest must reflect.
+	// The preview composes the same plan SetContextPrompt is about to
+	// apply — same pure function of the same two inputs, pinned by
+	// TestWhisperCpp_PreviewMatchesSetContextPrompt — so the prompt and
+	// token count stamped below describe exactly the prompt the line
+	// after it installs. It is a second composition rather than a
+	// second implementation; the cost is a handful of extra
+	// whisper_token_count calls on an already byte-bounded string.
+	//
+	// ScreenKeywords still comes from SetContextPrompt's return value
+	// rather than the plan, deliberately: that return is the reviewed
+	// contract this manifest field has always been stamped from.
+	if ps, ok := pipe.Transcriber.(transcribe.PromptSetter); ok {
+		plan := ps.PreviewContextPrompt(e.cfg.CustomDict, e.screenKeywords)
+		pipe.ScreenKeywords = ps.SetContextPrompt(e.cfg.CustomDict, e.screenKeywords)
+		// The whisper prompt is recorded for the session manifest only.
+		// It contains no window text — just dictionary and keyword
+		// terms — and is deliberately NOT logged: term lists derived
+		// from the focused window do not belong in /tmp/howl.log.
+		pipe.WhisperPrompt = plan.Prompt
+		pipe.WhisperPromptTokens = plan.TokenCount
+		log.Printf("[howl] howl_start_capture: applied %d screen keyword(s); whisper prompt is %d token(s)", len(pipe.ScreenKeywords), plan.TokenCount)
+	}
 	timeout := e.cfg.PipelineTimeoutValue()
 	// Open a per-capture session recorder under DeveloperMode. Errors are
 	// non-fatal; we proceed without recording in that case. Safe under
@@ -710,11 +762,20 @@ func howl_clear_sessions() C.int {
 //   - minor: a new function is added (additive, back-compat)
 //   - patch: a fix that doesn't change the surface (rare)
 //
-// The Mac app reads this via howl_abi_version() at startup and asserts
-// it matches the major version it was built against. This catches
-// dev-build vs. shipped-dylib mismatches that would otherwise crash
-// at first call to the new function.
-const abiVersion = "1.0.0"
+// No Swift consumer reads howl_abi_version() today — a grep of mac/
+// for "abi_version"/"abiVersion" finds nothing (see docs/decisions.md's
+// 2026-08-29 ABI-bump entry, which records the same finding). This is
+// a version marker for a startup dev-build-vs-shipped-dylib mismatch
+// check that does not exist yet, not a description of one that does.
+// Bumping the minor digit is safe precisely because nothing currently
+// reads it; if a Swift-side check is added later, it should assert on
+// the major version only, per the bump policy above.
+//
+// 1.1.0 -> 1.2.0: added howl_screen_context_preview. See
+// docs/decisions.md, 2026-08-30.
+// 1.2.0 -> 1.3.0: added howl_extract_keywords_image. Additive, like
+// every bump before it — no existing signature changed.
+const abiVersion = "1.3.0"
 
 // howl_abi_version returns the libhowl ABI semver. Caller frees via
 // howl_free_string. Never returns NULL.

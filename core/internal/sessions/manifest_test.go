@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -119,4 +120,68 @@ func TestManifest_WriteProducesCanonicalJSON(t *testing.T) {
 	}
 }
 
+// TestManifest_ScreenKeywordsOmittedWhenEmpty guards the back-compat
+// promise on ScreenKeywords' `omitempty` tag: existing manifests (and
+// sessions that never had screen context) must serialize with no
+// `screen_keywords` key at all, not `"screen_keywords": null` or `[]`.
+// Before this test, that guarantee rested only on the struct tag
+// looking correct — nothing exercised it directly.
+func TestManifest_ScreenKeywordsOmittedWhenEmpty(t *testing.T) {
+	base := TranscriptEntries{Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt"}
+
+	t.Run("nil", func(t *testing.T) {
+		dir := t.TempDir()
+		m := Manifest{Version: 1, ID: "x", Preset: "default", Transcripts: base}
+		if err := m.Write(dir); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, "session.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(got), "screen_keywords") {
+			t.Errorf("expected screen_keywords absent when nil, got:\n%s", got)
+		}
+	})
+
+	t.Run("empty_non_nil", func(t *testing.T) {
+		// This is the actual shape produced when a caller sets
+		// `{"keywords":[]}` via howl_set_screen_keywords (a non-nil,
+		// zero-length slice) — omitempty must treat it the same as nil.
+		dir := t.TempDir()
+		m := Manifest{Version: 1, ID: "x", Preset: "default", Transcripts: base, ScreenKeywords: []string{}}
+		if err := m.Write(dir); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, "session.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(got), "screen_keywords") {
+			t.Errorf("expected screen_keywords absent when empty, got:\n%s", got)
+		}
+	})
+}
+
 func floatPtr(f float32) *float32 { return &f }
+
+// TestManifest_WhisperPromptOmittedWhenEmpty holds whisper_prompt and
+// whisper_prompt_tokens to the same back-compat promise
+// screen_keywords already carries: a session that had no ASR prompt
+// must serialize with neither key present, so existing manifests stay
+// byte-identical.
+func TestManifest_WhisperPromptOmittedWhenEmpty(t *testing.T) {
+	base := TranscriptEntries{Raw: "raw.txt", Dict: "dict.txt", Cleaned: "cleaned.txt"}
+	dir := t.TempDir()
+	m := Manifest{Version: 1, ID: "x", Preset: "default", Transcripts: base}
+	if err := m.Write(dir); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "whisper_prompt") {
+		t.Errorf("expected whisper_prompt absent when empty, got:\n%s", got)
+	}
+}

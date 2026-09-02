@@ -15,3 +15,5 @@ assets/icons/generated/
 
 # superpowers brainstorming session state (per-session mockups + server info)
 .superpowers/
+# Agent scratch directories (any depth)
+.layercake/

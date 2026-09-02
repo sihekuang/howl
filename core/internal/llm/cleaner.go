@@ -33,3 +33,31 @@ type StreamingCleaner interface {
 		onDelta func(string),
 	) (string, error)
 }
+
+// callSource is a private context-key type for tagging *why* Clean is
+// being called, so provider implementations can adjust their own
+// logging without the Cleaner interface (and therefore every call
+// site and test that constructs one) needing to change. Kept
+// unexported per the standard context-key pattern to avoid collisions
+// with keys other packages might set on the same context.
+type callSource int
+
+const screenContextSourceKey callSource = iota
+
+// WithScreenContextSource marks ctx as belonging to a screen-context
+// keyword extraction call rather than an ordinary dictation-cleanup
+// call. screenctx.Extract reuses the configured provider's Cleaner
+// (see screenctx.NewExtractor's doc comment) — same Clean method, same
+// log lines — so without this tag, every window focus change would be
+// indistinguishable in the log from an actual dictation cleanup,
+// including logging the byte length of the focused window's text.
+func WithScreenContextSource(ctx context.Context) context.Context {
+	return context.WithValue(ctx, screenContextSourceKey, true)
+}
+
+// IsScreenContextSource reports whether ctx was tagged by
+// WithScreenContextSource.
+func IsScreenContextSource(ctx context.Context) bool {
+	v, _ := ctx.Value(screenContextSourceKey).(bool)
+	return v
+}

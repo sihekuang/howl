@@ -1,0 +1,424 @@
+import HowlCore
+import SwiftUI
+
+/// Right column of the Screen Context tab: the full diagnostic chain
+/// for ONE selected `ScreenContextActivity`.
+///
+/// Mirrors `Pipeline/SessionDetail.swift` — a plain
+/// `VStack(alignment: .leading)` of labelled rows for whatever the
+/// list has selected, owning no selection state of its own.
+///
+/// Rendered inside `SettingsPane`, and follows that container's idiom:
+/// plain `HStack`/`Text` rows and `SettingsGroupHeader`, never
+/// `Section` or `LabeledContent` — `SettingsPane` is a `VStack`, not a
+/// `Form`/`List`, so those don't render here.
+///
+/// ## Everything here is a property of the selected record
+///
+/// Captured, LLM returned, Sanitized and Timing all describe what
+/// happened when that one window was read. They are as true a week
+/// later as they were at the time, which is what makes an older
+/// selection safe to read.
+///
+/// Live engine state — the prompt whisper would receive if you
+/// dictated right now — deliberately does NOT live here. It sits above
+/// the table in `ScreenContextLivePrompt`, because it is one global
+/// fact rather than a property of any row. It was in this pane once,
+/// fenced off under its own heading with a caption that turned orange
+/// on a historical selection; the caption was accurate and it still
+/// misled, because position reads louder than a paragraph. See that
+/// type for the full reasoning.
+///
+/// ## Privacy
+///
+/// Raw window text and the LLM's raw response are shown verbatim
+/// behind disclosures, by design — this is a diagnostic surface the
+/// user explicitly asked to see the truth on, and everything it shows
+/// is already in-memory-only (`ScreenContextActivityStore`), never
+/// written to disk.
+///
+/// The captured SCREENSHOT is the deliberate exception: only its byte
+/// count and pixel dimensions are ever recorded, so this panel can
+/// report that a capture happened, how big it was and what resolution
+/// the model saw, but can never show the picture back. See
+/// `ScreenContextActivity.capturedImageBytes`.
+///
+/// Every read path is reachable in normal operation — a screenshot
+/// read locally by OCR (the default), a screenshot sent to a vision
+/// model, or accessibility text when there are no pixels at all — so
+/// every row that describes a capture names which one it was, and the
+/// Captured row spells out why a fallback happened. "This model can't
+/// read images" and "the screenshot failed" are the two reasons, and
+/// they call for opposite fixes.
+///
+/// A `.screenshot` row with a character count was read by OCR; one
+/// with a byte count was sent to a vision model. Which strategy is
+/// installed is `CompositionRoot`'s business, not this view's.
+struct ScreenContextActivityDetail: View {
+    let activity: ScreenContextActivity
+    /// Whether there is anything older than `activity` to select.
+    /// Only used to decide whether the self-skip note can honestly
+    /// point at "the entry below this one".
+    let hasOlderEntries: Bool
+
+    @State private var showCapturedText = false
+    @State private var showRawResponse = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if isSelfSkip { selfSkipNote }
+            SettingsGroupHeader("This capture")
+            capturedRow(activity)
+            llmReturnedRow(activity)
+            sanitizedRow(activity)
+            timingRows(activity)
+        }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(activity.bundleID ?? "Unknown app")
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                // Same clock as the list's rows, for the same reason
+                // — see `ScreenContextActivityList`. The pane can sit
+                // on one selection for minutes.
+                TimelineView(.periodic(from: .now, by: RelativeTime.subMinuteBucket)) { context in
+                    Text(timestampLabel(now: context.date))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            ScreenContextOutcomeChip(outcome: activity.outcome)
+        }
+    }
+
+    /// Relative time for scanning plus the wall clock for correlating
+    /// against a dictation — the list rows only carry the relative
+    /// half, and several refreshes can share one "just now".
+    private func timestampLabel(now: Date) -> String {
+        let relative = RelativeTime.string(now: now, then: activity.timestamp, granularity: .seconds)
+        let exact = activity.timestamp.formatted(.dateTime.hour().minute().second())
+        return "\(relative) · \(exact) · \(activity.outcome.label)"
+    }
+
+    // MARK: - Howl's own skip
+
+    /// Howl denylists its own bundle ID (see `ScreenContextDenylist` —
+    /// reading our own AX tree self-deadlocks the app), so bringing
+    /// this window to the front to inspect screen context necessarily
+    /// files a skip, and that skip is necessarily the newest entry in
+    /// the list. Without saying so, the very act of opening Settings
+    /// looks like a bug in the feature, and the reading the user came
+    /// to see looks like it never happened.
+    private var isSelfSkip: Bool {
+        switch activity.outcome {
+        case .skippedPreReadDenylist, .skippedPostReadDenylist:
+            guard let own = Bundle.main.bundleIdentifier?.lowercased(), !own.isEmpty,
+                  let seen = activity.bundleID?.lowercased() else { return false }
+            return own == seen
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var selfSkipNote: some View {
+        Label(
+            hasOlderEntries
+                ? "This is Howl skipping its own window. Opening Settings puts Howl in front, "
+                    + "so one of these lands on top every time — the reading you came to look at "
+                    + "is the entry below it."
+                : "This is Howl skipping its own window. Opening Settings puts Howl in front, so "
+                    + "one of these lands on top every time. Focus another window to capture a real "
+                    + "reading.",
+            systemImage: "info.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Row 1: Captured
+
+    @ViewBuilder
+    private func capturedRow(_ activity: ScreenContextActivity) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                rowLabel("Captured")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(capturedSummary(activity)).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let note = fallbackNote(activity) {
+                        Text(note).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let note = truncationNote(activity) {
+                        Text(note).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer()
+                if activity.capturedText != nil {
+                    Button(showCapturedText ? "Hide text" : "Show text") {
+                        showCapturedText.toggle()
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
+            }
+            if showCapturedText, let text = activity.capturedText {
+                disclosedText(text)
+            }
+        }
+    }
+
+    private func capturedSummary(_ activity: ScreenContextActivity) -> String {
+        let app = activity.bundleID ?? "unknown app"
+        // The screenshot path has no text to measure — only a payload
+        // size and the dimensions it was encoded at. The image itself is
+        // deliberately never retained, so those two numbers are all
+        // there is to show, and all there should be.
+        if let bytes = activity.capturedImageBytes {
+            var parts = [
+                app,
+                activity.source?.shortLabel ?? ScreenContextOrigin.screenshot.shortLabel,
+                ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+            ]
+            if let pixels = activity.capturedImagePixelSize {
+                parts.append("\(pixels.width)×\(pixels.height)")
+            }
+            return parts.joined(separator: " · ")
+        }
+        guard activity.capturedText != nil, let length = activity.capturedTextLength else {
+            return unavailableCapturedReason(activity)
+        }
+        let sourceLabel = activity.source?.shortLabel ?? "?"
+        var parts = ["\(app)", sourceLabel, "\(length.formatted()) chars"]
+        // Present only for OCR readings — an accessibility read has no
+        // pixels behind it. Worth showing on the successful path as
+        // well as the empty one, because it is the number that says
+        // whether the right window was photographed.
+        if let pixels = activity.capturedImagePixelSize {
+            parts.append("\(pixels.width)×\(pixels.height)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func unavailableCapturedReason(_ activity: ScreenContextActivity) -> String {
+        switch activity.outcome {
+        case .disabled:
+            return "Screen context is off"
+        case .skippedPreReadDenylist, .skippedPostReadDenylist:
+            return "Skipped — \(activity.bundleID ?? "this app") is on the never-read list"
+        case .noReadableWindowText:
+            // WHY the screenshot path wasn't used instead is the
+            // fallback note's job, and the two are different problems.
+            //
+            // When there WERE pixels, the dimensions are the whole
+            // diagnosis: a plausible window size means the window
+            // genuinely had no text, while something like 159×22 means
+            // Howl photographed a transient scrap of window chrome
+            // rather than the window. Reading those two apart used to
+            // require correlating log timestamps against a probe.
+            if let pixels = activity.capturedImagePixelSize {
+                return "Nothing readable in the \(pixels.width)×\(pixels.height) capture"
+            }
+            return "No readable window text"
+        case .superseded:
+            return "Superseded before it finished"
+        case .cacheHit, .extractionSucceeded, .extractionFailed:
+            return "—"
+        }
+    }
+
+    /// Why this refresh used accessibility text rather than a
+    /// screenshot. Nil on the primary path, where there is nothing to
+    /// explain.
+    ///
+    /// This is the row that answers "why are my keywords worse than I
+    /// expected" for the two states that are otherwise invisible: a
+    /// model that cannot see, and a screenshot that never happened.
+    /// They look identical in the keyword list and have opposite fixes.
+    private func fallbackNote(_ activity: ScreenContextActivity) -> String? {
+        switch activity.fallbackReason {
+        case .noVision:
+            return "This model can't read images, so Howl used accessibility text instead. "
+                + "Switch to a vision model to use screenshots."
+        case .screenshotUnavailable:
+            return "No screenshot was available, so Howl used accessibility text instead. "
+                + "If this is every window, check Screen Recording in System Settings › Privacy & Security."
+        case nil:
+            return nil
+        }
+    }
+
+    private func truncationNote(_ activity: ScreenContextActivity) -> String? {
+        guard let text = activity.capturedText,
+              text.utf8.count > ScreenContextLimits.maxWindowTextBytesForExtraction else { return nil }
+        return "Truncated to \(ScreenContextLimits.maxWindowTextBytesForExtraction.formatted()) bytes before the LLM saw it"
+    }
+
+    // MARK: - Row 2: LLM returned
+
+    @ViewBuilder
+    private func llmReturnedRow(_ activity: ScreenContextActivity) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                rowLabel("LLM returned")
+                Text(llmReturnedSummary(activity)).font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                if activity.rawResponse != nil {
+                    Button(showRawResponse ? "Hide raw" : "Show raw") {
+                        showRawResponse.toggle()
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
+            }
+            if showRawResponse, let raw = activity.rawResponse {
+                disclosedText(raw.isEmpty ? "(empty response)" : raw)
+            }
+        }
+    }
+
+    private func llmReturnedSummary(_ activity: ScreenContextActivity) -> String {
+        switch activity.outcome {
+        case .extractionSucceeded:
+            let total = activity.appliedKeywords.count + activity.dropped.count
+            return "\(total) term\(total == 1 ? "" : "s")"
+        case .extractionFailed:
+            return "Extraction failed — provider unreachable, rate-limited, or timed out"
+        case .cacheHit:
+            return "Reused from an earlier read — no LLM call this time"
+        default:
+            return "—"
+        }
+    }
+
+    // MARK: - Row 3: Sanitized
+
+    @ViewBuilder
+    private func sanitizedRow(_ activity: ScreenContextActivity) -> some View {
+        HStack(alignment: .top) {
+            rowLabel("Sanitized")
+            Text(sanitizedSummary(activity)).font(.callout)
+            Spacer()
+        }
+    }
+
+    private func sanitizedSummary(_ activity: ScreenContextActivity) -> String {
+        guard activity.outcome == .extractionSucceeded else { return "—" }
+        let kept = activity.appliedKeywords.count
+        let droppedCount = activity.dropped.count
+        guard droppedCount > 0 else { return "\(kept) kept" }
+        let reasons = orderedUniqueReasons(activity.dropped.map(\.reason))
+            .map(friendlyDropReason)
+            .joined(separator: ", ")
+        return "\(kept) kept · \(droppedCount) dropped (\(reasons))"
+    }
+
+    // MARK: - Timing
+
+    /// Per-stage wall-clock for this refresh.
+    ///
+    /// Only stages that actually ran are shown. A strategy that takes
+    /// no screenshot has no capture row at all, rather than a capture
+    /// row reading "0 ms" — the second would claim a stage happened
+    /// instantly when it never happened.
+    @ViewBuilder
+    private func timingRows(_ activity: ScreenContextActivity) -> some View {
+        let t = activity.timings
+        if !t.isEmpty {
+            Divider().padding(.vertical, 4)
+            SettingsGroupHeader("Timing")
+            VStack(alignment: .leading, spacing: 3) {
+                timingRow("Capture", t.capture)
+                timingRow("Read", t.read)
+                timingRow("Model", t.extract)
+                // Separated from the stages above: it is a residual,
+                // not something anyone measured directly.
+                if t.unaccounted != nil || t.total != nil {
+                    Divider().padding(.vertical, 2)
+                }
+                timingRow("Waiting", t.unaccounted, emphasised: false)
+                timingRow("Total", t.total, emphasised: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func timingRow(_ label: String, _ seconds: TimeInterval?, emphasised: Bool = false) -> some View {
+        if let seconds {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                rowLabel(label)
+                Text(formatDuration(seconds))
+                    .font(emphasised ? .caption.monospaced().bold() : .caption.monospaced())
+                    // Digits line up down the column so the slow stage
+                    // is findable without reading every number.
+                    .monospacedDigit()
+                Spacer()
+            }
+        }
+    }
+
+    /// Milliseconds below a second, seconds above it.
+    ///
+    /// Stages here span roughly 20ms to 60s, and one unit across that
+    /// whole range reads badly at one end or the other: "0.018 s" hides
+    /// the magnitude, "10300 ms" is unreadable.
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        if seconds < 1 {
+            return "\(Int((seconds * 1000).rounded())) ms"
+        }
+        return String(format: "%.2f s", seconds)
+    }
+
+    // MARK: - Shared row chrome
+
+    private func rowLabel(_ s: String) -> some View {
+        Text(s)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(width: 96, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func disclosedText(_ text: String) -> some View {
+        ScrollView {
+            Text(text)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 160)
+        .padding(6)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func orderedUniqueReasons(_ reasons: [String]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for r in reasons where seen.insert(r).inserted { out.append(r) }
+        return out
+    }
+
+    private func friendlyDropReason(_ reason: String) -> String {
+        switch reason {
+        case "empty": return "empty"
+        case "too_long": return "oversize"
+        case "numeric": return "numeric"
+        case "duplicate": return "duplicate"
+        case "keyword_cap": return "over cap"
+        default: return reason
+        }
+    }
+}
