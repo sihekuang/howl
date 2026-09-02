@@ -13,28 +13,21 @@ import SwiftUI
 /// `Section` or `LabeledContent` — `SettingsPane` is a `VStack`, not a
 /// `Form`/`List`, so those don't render here.
 ///
-/// ## The two halves are not the same kind of fact
+/// ## Everything here is a property of the selected record
 ///
-/// Rows 1-3 (Captured, LLM returned, Sanitized) are properties of the
-/// selected record: they describe what happened when that window was
-/// read, and they are as true a week later as they were at the time.
+/// Captured, LLM returned, Sanitized and Timing all describe what
+/// happened when that one window was read. They are as true a week
+/// later as they were at the time, which is what makes an older
+/// selection safe to read.
 ///
-/// Rows 4-6 (Deduped, Token trim, → Whisper) come from
-/// `engine.screenContextPreview()`, which is **live engine state** —
-/// the prompt whisper would receive if you dictated right now, rebuilt
-/// by every refresh from the current dictionary and whatever keywords
-/// the LAST refresh stored. They were never a property of any single
-/// activity; the old single-entry layout just never had to admit it,
-/// because the only entry it could show was the newest one.
-///
-/// So they are presented as their own group, under their own heading,
-/// explicitly labelled as the engine's current state rather than part
-/// of the record above — and when the selection is not the newest
-/// entry, the heading says so outright. Showing them silently under a
-/// historical selection would be a straightforward lie, and a
-/// consequential one: a denylist skip applies an EMPTY keyword set, so
-/// the moment Settings comes to the front, the live prompt loses every
-/// screen keyword the entry you are reading actually produced.
+/// Live engine state — the prompt whisper would receive if you
+/// dictated right now — deliberately does NOT live here. It sits above
+/// the table in `ScreenContextLivePrompt`, because it is one global
+/// fact rather than a property of any row. It was in this pane once,
+/// fenced off under its own heading with a caption that turned orange
+/// on a historical selection; the caption was accurate and it still
+/// misled, because position reads louder than a paragraph. See that
+/// type for the full reasoning.
 ///
 /// ## Privacy
 ///
@@ -63,13 +56,6 @@ import SwiftUI
 /// installed is `CompositionRoot`'s business, not this view's.
 struct ScreenContextActivityDetail: View {
     let activity: ScreenContextActivity
-    /// Live engine state, refetched by the parent whenever new
-    /// activity lands. Nil when the preview could not be decoded.
-    let preview: ScreenContextPreview?
-    /// Whether `activity` is the newest entry in the list. Drives the
-    /// "this is not what that entry produced" warning on the live
-    /// group — see the type comment.
-    let isNewest: Bool
     /// Whether there is anything older than `activity` to select.
     /// Only used to decide whether the self-skip note can honestly
     /// point at "the entry below this one".
@@ -77,7 +63,6 @@ struct ScreenContextActivityDetail: View {
 
     @State private var showCapturedText = false
     @State private var showRawResponse = false
-    @State private var showFullPrompt = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -88,8 +73,6 @@ struct ScreenContextActivityDetail: View {
             llmReturnedRow(activity)
             sanitizedRow(activity)
             timingRows(activity)
-            Divider().padding(.vertical, 4)
-            liveEngineGroup
         }
     }
 
@@ -340,119 +323,6 @@ struct ScreenContextActivityDetail: View {
             .map(friendlyDropReason)
             .joined(separator: ", ")
         return "\(kept) kept · \(droppedCount) dropped (\(reasons))"
-    }
-
-    // MARK: - Rows 4-6: live engine state
-
-    /// The half of the chain that is NOT a property of the selected
-    /// record. See the type comment for why this is fenced off rather
-    /// than continuing the row list above.
-    @ViewBuilder
-    private var liveEngineGroup: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                SettingsGroupHeader("Whisper prompt right now")
-                Text("LIVE")
-                    .font(.caption2.bold())
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-                    .foregroundStyle(Color.accentColor)
-            }
-            Text(liveCaption)
-                .font(.caption)
-                .foregroundStyle(isNewest ? AnyShapeStyle(HierarchicalShapeStyle.secondary) : AnyShapeStyle(Color.orange))
-                // Without this the split view hands the column an
-                // ideal height of one line and SwiftUI truncates the
-                // sentence rather than wrapping it — which would clip
-                // exactly the clause that says these numbers are live.
-                .fixedSize(horizontal: false, vertical: true)
-            if let preview {
-                dedupedRow(preview)
-                tokenTrimRow(preview)
-                whisperRow(preview)
-            } else {
-                Text("Whisper prompt preview unavailable.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var liveCaption: String {
-        if isNewest {
-            return "What the engine would send Whisper if you dictated now. Rebuilt on every "
-                + "refresh from the current dictionary plus the last stored screen keywords — "
-                + "not a stored part of the entry above."
-        }
-        return "These numbers are the engine's, not this entry's. Later refreshes have rebuilt "
-            + "the prompt since this capture — including denylist skips, which apply an empty "
-            + "keyword set — so it may share nothing with what this read produced."
-    }
-
-    // MARK: - Row 4: Deduped (from the live preview)
-
-    @ViewBuilder
-    private func dedupedRow(_ preview: ScreenContextPreview) -> some View {
-        HStack(alignment: .top) {
-            rowLabel("Deduped")
-            Text(dedupedSummary(preview)).font(.callout)
-            Spacer()
-        }
-    }
-
-    private func dedupedSummary(_ preview: ScreenContextPreview) -> String {
-        let dictDupes = preview.dropped.filter { $0.source == "screen" && $0.stage == "duplicate_of_dictionary" }.count
-        let selfDupes = preview.dropped.filter { $0.source == "screen" && $0.stage == "duplicate" }.count
-        let kept = max(preview.screenKeywords.count - dictDupes - selfDupes, 0)
-        var parts: [String] = []
-        if dictDupes > 0 { parts.append("\(dictDupes) already in dictionary") }
-        if selfDupes > 0 { parts.append("\(selfDupes) repeated") }
-        guard !parts.isEmpty else { return "\(kept) kept" }
-        return "\(kept) kept · " + parts.joined(separator: " · ")
-    }
-
-    // MARK: - Row 5: Token trim (from the live preview)
-
-    @ViewBuilder
-    private func tokenTrimRow(_ preview: ScreenContextPreview) -> some View {
-        HStack(alignment: .top) {
-            rowLabel("Token trim")
-            Text(tokenTrimSummary(preview)).font(.callout)
-            Spacer()
-        }
-    }
-
-    private func tokenTrimSummary(_ preview: ScreenContextPreview) -> String {
-        let capStages: Set<String> = ["byte_prefilter", "screen_token_cap"]
-        let droppedCount = preview.dropped.filter { $0.source == "screen" && capStages.contains($0.stage) }.count
-        return "\(preview.screenApplied.count) kept · \(droppedCount) dropped · cap \(preview.maxScreenPromptTokens) tokens"
-    }
-
-    // MARK: - Row 6: → Whisper (from the live preview)
-
-    @ViewBuilder
-    private func whisperRow(_ preview: ScreenContextPreview) -> some View {
-        HStack(alignment: .top) {
-            rowLabel("→ Whisper")
-            VStack(alignment: .leading, spacing: 4) {
-                Text(preview.prompt.isEmpty ? "(no prompt)" : preview.prompt)
-                    .font(.callout.monospaced())
-                    .lineLimit(showFullPrompt ? nil : 2)
-                    .textSelection(.enabled)
-                if preview.prompt.count > 160 {
-                    Button(showFullPrompt ? "Show less" : "Show full prompt") {
-                        showFullPrompt.toggle()
-                    }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                }
-            }
-            Spacer()
-            Text("\(preview.tokenCount)/\(preview.maxPromptTokens) tokens")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-        }
     }
 
     // MARK: - Timing

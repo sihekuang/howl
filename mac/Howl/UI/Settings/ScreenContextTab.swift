@@ -35,8 +35,8 @@ import SwiftUI
 struct ScreenContextTab: View {
     @Binding var settings: UserSettings
     let onSave: (UserSettings) -> Void
-    /// Source of the live whisper-prompt preview shown in the detail
-    /// pane's own clearly-fenced-off group.
+    /// Source of the live whisper-prompt preview shown above the
+    /// activity table.
     let engine: any CoreEngine
     /// In-memory ring buffer the coordinator pushes each refresh into.
     let screenContextActivity: ScreenContextActivityStore
@@ -74,6 +74,12 @@ struct ScreenContextTab: View {
 
             if settings.screenContextEnabled {
                 ScreenContextDenylistEditor(denylist: $settings.screenContextDenylist)
+                Divider()
+                // Above the table on purpose. This is one global fact
+                // about the engine, not a property of whichever row is
+                // selected — inside the detail column it read as the
+                // latter no matter how the caption was worded.
+                ScreenContextLivePrompt(preview: preview)
                 Divider()
                 activitySplit
             }
@@ -127,8 +133,6 @@ struct ScreenContextTab: View {
             if let selected {
                 ScreenContextActivityDetail(
                     activity: selected,
-                    preview: preview,
-                    isNewest: selected.id == activities.first?.id,
                     hasOlderEntries: selected.id != activities.last?.id
                 )
                 // Disclosure state (show text / show raw / show full

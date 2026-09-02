@@ -69,6 +69,7 @@
 		EA367CE838A372E5777C22F4 /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E59955941D1FDC3B9EB246 /* MenuBarMenu.swift */; };
 		F0B5D1B4EFAD130161AF91E9 /* DataMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57AB1B11B1EFB431EF92B27C /* DataMigration.swift */; };
 		F3C60668F1CD1F297EBEE66C /* ModelDownloadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E81A2DB7A4A5F03241872E5 /* ModelDownloadPanel.swift */; };
+		F6A469986DFBDACC907820A6 /* ScreenContextLivePrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF82B0736535361AC650EA81 /* ScreenContextLivePrompt.swift */; };
 		F6AF37B90F231A5FEF940B84 /* HotkeyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA7F55A2C984A93AAF14FB13 /* HotkeyTab.swift */; };
 		F9677F5AE8E50D92C5ECEAFA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2F52C68CF045C2C2C20E383 /* Assets.xcassets */; };
 		F9819E209CD7F2E35E2A1CD1 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4645AD4550A9165E3D88094E /* SettingsComponents.swift */; };
@@ -141,6 +142,7 @@
 		EA7F55A2C984A93AAF14FB13 /* HotkeyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyTab.swift; sourceTree = "<group>"; };
 		EB90CC13B20CC997D6FBE210 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		ED59C5EE6991EEFD0A414C63 /* EnrollmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentSheet.swift; sourceTree = "<group>"; };
+		EF82B0736535361AC650EA81 /* ScreenContextLivePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenContextLivePrompt.swift; sourceTree = "<group>"; };
 		F3C39189908EBF270041F13D /* EngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCoordinator.swift; sourceTree = "<group>"; };
 		F908767741F0ECA202FA2FF7 /* DeletePresetConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletePresetConfirmSheet.swift; sourceTree = "<group>"; };
 		FD3D2C5CC15082888D4E30AF /* AnthropicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicSection.swift; sourceTree = "<group>"; };
@@ -340,6 +342,7 @@
 				AAB76933DBD7937A74B7D8E3 /* ScreenContextActivityList.swift */,
 				373562A2CF06C33869CD616E /* ScreenContextActivitySelection.swift */,
 				29832B856B5416AAB687A60A /* ScreenContextDenylistEditor.swift */,
+				EF82B0736535361AC650EA81 /* ScreenContextLivePrompt.swift */,
 				618278950B07853F0C4F82D9 /* ScreenContextTab.swift */,
 				4645AD4550A9165E3D88094E /* SettingsComponents.swift */,
 				5D6FA7659981634693F0DBA7 /* SettingsView.swift */,
@@ -579,6 +582,7 @@
 				6626EADCC0EDF3A08D1D5BF9 /* ScreenContextActivitySelection.swift in Sources */,
 				B54FD99472E8C0E577169A16 /* ScreenContextActivityStore.swift in Sources */,
 				E063502CD14710D733F4FA3E /* ScreenContextDenylistEditor.swift in Sources */,
+				F6A469986DFBDACC907820A6 /* ScreenContextLivePrompt.swift in Sources */,
 				5B91675F5E52A1574F7C97EF /* ScreenContextTab.swift in Sources */,
 				2662BA697C2C4C8B5BDD7E88 /* SessionDetail.swift in Sources */,
 				3E8FF60BF6D2472A02692F2E /* SessionList.swift in Sources */,
