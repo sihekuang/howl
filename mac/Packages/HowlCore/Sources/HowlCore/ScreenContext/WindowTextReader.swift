@@ -92,25 +92,36 @@ public struct WindowSnapshot: Equatable, Sendable {
     /// extractor rejects the primary reading), not by the leaf source,
     /// which has no way to know it is second in line.
     public let fallbackReason: ScreenContextFallbackReason?
+    /// Dimensions of the screenshot this text was read out of; nil for
+    /// a reading that came from no pixels at all, like the AX walk.
+    ///
+    /// Carried purely so a reading that recognised NOTHING can still
+    /// say what it was looking at. Without it, a successfully
+    /// photographed 159x22 scrap of window chrome and a real window
+    /// that genuinely had no text produce identical records, which is
+    /// what made `chooseWindow`'s bug invisible for as long as it was.
+    public let pixelSize: ScreenContextPixelSize?
 
     public init(
         bundleID: String,
         windowTitle: String,
         text: String,
         source: ScreenContextOrigin,
-        fallbackReason: ScreenContextFallbackReason? = nil
+        fallbackReason: ScreenContextFallbackReason? = nil,
+        pixelSize: ScreenContextPixelSize? = nil
     ) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.text = text
         self.source = source
         self.fallbackReason = fallbackReason
+        self.pixelSize = pixelSize
     }
 
     /// The same reading, marked as having come from a fallback.
     public func marked(asFallback reason: ScreenContextFallbackReason) -> WindowSnapshot {
         WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, text: text,
-                       source: source, fallbackReason: reason)
+                       source: source, fallbackReason: reason, pixelSize: pixelSize)
     }
 }
 

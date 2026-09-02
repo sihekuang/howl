@@ -197,7 +197,8 @@ public actor ScreenContextCoordinator {
             // an answer, not a missing one.
             await recordAndApply(
                 [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID,
-                outcome: .noReadableWindowText, source: snapshot.source, fallbackReason: reason
+                outcome: .noReadableWindowText, source: snapshot.source, fallbackReason: reason,
+                capturedImagePixelSize: snapshot.pixelSize
             )
             return
         }
@@ -211,7 +212,8 @@ public actor ScreenContextCoordinator {
             await recordAndApply(
                 cached, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .cacheHit,
                 source: snapshot.source, fallbackReason: reason,
-                capturedText: snapshot.text, capturedTextLength: snapshot.text.count
+                capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+                capturedImagePixelSize: snapshot.pixelSize
             )
             return
         }
@@ -228,7 +230,8 @@ public actor ScreenContextCoordinator {
             await recordAndApply(
                 [], myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID, outcome: .extractionFailed,
                 source: snapshot.source, fallbackReason: reason,
-                capturedText: snapshot.text, capturedTextLength: snapshot.text.count
+                capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+                capturedImagePixelSize: snapshot.pixelSize
             )
             return
         }
@@ -237,6 +240,7 @@ public actor ScreenContextCoordinator {
             extraction.keywords, myGeneration: myGeneration, now: now, bundleID: snapshot.bundleID,
             outcome: .extractionSucceeded, source: snapshot.source, fallbackReason: reason,
             capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+            capturedImagePixelSize: snapshot.pixelSize,
             rawResponse: extraction.raw, dropped: extraction.dropped
         )
         if applied {

@@ -149,7 +149,9 @@ public struct OCRScreenContentSource: ScreenContentSource {
             bundleID: captured.bundleID,
             windowTitle: captured.windowTitle,
             text: text,
-            source: .screenshot
+            source: .screenshot,
+            // Recorded even when `text` is empty — especially then.
+            pixelSize: captured.pixelSize
         ))
     }
 }

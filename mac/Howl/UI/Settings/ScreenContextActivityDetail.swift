@@ -216,7 +216,15 @@ struct ScreenContextActivityDetail: View {
             return unavailableCapturedReason(activity)
         }
         let sourceLabel = activity.source?.shortLabel ?? "?"
-        return "\(app) · \(sourceLabel) · \(length.formatted()) chars"
+        var parts = ["\(app)", sourceLabel, "\(length.formatted()) chars"]
+        // Present only for OCR readings — an accessibility read has no
+        // pixels behind it. Worth showing on the successful path as
+        // well as the empty one, because it is the number that says
+        // whether the right window was photographed.
+        if let pixels = activity.capturedImagePixelSize {
+            parts.append("\(pixels.width)×\(pixels.height)")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func unavailableCapturedReason(_ activity: ScreenContextActivity) -> String {
@@ -226,9 +234,18 @@ struct ScreenContextActivityDetail: View {
         case .skippedPreReadDenylist, .skippedPostReadDenylist:
             return "Skipped — \(activity.bundleID ?? "this app") is on the never-read list"
         case .noReadableWindowText:
-            // Exactly one fact: the accessibility read came up empty.
             // WHY the screenshot path wasn't used instead is the
             // fallback note's job, and the two are different problems.
+            //
+            // When there WERE pixels, the dimensions are the whole
+            // diagnosis: a plausible window size means the window
+            // genuinely had no text, while something like 159×22 means
+            // Howl photographed a transient scrap of window chrome
+            // rather than the window. Reading those two apart used to
+            // require correlating log timestamps against a probe.
+            if let pixels = activity.capturedImagePixelSize {
+                return "Nothing readable in the \(pixels.width)×\(pixels.height) capture"
+            }
             return "No readable window text"
         case .superseded:
             return "Superseded before it finished"

@@ -233,3 +233,59 @@ struct FallbackScreenContentSourceTests {
         #expect(await FixedSource(content: primaryReading).readAlternate() == nil)
     }
 }
+
+/// The dimensions of what was photographed survive into the reading.
+///
+/// This is a diagnostic guarantee, not a cosmetic one. A capture that
+/// recognises no text and a capture of a 159x22 scrap of window chrome
+/// are the same record without it — which is precisely why the
+/// wrong-window bug stayed invisible while it was happening.
+@Suite("OCR readings carry what was photographed")
+struct OCRReadingPixelSizeTests {
+    @Test("a reading that recognised nothing still reports the size")
+    func emptyReadingKeepsPixelSize() async {
+        let source = OCRScreenContentSource(
+            capturer: StubCapturer(captured: CapturedWindow(
+                bundleID: "com.example.app",
+                windowTitle: "",
+                image: blankImage(width: 159, height: 22)
+            )),
+            recognizer: StubRecognizer(text: nil)
+        )
+
+        guard case .text(let snapshot)? = await source.read() else {
+            Issue.record("expected a text reading"); return
+        }
+        #expect(snapshot.text.isEmpty)
+        #expect(snapshot.pixelSize == ScreenContextPixelSize(width: 159, height: 22))
+    }
+
+    @Test("a successful reading reports it too")
+    func successfulReadingKeepsPixelSize() async {
+        let source = OCRScreenContentSource(
+            capturer: StubCapturer(captured: CapturedWindow(
+                bundleID: "com.example.app",
+                windowTitle: "",
+                image: blankImage(width: 2560, height: 2160)
+            )),
+            recognizer: StubRecognizer(text: "some recognised text")
+        )
+
+        guard case .text(let snapshot)? = await source.read() else {
+            Issue.record("expected a text reading"); return
+        }
+        #expect(snapshot.pixelSize == ScreenContextPixelSize(width: 2560, height: 2160))
+    }
+
+    @Test("a reading with no pixels behind it reports no size")
+    func axReadingHasNoPixelSize() async {
+        let source = AXScreenContentSource(reader: StubTextReader(snapshot: WindowSnapshot(
+            bundleID: "com.example.app", windowTitle: "", text: "text", source: .accessibility
+        )))
+
+        guard case .text(let snapshot)? = await source.read() else {
+            Issue.record("expected a text reading"); return
+        }
+        #expect(snapshot.pixelSize == nil)
+    }
+}

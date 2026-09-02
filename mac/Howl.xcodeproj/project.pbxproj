@@ -104,6 +104,7 @@
 		6B15CA05B53A88BBF54B03CB /* AboutTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutTab.swift; sourceTree = "<group>"; };
 		6CD97B3F7B9B113A7DD7B29C /* OpenAISection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAISection.swift; sourceTree = "<group>"; };
 		6D794B258F72EFD8EF74C73B /* LLMProviderTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTab.swift; sourceTree = "<group>"; };
+		717CA32FFB61096282B1301D /* heartbeat */ = {isa = PBXFileReference; path = heartbeat; sourceTree = "<group>"; };
 		724D229C9524B15ABED3630B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		73A1F8DB6683A17BA69FC54C /* APIKeyPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyPanel.swift; sourceTree = "<group>"; };
 		7BD54519ED2E278EB40092A3 /* SessionPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPreview.swift; sourceTree = "<group>"; };
@@ -209,6 +210,14 @@
 				2A966570B7133FF3A910732C /* WAVPlayer.swift */,
 			);
 			path = Pipeline;
+			sourceTree = "<group>";
+		};
+		5BEFDBEACE6F21FED57BF1F0 /* .layercake */ = {
+			isa = PBXGroup;
+			children = (
+				717CA32FFB61096282B1301D /* heartbeat */,
+			);
+			path = .layercake;
 			sourceTree = "<group>";
 		};
 		5C63653FE0D2D4DFB4A3D397 /* Products */ = {
@@ -325,6 +334,7 @@
 				4645AD4550A9165E3D88094E /* SettingsComponents.swift */,
 				5D6FA7659981634693F0DBA7 /* SettingsView.swift */,
 				CEF5C65AF9893251E66B0AC8 /* VoiceTab.swift */,
+				5BEFDBEACE6F21FED57BF1F0 /* .layercake */,
 				30F99FCAA34DE754FD27959D /* Pipeline */,
 			);
 			path = Settings;
