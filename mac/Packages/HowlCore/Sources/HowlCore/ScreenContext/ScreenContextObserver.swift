@@ -12,6 +12,25 @@ private final class ObserverToken: @unchecked Sendable {
     var value: NSObjectProtocol?
 }
 
+/// Holds the periodic scan's Task so `deinit` — nonisolated, and
+/// running on whichever thread drops the last reference — can cancel
+/// it without touching actor-isolated state. Same reasoning as
+/// `ObserverToken` above.
+private final class ScanToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _task: Task<Void, Never>?
+    var task: Task<Void, Never>? {
+        get { lock.lock(); defer { lock.unlock() }; return _task }
+        set { lock.lock(); defer { lock.unlock() }; _task = newValue }
+    }
+
+    func cancel() {
+        lock.lock(); defer { lock.unlock() }
+        _task?.cancel()
+        _task = nil
+    }
+}
+
 /// Context handed to the AX callback via `refcon`, since
 /// `AXObserverCallback` is a C function pointer and cannot capture
 /// Swift closures. Holds exactly what the callback needs to do its
@@ -151,7 +170,8 @@ private func axScreenContextCallback(
 /// window/title has stayed settled for `debounce` seconds, so
 /// alt-tabbing (and rapid tab-switching within one app) costs nothing.
 ///
-/// Two AppKit/AX sources feed the same debounce:
+/// Three sources feed the same debounce — two focus signals from
+/// AppKit/AX, plus a timer:
 /// - `NSWorkspace.didActivateApplicationNotification` — the frontmost
 ///   app changed.
 /// - An `AXObserver` on the frontmost app, watching
@@ -165,6 +185,18 @@ private func axScreenContextCallback(
 ///   chatty here is safe: `Debouncer` has its own maxDelay backstop
 ///   against a sustained retitling stream, and the content-hash cache
 ///   means an unchanged window costs a hash and no LLM call.
+/// - A periodic timer (`scanInterval`), because the two above are
+///   both CHANGE-OF-FOCUS signals and neither fires for the case
+///   that matters most: staying in one window while its content moves
+///   under you — scrolling a long document, a chat thread growing, a
+///   log tailing, a view swapping without a retitle. Whisper's prompt
+///   is frozen inside `howl_start_capture`, so a refresh triggered by
+///   the hotkey would already be too late; the keywords have to be
+///   warm before it. Ticks are cheap by construction: they feed the
+///   same debounce as everything else, and `ScreenContextSimilarityCache`
+///   absorbs a window whose content has not meaningfully moved, so a
+///   quiet window costs a screenshot and an OCR pass, never an LLM
+///   call. `ScreenContextScanPolicy` pauses ticking on an idle machine.
 ///
 /// Thin AppKit/AX shim — the timing lives in `Debouncer` and the
 /// policy in `ScreenContextCoordinator`, which is where the tests are;
@@ -174,7 +206,9 @@ private func axScreenContextCallback(
 public final class ScreenContextObserver {
     private let debouncer: Debouncer
     private let onFocusSettled: @Sendable () async -> Void
+    private let scanInterval: TimeInterval
     private let token = ObserverToken()
+    private let scanToken = ScanToken()
     private let axToken = AXObserverToken()
     private let log = Logger(subsystem: "com.howl.app", category: "screencontext")
     /// Identifies the most recent attach attempt. Registration happens
@@ -223,10 +257,23 @@ public final class ScreenContextObserver {
         label: "com.howl.app.screencontext-axregister", qos: .utility
     )
 
+    /// - Parameter scanInterval: how often to re-read the focused
+    ///   window even when nothing about the focus has changed. Zero or
+    ///   negative disables periodic scanning, leaving the three
+    ///   event triggers exactly as they were.
     public init(debounce: TimeInterval = 0.8,
+                scanInterval: TimeInterval = ScreenContextLimits.defaultScanInterval,
                 onFocusSettled: @escaping @Sendable () async -> Void) {
         self.debouncer = Debouncer(interval: debounce)
+        self.scanInterval = scanInterval
         self.onFocusSettled = onFocusSettled
+    }
+
+    /// Seconds since the last human input event of any kind, or nil if
+    /// CoreGraphics declines to say. `~0` is `kCGAnyInputEventType`.
+    private static func idleSeconds() -> TimeInterval? {
+        guard let anyInput = CGEventType(rawValue: ~0) else { return nil }
+        return CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: anyInput)
     }
 
     public func start() {
@@ -255,6 +302,30 @@ public final class ScreenContextObserver {
         // Prime with whatever is already focused at startup.
         debouncer.schedule(action)
         reattachAXObserver()
+        startPeriodicScan()
+    }
+
+    /// The fourth trigger. Deliberately routed through the SAME
+    /// debouncer as the other three rather than calling the action
+    /// directly: a tick that lands next to a real focus event then
+    /// collapses into one refresh instead of racing it, and
+    /// `scheduleRefresh`'s supersede logic keeps applying unchanged.
+    private func startPeriodicScan() {
+        guard scanInterval > 0, scanToken.task == nil else { return }
+        let interval = scanInterval
+        let debouncer = self.debouncer
+        let action = onFocusSettled
+        // Captures no `self`: the two things a tick needs are the
+        // debouncer and the action, and holding the observer would
+        // keep a dying one alive for up to one interval.
+        scanToken.task = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                if Task.isCancelled { return }
+                guard ScreenContextScanPolicy.shouldScan(idleSeconds: Self.idleSeconds()) else { continue }
+                debouncer.schedule(action)
+            }
+        }
     }
 
     public func stop() {
@@ -262,6 +333,7 @@ public final class ScreenContextObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         token.value = nil
+        scanToken.cancel()
         debouncer.cancel()
         // Invalidate any attach attempt still in flight BEFORE tearing
         // the token down. Registration is asynchronous now, so an
@@ -304,6 +376,9 @@ public final class ScreenContextObserver {
         // the registration queue so it skips its IPC and can never
         // install into a token that is about to be torn down.
         attachGeneration.bump()
+        // Before the debounce is cancelled, so a tick cannot slip a
+        // fresh schedule in behind it.
+        scanToken.cancel()
         debouncer.cancel()
 
         Task { @MainActor in

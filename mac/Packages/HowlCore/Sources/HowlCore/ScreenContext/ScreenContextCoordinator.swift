@@ -27,6 +27,14 @@ public actor ScreenContextCoordinator {
     /// THE strategy. See `ScreenContentSource`.
     private let source: any ScreenContentSource
     private let cache: ScreenContextCache
+    /// Second chance behind `cache`, consulted only on an exact-hash
+    /// miss. See `ScreenContextSimilarityCache`.
+    private let similarityCache: ScreenContextSimilarityCache
+    /// Jaccard overlap at or above which a fresh reading counts as
+    /// unchanged. A closure rather than a stored value so the number
+    /// can later be driven from settings without reshaping the graph;
+    /// today every caller passes the default constant.
+    private let similarityThreshold: @Sendable () -> Double
     private let denylist: @Sendable () -> ScreenContextDenylist
     private let isEnabled: @Sendable () -> Bool
     private let frontmostBundleID: @Sendable () async -> String?
@@ -62,9 +70,24 @@ public actor ScreenContextCoordinator {
     // (now stale) result without this check.
     private var generation: UInt64 = 0
 
+    /// The (outcome, bundleID) of the last activity actually recorded,
+    /// used to coalesce a repeating denylist skip into one entry.
+    ///
+    /// The periodic scan is what makes this necessary. Howl's own
+    /// windows are denylisted, the inspector that shows these records
+    /// lives INSIDE a Howl window, and the activity buffer holds 50
+    /// entries — so without coalescing, sitting on the Screen Context
+    /// tab for twelve minutes would evict the entire history the user
+    /// opened it to read and replace it with fifty identical "skipped
+    /// (denylist) — Howl" rows. Nothing is lost by collapsing them:
+    /// the first one says everything the fiftieth would.
+    private var lastRecorded: (outcome: ScreenContextActivity.Outcome, bundleID: String?)?
+
     public init(
         source: any ScreenContentSource,
         cache: ScreenContextCache,
+        similarityCache: ScreenContextSimilarityCache = ScreenContextSimilarityCache(),
+        similarityThreshold: @escaping @Sendable () -> Double = { ScreenContextLimits.defaultSimilarityThreshold },
         denylist: @escaping @Sendable () -> ScreenContextDenylist,
         isEnabled: @escaping @Sendable () -> Bool,
         frontmostBundleID: @escaping @Sendable () async -> String?,
@@ -74,6 +97,8 @@ public actor ScreenContextCoordinator {
         onActivity: @escaping @Sendable (ScreenContextActivity) async -> Void
     ) {
         self.source = source
+        self.similarityCache = similarityCache
+        self.similarityThreshold = similarityThreshold
         self.cache = cache
         self.denylist = denylist
         self.isEnabled = isEnabled
@@ -227,6 +252,41 @@ public actor ScreenContextCoordinator {
             return
         }
 
+        // SECOND CHANCE. The exact hash missed, which under the
+        // periodic scan usually means something trivial moved — a
+        // caret, a hover state, one arriving message — not that the
+        // window has genuinely moved on. Ask how much actually changed
+        // relative to the reading that produced the keywords currently
+        // in force.
+        let tokens = ScreenTextSimilarity.tokens(in: snapshot.text)
+        let threshold = similarityThreshold()
+        // Read BEFORE the extraction below, because a successful one
+        // re-anchors this window and this measures against the anchor.
+        // nil on the first sight of a window, which is honest: there
+        // was nothing to be similar to.
+        let priorSimilarity = similarityCache.score(
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle, tokens: tokens, now: now
+        )
+        if let near = similarityCache.hit(
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            tokens: tokens, now: now, threshold: threshold
+        ) {
+            // Re-apply rather than leave the engine holding what it
+            // has: `refresh` is also reached by a real focus change
+            // back to this window, where the engine's current keywords
+            // may belong to some other app entirely.
+            await recordAndApply(
+                near.keywords, myGeneration: myGeneration, startedAt: startedAt, now: now,
+                bundleID: snapshot.bundleID, outcome: .unchangedContent,
+                source: snapshot.source, fallbackReason: reason,
+                capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: snapshot.timings,
+                similarity: near.similarity
+            )
+            return
+        }
+
         let extractStart = ContinuousClock().now
         let extractionOrNil = await extractText(snapshot.text)
         let extractSeconds = (ContinuousClock().now - extractStart).timeInterval
@@ -253,13 +313,26 @@ public actor ScreenContextCoordinator {
             return
         }
         cache.store(extraction.keywords, for: key, now: now)
+        // Re-anchor the similarity reference to THIS reading. Only
+        // here, never on a near-hit: the reference has to stay the
+        // content the live keywords actually came from, or slow drift
+        // never accumulates into a re-extract. See
+        // `ScreenContextSimilarityCache`.
+        similarityCache.store(
+            tokens: tokens, keywords: extraction.keywords,
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle, now: now
+        )
         let applied = await recordAndApply(
             extraction.keywords, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID,
             outcome: .extractionSucceeded, source: snapshot.source, fallbackReason: reason,
             capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
             capturedImagePixelSize: snapshot.pixelSize,
             rawResponse: extraction.raw, dropped: extraction.dropped,
-            timings: staged
+            timings: staged,
+            // The score that sent this reading to the model rather
+            // than reusing the last answer — the below-threshold half
+            // of the distribution the threshold is tuned from.
+            similarity: priorSimilarity
         )
         if applied {
             // Deliberately logs the COUNT, never the terms.
@@ -387,7 +460,8 @@ public actor ScreenContextCoordinator {
         capturedImagePixelSize: ScreenContextPixelSize? = nil,
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = [],
-        timings: ScreenContextTimings = ScreenContextTimings()
+        timings: ScreenContextTimings = ScreenContextTimings(),
+        similarity: Double? = nil
     ) async -> Bool {
         let applied = await applyIfCurrent(keywords, myGeneration: myGeneration)
         // Total is stamped here rather than by the caller so it covers
@@ -410,8 +484,26 @@ public actor ScreenContextCoordinator {
             rawResponse: rawResponse,
             dropped: dropped,
             appliedKeywords: applied ? keywords : [],
-            timings: stamped
+            timings: stamped,
+            similarity: similarity
         )
+        // Coalesce a repeating denylist skip for the same app into a
+        // single record. Deliberately narrow: ONLY the two denylist
+        // skips, and only when the immediately preceding record was
+        // the same skip for the same app. Every other outcome —
+        // including a run of `.unchangedContent` ticks — still records
+        // every time, because those carry a similarity score that
+        // changes tick to tick and is the whole point of the row.
+        //
+        // The apply above has already happened either way: this
+        // suppresses the DIAGNOSTIC, never the behaviour.
+        let recordedOutcome = activity.outcome
+        let isRepeatedSkip =
+            (recordedOutcome == .skippedPreReadDenylist || recordedOutcome == .skippedPostReadDenylist)
+            && lastRecorded?.outcome == recordedOutcome
+            && lastRecorded?.bundleID == activity.bundleID
+        guard !isRepeatedSkip else { return applied }
+        lastRecorded = (recordedOutcome, activity.bundleID)
         await onActivity(activity)
         return applied
     }

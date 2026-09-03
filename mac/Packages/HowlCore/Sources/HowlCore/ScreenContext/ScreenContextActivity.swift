@@ -10,6 +10,26 @@ public enum ScreenContextLimits {
     /// the LLM. A capture longer than this is what the inspector's
     /// "truncated" note is about.
     public static let maxWindowTextBytesForExtraction = 8192
+
+    /// Jaccard overlap at or above which a fresh reading of a window
+    /// counts as unchanged and no extraction runs. See
+    /// `ScreenTextSimilarity`.
+    ///
+    /// 0.95 — a 5% change in the distinct-token set — is the strict
+    /// end of the published near-duplicate range (sources cluster at
+    /// 0.8 / 0.9 / 0.95 and every one of them ties the value to the
+    /// corpus). Strict is the right way to be wrong here: too low
+    /// serves keywords for content the user has scrolled away from,
+    /// which corrupts dictation silently, while too high only costs an
+    /// extra extraction. The number is meant to be tuned from the
+    /// `similarity` column in the Screen Context inspector against
+    /// real windows — that is why the score is recorded on BOTH sides
+    /// of the threshold.
+    public static let defaultSimilarityThreshold = 0.95
+
+    /// How often the periodic scan re-reads the focused window, in
+    /// seconds. See `ScreenContextObserver`.
+    public static let defaultScanInterval: TimeInterval = 15
 }
 
 /// Which read actually produced what the model saw on a given refresh
@@ -166,6 +186,18 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
     /// `ScreenContextTimings`.
     public let timings: ScreenContextTimings
 
+    /// Jaccard overlap between this reading and the one that produced
+    /// the keywords currently in force, on the 0...1 scale where 1.0
+    /// is identical content. Populated for `.unchangedContent` (where
+    /// it is the reason no extraction ran) and for
+    /// `.extractionSucceeded` reached through the similarity gate
+    /// (where it is the reason one DID) — so the inspector can show
+    /// both sides of the threshold and the number can be tuned from
+    /// real windows rather than guessed. nil wherever the gate was not
+    /// consulted: the image path, and every outcome that returns
+    /// before the read.
+    public let similarity: Double?
+
     public enum Outcome: Equatable, Sendable {
         /// Screen context is off. Keywords were cleared, not merely
         /// left un-set.
@@ -190,6 +222,19 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         case noReadableWindowText
         /// This window's content was already in cache; no LLM call.
         case cacheHit
+        /// The window was read, its content did NOT match the cache
+        /// exactly, but it was still similar enough to the reading
+        /// that produced the keywords currently in force that
+        /// re-extracting would have been waste. The keywords were
+        /// re-applied unchanged and no LLM call was made.
+        ///
+        /// Distinct from `.cacheHit` on purpose. A cache hit means the
+        /// bytes were identical; this means they were not, and a
+        /// judgement call was made about how much that mattered.
+        /// `similarity` carries the score behind that call, which is
+        /// the number to look at when deciding whether the threshold
+        /// is set right. See `ScreenTextSimilarity`.
+        case unchangedContent
         /// The LLM round trip succeeded (whether or not it found any
         /// usable keywords).
         case extractionSucceeded
@@ -217,7 +262,8 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         rawResponse: String? = nil,
         dropped: [ScreenContextDroppedTerm] = [],
         appliedKeywords: [String] = [],
-        timings: ScreenContextTimings = ScreenContextTimings()
+        timings: ScreenContextTimings = ScreenContextTimings(),
+        similarity: Double? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -233,5 +279,6 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         self.dropped = dropped
         self.appliedKeywords = appliedKeywords
         self.timings = timings
+        self.similarity = similarity
     }
 }
