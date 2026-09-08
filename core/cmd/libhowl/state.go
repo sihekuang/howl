@@ -26,6 +26,12 @@ type engine struct {
 	cfg      config.Config
 	pipeline *pipeline.Pipeline
 
+	// screenExtract is the one text extraction allowed in flight at a
+	// time, so the host can abort it (howl_cancel_extract_keywords)
+	// when the window it was reading is no longer the one that
+	// matters. Guarded by mu. See screenctx_export.go.
+	screenExtract *inFlightExtract
+
 	// sessions stores captured per-dictation folders under
 	// /tmp/voicekeyboard/sessions/. Initialized once in howl_init;
 	// the Pipeline tab + C ABI exports read from this Store.

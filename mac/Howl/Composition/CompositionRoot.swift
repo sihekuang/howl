@@ -115,10 +115,9 @@ public final class CompositionRoot {
     ///     else edited.
     ///   - accessibility only (no Screen Recording prompt, ever): drop
     ///     the wrapper and pass `AXScreenContentSource` directly.
-    lazy var screenContentSource: any ScreenContentSource = FallbackScreenContentSource(
-        primary: OCRScreenContentSource(denylist: screenContextDenylistProvider),
-        secondary: AXScreenContentSource(denylist: screenContextDenylistProvider),
-        reasonWhenSecondaryUsed: .screenshotUnavailable
+    lazy var screenContentSource: any ScreenContentSource = AXFirstScreenContentSource(
+        accessibility: AXScreenContentSource(denylist: screenContextDenylistProvider),
+        screenshot: OCRScreenContentSource(denylist: screenContextDenylistProvider)
     )
 
     lazy var screenContextCoordinator = ScreenContextCoordinator(
@@ -141,6 +140,7 @@ public final class CompositionRoot {
         },
         extractImage: { [engine] png in await engine.extractScreenKeywords(image: png) },
         extractText: { [engine] text in await engine.extractScreenKeywords(text: text) },
+        cancelExtraction: { [engine] in engine.cancelScreenExtraction() },
         apply: { [engine] keywords in await engine.setScreenKeywords(keywords) },
         // `record(_:)` is `@MainActor`-isolated (the whole store is);
         // this `await` is the hop off the coordinator's own actor onto

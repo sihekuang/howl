@@ -81,13 +81,18 @@ private func makeGatedCoordinator(
     source: MutableSource,
     extractor: CountingExtractor,
     recorder: Recorder,
-    threshold: Double = ScreenContextLimits.defaultSimilarityThreshold
+    threshold: Double = ScreenContextLimits.defaultSimilarityThreshold,
+    // Off by default: these tests refresh one window seconds apart to
+    // exercise the GATE, and the per-window rate limit would answer
+    // first. It has its own suite (ScreenContextExtractionLoadTests).
+    minExtractionInterval: TimeInterval = 0
 ) -> ScreenContextCoordinator {
     ScreenContextCoordinator(
         source: source,
         cache: ScreenContextCache(),
         similarityCache: ScreenContextSimilarityCache(),
         similarityThreshold: { threshold },
+        minExtractionInterval: minExtractionInterval,
         denylist: { ScreenContextDenylist(userAdditions: []) },
         isEnabled: { true },
         frontmostBundleID: { "com.a" },

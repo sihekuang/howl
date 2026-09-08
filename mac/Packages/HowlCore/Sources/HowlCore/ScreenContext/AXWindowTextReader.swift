@@ -113,15 +113,25 @@ public struct AXWindowTextReader: WindowTextReader {
         guard let window = copyElement(appElement, kAXFocusedWindowAttribute) else { return nil }
 
         let title = copyString(window, kAXTitleAttribute) ?? ""
+        let windowArea = copySize(window).map { $0.width * $0.height } ?? 0
         var collected = ""
         var visited = 0
         var charCount = 0
+        var largestImageArea: CGFloat = 0
         walk(window, into: &collected, charCount: &charCount, visited: &visited,
-             deadline: .now() + axWalkBudget)
+             largestImageArea: &largestImageArea, deadline: .now() + axWalkBudget)
 
         let text = collected.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
-        return WindowSnapshot(bundleID: bundleID, windowTitle: title, text: text, source: .accessibility)
+        let coverage = AXCoverage(
+            textChars: text.count, nodes: visited,
+            largestImageFraction: windowArea > 0 ? Double(largestImageArea / windowArea) : 0
+        )
+        return WindowSnapshot(
+            bundleID: bundleID, windowTitle: title,
+            windowID: frontmostWindowID(pid: pid),
+            text: text, source: .accessibility, coverage: coverage
+        )
     }
 
     /// Depth-first walk accumulating AXValue and AXTitle strings.
@@ -147,9 +157,16 @@ public struct AXWindowTextReader: WindowTextReader {
     /// outside those hard breaks — summing it in is exactly equivalent
     /// to re-counting the whole accumulated string, not just close to
     /// it.
-    private func walk(_ element: AXUIElement, into out: inout String, charCount: inout Int, visited: inout Int, deadline: DispatchTime) {
+    private func walk(_ element: AXUIElement, into out: inout String, charCount: inout Int, visited: inout Int,
+                      largestImageArea: inout CGFloat, deadline: DispatchTime) {
         if visited >= maxNodes || charCount >= maxChars || .now() > deadline { return }
         visited += 1
+        // One extra IPC per node for the role, and a size lookup only
+        // for images. The router needs to know whether the window is
+        // mostly a picture; nothing else about the role is used.
+        if copyString(element, kAXRoleAttribute) == kAXImageRole, let size = copySize(element) {
+            largestImageArea = max(largestImageArea, size.width * size.height)
+        }
 
         for attr in [kAXValueAttribute, kAXTitleAttribute] {
             if let s = copyString(element, attr) {
@@ -166,7 +183,8 @@ public struct AXWindowTextReader: WindowTextReader {
         guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
               let children = childrenRef as? [AXUIElement] else { return }
         for child in children {
-            walk(child, into: &out, charCount: &charCount, visited: &visited, deadline: deadline)
+            walk(child, into: &out, charCount: &charCount, visited: &visited,
+                 largestImageArea: &largestImageArea, deadline: deadline)
             if visited >= maxNodes || charCount >= maxChars || .now() > deadline { return }
         }
     }
@@ -176,6 +194,15 @@ public struct AXWindowTextReader: WindowTextReader {
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success else { return nil }
         guard let value = ref, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         return (value as! AXUIElement)
+    }
+
+    private func copySize(_ element: AXUIElement) -> CGSize? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &ref) == .success,
+              let value = ref, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue((value as! AXValue), .cgSize, &size) else { return nil }
+        return size
     }
 
     private func copyString(_ element: AXUIElement, _ attribute: String) -> String? {

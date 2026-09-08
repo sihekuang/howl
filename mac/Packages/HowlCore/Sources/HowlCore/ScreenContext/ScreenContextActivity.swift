@@ -30,6 +30,34 @@ public enum ScreenContextLimits {
     /// How often the periodic scan re-reads the focused window, in
     /// seconds. See `ScreenContextObserver`.
     public static let defaultScanInterval: TimeInterval = 15
+
+    /// The shortest gap between two LLM extractions of the SAME window,
+    /// whatever its content did in between. The similarity gate is the
+    /// first line of defence; this is the backstop for when it does not
+    /// hold — measured on 2026-09-08 it mostly did not, and the periodic
+    /// scan became 83 Ollama calls in 31 minutes on one machine. A
+    /// window the user is still looking at is well served by keywords
+    /// that are a minute old; a different window is never held back by
+    /// this, because the limit is per window identity.
+    public static let minExtractionInterval: TimeInterval = 60
+
+    /// Below this many characters an accessibility reading is not
+    /// trusted and a screenshot is taken instead. Chrome and Electron
+    /// apps expose ~60 and ~12 chars of toolbar chrome until their
+    /// accessibility tree wakes up (measured 2026-09-08), and a real
+    /// document is thousands. 200 sits comfortably between.
+    public static let minAccessibilityChars = 200
+
+    /// An `AXImage` covering at least this fraction of the window means
+    /// the interesting text is probably drawn in pixels — a pasted
+    /// screenshot, a diagram, a rendered PDF page — and accessibility
+    /// cannot read it. Screenshot instead.
+    public static let maxAccessibilityImageFraction = 0.35
+
+    /// Normalized mean pixel difference between two consecutive
+    /// screenshot signatures at or above which the window counts as
+    /// changed and is OCR'd again. See `ScreenshotChangeDetector`.
+    public static let screenshotChangeThreshold = 0.02
 }
 
 /// Which read actually produced what the model saw on a given refresh
@@ -84,6 +112,16 @@ public enum ScreenContextFallbackReason: String, Equatable, Sendable {
     /// everyone who declines "a dictation app wants to record your
     /// screen", which is a very likely path.
     case screenshotUnavailable
+    /// Accessibility ran first and exposed too little text to trust —
+    /// under `ScreenContextLimits.minAccessibilityChars`. Typical of
+    /// Chromium and Electron apps before their accessibility tree
+    /// wakes up, and of canvas-drawn UIs that never expose one. The
+    /// screenshot path was used instead.
+    case accessibilityTooThin
+    /// Accessibility ran first and found the window dominated by an
+    /// image, whose text it cannot read. The screenshot path was used
+    /// instead.
+    case imageHeavy
 }
 
 /// Pixel dimensions of a captured screenshot.
@@ -246,6 +284,16 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         /// before this refresh's own apply could land — its result,
         /// whatever it would have been, was correctly discarded.
         case superseded
+        /// The window's content had moved past the threshold, but it
+        /// had been extracted less than `minExtractionInterval` ago, so
+        /// the previous keywords were re-applied instead of spending
+        /// another LLM call. `similarity` still carries the score.
+        case extractionRateLimited
+        /// The LLM call was aborted on purpose — focus moved to a
+        /// different window before the provider answered — rather than
+        /// failing. Distinct from `extractionFailed` so a flaky provider
+        /// and a busy user do not look alike in the inspector.
+        case extractionCancelled
     }
 
     public init(
