@@ -307,3 +307,22 @@ real windows, not from the literature.
 - Shrivastava & Li, "In Defense of MinHash Over SimHash", AISTATS 2014 — http://proceedings.mlr.press/v33/shrivastava14.pdf
 - Manku, Jain & Das Sarma, "Detecting Near-Duplicates for Web Crawling", WWW 2007 (the k=3-of-64-bits SimHash convention, and its indexed-retrieval framing) — https://research.google.com/pubs/archive/33026.pdf
 - Lee et al., "Deduplicating Training Data Makes Language Models Better" (threshold divergence: 0.8 Jaccard + 0.8 edit similarity) — https://arxiv.org/pdf/2107.06499
+
+## 2026-09-08 — Feature branches land via a pushed PR, never a local merge
+
+**Decision:** A finished feature branch is pushed and opened as a GitHub PR
+against `main`. The merge itself is the user's step, taken after their manual
+in-app smoke test. Do not merge locally.
+
+**Trigger:** `feat/screen-context-periodic-scan` was complete and verified
+(406 tests / 69 suites, `make build` green) and needed integrating.
+
+**Basis:** Existing project convention.
+- `git log main` — every feature since `#56` carries a `(#NN)` squash-merge
+  suffix; only version bumps from the release flow land on `main` directly.
+- `.superpowers/sdd/progress.md` — the modifier-only-PTT branch: "Pushed
+  origin/…; DRAFT PR #60 opened … user runs manual GUI smoke, then mark PR
+  ready + merge."
+- `~/.claude/skills/shipping-a-pr` — the user's own workflow starts at
+  "opening the pull request", and `tag-and-release` runs from `main` after
+  the merge.
