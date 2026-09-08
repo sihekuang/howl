@@ -115,10 +115,9 @@ public final class CompositionRoot {
     ///     else edited.
     ///   - accessibility only (no Screen Recording prompt, ever): drop
     ///     the wrapper and pass `AXScreenContentSource` directly.
-    lazy var screenContentSource: any ScreenContentSource = FallbackScreenContentSource(
-        primary: OCRScreenContentSource(denylist: screenContextDenylistProvider),
-        secondary: AXScreenContentSource(denylist: screenContextDenylistProvider),
-        reasonWhenSecondaryUsed: .screenshotUnavailable
+    lazy var screenContentSource: any ScreenContentSource = AXFirstScreenContentSource(
+        accessibility: AXScreenContentSource(denylist: screenContextDenylistProvider),
+        screenshot: OCRScreenContentSource(denylist: screenContextDenylistProvider)
     )
 
     lazy var screenContextCoordinator = ScreenContextCoordinator(

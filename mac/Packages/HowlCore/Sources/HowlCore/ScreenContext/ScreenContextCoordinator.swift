@@ -298,9 +298,12 @@ public actor ScreenContextCoordinator {
             return
         }
 
+        // `windowKey`, not the title, everywhere below: a terminal
+        // retitles on every command, and that must read as the same
+        // window with new content, not as a new window.
         let key = cache.key(
             bundleID: snapshot.bundleID,
-            windowTitle: snapshot.windowTitle,
+            windowTitle: snapshot.windowKey,
             text: snapshot.text
         )
         if let cached = cache.value(for: key, now: now) {
@@ -327,10 +330,10 @@ public actor ScreenContextCoordinator {
         // nil on the first sight of a window, which is honest: there
         // was nothing to be similar to.
         let priorSimilarity = similarityCache.score(
-            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle, tokens: tokens, now: now
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowKey, tokens: tokens, now: now
         )
         if let near = similarityCache.hit(
-            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowKey,
             tokens: tokens, now: now, threshold: threshold
         ) {
             // Re-apply rather than leave the engine holding what it
@@ -356,7 +359,7 @@ public actor ScreenContextCoordinator {
         // new window is never held back by it. Not re-anchored, for
         // the same reason a near-hit is not.
         if let recent = similarityCache.recentKeywords(
-            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowKey,
             now: now, within: minExtractionInterval
         ) {
             await recordAndApply(
@@ -372,7 +375,7 @@ public actor ScreenContextCoordinator {
         }
 
         let extractStart = ContinuousClock().now
-        let identity = "\(snapshot.bundleID)\u{0}\(snapshot.windowTitle)"
+        let identity = snapshot.windowKey
         let extractionOrNil: ScreenKeywordExtraction?
         switch await runExtraction(text: snapshot.text, identity: identity, myGeneration: myGeneration) {
         case .cancelled:
@@ -420,7 +423,7 @@ public actor ScreenContextCoordinator {
         // `ScreenContextSimilarityCache`.
         similarityCache.store(
             tokens: tokens, keywords: extraction.keywords,
-            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle, now: now
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowKey, now: now
         )
         let applied = await recordAndApply(
             extraction.keywords, myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID,

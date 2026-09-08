@@ -105,30 +105,51 @@ public struct WindowSnapshot: Equatable, Sendable {
     /// by the source, which is the only place the capture/read split
     /// is visible; the coordinator adds `extract` and `total` later.
     public let timings: ScreenContextTimings
+    /// The CGWindowID of the window that was read, when the reader
+    /// could determine it. See `windowKey`.
+    public let windowID: UInt32?
+    /// What the accessibility walk found, for the router. Nil on
+    /// screenshot readings.
+    public let coverage: AXCoverage?
 
     public init(
         bundleID: String,
         windowTitle: String,
+        windowID: UInt32? = nil,
         text: String,
         source: ScreenContextOrigin,
         fallbackReason: ScreenContextFallbackReason? = nil,
         pixelSize: ScreenContextPixelSize? = nil,
-        timings: ScreenContextTimings = ScreenContextTimings()
+        timings: ScreenContextTimings = ScreenContextTimings(),
+        coverage: AXCoverage? = nil
     ) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
+        self.windowID = windowID
         self.text = text
         self.source = source
         self.fallbackReason = fallbackReason
         self.pixelSize = pixelSize
         self.timings = timings
+        self.coverage = coverage
+    }
+
+    /// The name the caches, the rate limit and the in-flight join use
+    /// for "this window". The window ID when there is one, because a
+    /// terminal retitles on every command and a browser on every tab,
+    /// and a retitle is content moving inside one window — exactly the
+    /// case the similarity gate and the rate limit exist for. The
+    /// title is the fallback for readers that cannot supply an ID.
+    public var windowKey: String {
+        if let windowID { return "\(bundleID)#\(windowID)" }
+        return "\(bundleID)\u{0}\(windowTitle)"
     }
 
     /// The same reading, marked as having come from a fallback.
     public func marked(asFallback reason: ScreenContextFallbackReason) -> WindowSnapshot {
-        WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, text: text,
+        WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, windowID: windowID, text: text,
                        source: source, fallbackReason: reason, pixelSize: pixelSize,
-                       timings: timings)
+                       timings: timings, coverage: coverage)
     }
 }
 

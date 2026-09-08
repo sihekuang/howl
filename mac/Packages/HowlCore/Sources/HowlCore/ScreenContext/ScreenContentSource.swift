@@ -53,9 +53,10 @@ public enum ScreenContent: Sendable {
         switch self {
         case .text(let s):
             .text(WindowSnapshot(
-                bundleID: s.bundleID, windowTitle: s.windowTitle, text: s.text,
+                bundleID: s.bundleID, windowTitle: s.windowTitle, windowID: s.windowID, text: s.text,
                 source: s.source, fallbackReason: s.fallbackReason,
-                pixelSize: s.pixelSize, timings: s.timings.addingExtract(seconds)
+                pixelSize: s.pixelSize, timings: s.timings.addingExtract(seconds),
+                coverage: s.coverage
             ))
         case .image(let c):
             .image(WindowImageCapture(
@@ -136,10 +137,11 @@ public struct AXScreenContentSource: ScreenContentSource {
         // screenshot at all, which is a different fact from taking one
         // instantly.
         return .text(WindowSnapshot(
-            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle, windowID: snapshot.windowID,
             text: snapshot.text, source: snapshot.source,
             fallbackReason: snapshot.fallbackReason, pixelSize: snapshot.pixelSize,
-            timings: snapshot.timings.merging(ScreenContextTimings(read: seconds))
+            timings: snapshot.timings.merging(ScreenContextTimings(read: seconds)),
+            coverage: snapshot.coverage
         ))
     }
 }
@@ -151,6 +153,36 @@ public struct AXScreenContentSource: ScreenContentSource {
 public struct OCRScreenContentSource: ScreenContentSource {
     private let capturer: any WindowImageCapturing
     private let recognizer: any WindowImageTextRecognizing
+    /// The last reading per window, so a tick that captures the same
+    /// pixels again can hand back the same text without paying for
+    /// Vision. See `ScreenshotChangeDetector`.
+    private let lastReadings = LastReadings()
+
+    private final class LastReadings: @unchecked Sendable {
+        struct Reading {
+            let signature: [UInt8]
+            let text: String
+        }
+        private let lock = NSLock()
+        private var byWindow: [String: Reading] = [:]
+
+        /// The previous text if the capture is (near enough) the same
+        /// pixels as last time, else nil.
+        func unchangedText(for key: String, signature: [UInt8]) -> String? {
+            lock.lock(); defer { lock.unlock() }
+            guard let previous = byWindow[key] else { return nil }
+            let distance = ScreenshotChangeDetector.distance(previous.signature, signature)
+            return distance < ScreenContextLimits.screenshotChangeThreshold ? previous.text : nil
+        }
+
+        func store(_ text: String, for key: String, signature: [UInt8]) {
+            lock.lock(); defer { lock.unlock() }
+            byWindow[key] = Reading(signature: signature, text: text)
+            // Windows come and go; a handful of stale entries is
+            // harmless, a thousand is a leak.
+            if byWindow.count > 32 { byWindow.removeValue(forKey: byWindow.keys.first!) }
+        }
+    }
 
     public init(capturer: any WindowImageCapturing, recognizer: any WindowImageTextRecognizing) {
         self.capturer = capturer
@@ -170,33 +202,90 @@ public struct OCRScreenContentSource: ScreenContentSource {
         // hop, before ScreenCaptureKit is touched at all.
         let (capturedOrNil, captureSeconds) = await measuringDuration { await capturer.capture() }
         guard let captured = capturedOrNil else {
-            // NO PIXELS. This is the one outcome that means "ask
-            // somebody else": there was nothing to read. Screen
-            // Recording denied, no on-screen window, or the window
-            // vanished mid-capture.
             return nil
         }
-
-        // A screenshot that OCRs to nothing is NOT the same thing, and
-        // deliberately does not return nil: the window was
-        // photographed and read successfully, and it had nothing
-        // legible in it. Returning the empty reading rather than nil
-        // stops a composed fallback from firing on it — the fallback
-        // exists for missing pixels, not for a blank answer — and lets
-        // the coordinator record which read came up empty.
+        // PIXEL GATE. Same window, same pixels as last tick — give or
+        // take a caret — is the same text; Vision would spend ~1.4s of
+        // multi-core CPU confirming that. The signature costs a few
+        // milliseconds.
+        let key = captured.windowID.map { "\(captured.bundleID)#\($0)" }
+            ?? "\(captured.bundleID)\u{0}\(captured.windowTitle)"
+        let (signature, signatureSeconds) = await measuringDuration {
+            ScreenshotChangeDetector.signature(of: captured.image)
+        }
+        if let unchanged = lastReadings.unchangedText(for: key, signature: signature) {
+            return .text(WindowSnapshot(
+                bundleID: captured.bundleID,
+                windowTitle: captured.windowTitle,
+                windowID: captured.windowID,
+                text: unchanged,
+                source: .screenshot,
+                pixelSize: captured.pixelSize,
+                timings: ScreenContextTimings(capture: captureSeconds, read: signatureSeconds)
+            ))
+        }
         let (recognized, readSeconds) = await measuringDuration {
             await recognizer.recognizeText(in: captured)
         }
+        // A screenshot that reads as blank is an EMPTY reading, not a
+        // missing one: the capture happened, so the source must not
+        // report "no window" and send the caller to a fallback.
         let text = recognized ?? ""
+        lastReadings.store(text, for: key, signature: signature)
         return .text(WindowSnapshot(
             bundleID: captured.bundleID,
             windowTitle: captured.windowTitle,
+            windowID: captured.windowID,
             text: text,
             source: .screenshot,
-            // Recorded even when `text` is empty — especially then.
             pixelSize: captured.pixelSize,
-            timings: ScreenContextTimings(capture: captureSeconds, read: readSeconds)
+            timings: ScreenContextTimings(capture: captureSeconds, read: signatureSeconds + readSeconds)
         ))
+    }
+}
+
+/// Accessibility first, screenshot when accessibility is not credible.
+///
+/// The router the coverage policy feeds. `AXCoveragePolicy` says why
+/// this order: the AX walk is 25–100× cheaper than OCR and exact where
+/// OCR jitters. The screenshot stays as the fallback for the two
+/// things AX cannot do — read text drawn in pixels, and read apps that
+/// expose nothing — and each fallback is marked with its reason so the
+/// inspector can tell them apart.
+///
+/// When the screenshot fails too (no Screen Recording permission), a
+/// thin accessibility reading is still handed back rather than
+/// nothing, marked `.screenshotUnavailable`.
+public struct AXFirstScreenContentSource: ScreenContentSource {
+    private let accessibility: any ScreenContentSource
+    private let screenshot: any ScreenContentSource
+    private let log = Logger(subsystem: "com.howl.app", category: "screencontext")
+
+    public init(accessibility: any ScreenContentSource, screenshot: any ScreenContentSource) {
+        self.accessibility = accessibility
+        self.screenshot = screenshot
+    }
+
+    public func read() async -> ScreenContent? {
+        let axContent = await accessibility.read()
+        let coverage: AXCoverage? = {
+            if case .text(let snapshot)? = axContent { return snapshot.coverage }
+            return nil
+        }()
+        switch AXCoveragePolicy.decide(coverage) {
+        case .useAccessibility:
+            return axContent
+        case .useScreenshot(let reason):
+            if let pixels = await screenshot.read() {
+                return pixels.marked(asFallback: reason)
+            }
+            log.notice("screen context screenshot unavailable; keeping the thin accessibility reading")
+            return axContent?.marked(asFallback: .screenshotUnavailable)
+        }
+    }
+
+    public func readAlternate() async -> ScreenContent? {
+        await screenshot.read()
     }
 }
 

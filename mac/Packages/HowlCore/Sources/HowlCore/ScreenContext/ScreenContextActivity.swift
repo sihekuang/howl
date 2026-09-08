@@ -40,6 +40,24 @@ public enum ScreenContextLimits {
     /// that are a minute old; a different window is never held back by
     /// this, because the limit is per window identity.
     public static let minExtractionInterval: TimeInterval = 60
+
+    /// Below this many characters an accessibility reading is not
+    /// trusted and a screenshot is taken instead. Chrome and Electron
+    /// apps expose ~60 and ~12 chars of toolbar chrome until their
+    /// accessibility tree wakes up (measured 2026-09-08), and a real
+    /// document is thousands. 200 sits comfortably between.
+    public static let minAccessibilityChars = 200
+
+    /// An `AXImage` covering at least this fraction of the window means
+    /// the interesting text is probably drawn in pixels — a pasted
+    /// screenshot, a diagram, a rendered PDF page — and accessibility
+    /// cannot read it. Screenshot instead.
+    public static let maxAccessibilityImageFraction = 0.35
+
+    /// Normalized mean pixel difference between two consecutive
+    /// screenshot signatures at or above which the window counts as
+    /// changed and is OCR'd again. See `ScreenshotChangeDetector`.
+    public static let screenshotChangeThreshold = 0.02
 }
 
 /// Which read actually produced what the model saw on a given refresh
@@ -94,6 +112,16 @@ public enum ScreenContextFallbackReason: String, Equatable, Sendable {
     /// everyone who declines "a dictation app wants to record your
     /// screen", which is a very likely path.
     case screenshotUnavailable
+    /// Accessibility ran first and exposed too little text to trust —
+    /// under `ScreenContextLimits.minAccessibilityChars`. Typical of
+    /// Chromium and Electron apps before their accessibility tree
+    /// wakes up, and of canvas-drawn UIs that never expose one. The
+    /// screenshot path was used instead.
+    case accessibilityTooThin
+    /// Accessibility ran first and found the window dominated by an
+    /// image, whose text it cannot read. The screenshot path was used
+    /// instead.
+    case imageHeavy
 }
 
 /// Pixel dimensions of a captured screenshot.

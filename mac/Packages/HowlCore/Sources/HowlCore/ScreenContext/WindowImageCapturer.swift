@@ -21,6 +21,9 @@ public struct CapturedWindow: Sendable {
     public let windowTitle: String
     /// The capture at native resolution.
     public let image: CGImage
+    /// ScreenCaptureKit's `SCWindow.windowID`, a CGWindowID. See
+    /// `WindowSnapshot.windowKey`.
+    public let windowID: UInt32?
 
     /// Dimensions of `image`. Computed rather than stored so the two
     /// can never disagree.
@@ -28,10 +31,11 @@ public struct CapturedWindow: Sendable {
         ScreenContextPixelSize(width: image.width, height: image.height)
     }
 
-    public init(bundleID: String, windowTitle: String, image: CGImage) {
+    public init(bundleID: String, windowTitle: String, image: CGImage, windowID: UInt32? = nil) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
         self.image = image
+        self.windowID = windowID
     }
 }
 
@@ -176,7 +180,8 @@ public struct ScreenCaptureKitWindowCapturer: WindowImageCapturing {
             return CapturedWindow(
                 bundleID: bundleID,
                 windowTitle: window.title ?? "",
-                image: image
+                image: image,
+                windowID: window.windowID
             )
         } catch {
             // Permission denied, or the window vanished mid-capture.

@@ -76,6 +76,8 @@ extension ScreenContextFallbackReason {
         switch self {
         case .noVision: return "no vision"
         case .screenshotUnavailable: return "no screenshot"
+        case .accessibilityTooThin: return "AX too thin"
+        case .imageHeavy: return "image-heavy"
         }
     }
 }

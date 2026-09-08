@@ -257,6 +257,11 @@ struct ScreenContextActivityDetail: View {
         case .screenshotUnavailable:
             return "No screenshot was available, so Howl used accessibility text instead. "
                 + "If this is every window, check Screen Recording in System Settings › Privacy & Security."
+        case .accessibilityTooThin:
+            return "Accessibility exposed too little text to trust, so Howl read the pixels instead. "
+                + "Browsers and Electron apps often wake their accessibility tree after a few reads."
+        case .imageHeavy:
+            return "This window is mostly an image, whose text accessibility can't read, so Howl read the pixels instead."
         case nil:
             return nil
         }

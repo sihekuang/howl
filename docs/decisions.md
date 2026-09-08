@@ -364,3 +364,52 @@ above cut the CALL COUNT, which is the larger term.
 - `/tmp/howl.log` 2026-09-08 12:06–12:37 (Go core log; `ollama.Clean` lines)
 - Unified log, `com.howl.app:screencontext`, same window: 33 "applied" in 30 min
 - `ScreenContextExtractionLoadTests.swift`, `screenctx_cancel_export_test.go`
+
+## 2026-09-08 — Screen-context reads: accessibility first, screenshot as fallback, pixel gate on OCR, window ID as identity
+
+**Decision:** Three changes to what a scan tick costs.
+1. `AXFirstScreenContentSource` reads the focused window through
+   accessibility first and takes a screenshot only when the AX reading
+   is not credible: under `minAccessibilityChars` (200) of text, or an
+   `AXImage` covering ≥ `maxAccessibilityImageFraction` (0.35) of the
+   window. Each fallback is marked (`.accessibilityTooThin`,
+   `.imageHeavy`) so the inspector says which.
+2. `OCRScreenContentSource` keeps a 64×36 grayscale point-sample of
+   the last capture per window and skips Vision when the new capture is
+   within `screenshotChangeThreshold` (0.02) of it.
+3. Window identity for the exact cache, the similarity anchor, the
+   rate limit and the in-flight join is `bundleID#CGWindowID` when a
+   reader can supply the ID, and `bundleID + title` otherwise.
+
+**Trigger:** With the LLM load fixed (entry above), the remaining cost
+was OCR: 1.41s of multi-core Vision per 15s tick on a 2560×1080 Warp
+window, 17.5% of a core on average for Howl. And two "Extracted" rows
+landed 15s apart on one Warp window because Warp retitles per command
+and the caches were keyed on the title.
+
+**Basis:** Measurement on live windows, 2026-09-08 (`axprobe`,
+`axroles` in the session scratchpad):
+- AX walk of the focused window: 1–70ms wall, 1–14ms CPU in Howl,
+  10–60ms CPU in the target app. Warp exposes its buffer as one
+  `AXTextArea` (5,244 chars in 7 nodes). Chrome exposed 158 chars and
+  Claude desktop 12 until Chromium's accessibility tree woke up on
+  being queried, then 1,724 and 5,143. Chrome's cost with the tree
+  awake: ~1% of a core.
+- OCR on the same window: 1,410ms, several cores.
+- AX cannot read text inside an `AXImage`; it reports the image's
+  role and size, which is what the router uses to hand those windows
+  to OCR.
+
+**Known limits, accepted:** AX returns the document, not the viewport,
+so on a long page the 8 KB cap can fill with scrolled-past text. Apps
+that draw their own UI expose nothing and always fall to OCR. Point
+sampling in the pixel gate can miss a change that lands between
+samples; a 64×36 grid on a window makes that a sub-line change, which
+the rate limit and the next tick absorb.
+
+**Sources:**
+- Session measurements above; `AXCoveragePolicyTests`,
+  `AXFirstScreenContentSourceTests`, `ScreenshotChangeGateTests`,
+  `ScreenContextWindowIdentityTests`
+- Apple, ScreenCaptureKit `SCWindow.windowID` — https://developer.apple.com/documentation/screencapturekit/scwindow/windowid
+- Apple, `CGWindowListCopyWindowInfo` — https://developer.apple.com/documentation/coregraphics/1455137-cgwindowlistcopywindowinfo

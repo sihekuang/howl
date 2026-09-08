@@ -19,24 +19,29 @@ private final class SwitchableSource: ScreenContentSource, @unchecked Sendable {
     private let lock = NSLock()
     private var bundleID: String
     private var windowTitle: String
+    private var windowID: UInt32?
     private var text: String
 
-    init(bundleID: String = "com.a", windowTitle: String = "Doc", text: String) {
+    init(bundleID: String = "com.a", windowTitle: String = "Doc", windowID: UInt32? = nil, text: String) {
         self.bundleID = bundleID
         self.windowTitle = windowTitle
+        self.windowID = windowID
         self.text = text
     }
 
-    func set(bundleID: String? = nil, windowTitle: String? = nil, text: String? = nil) {
+    func set(bundleID: String? = nil, windowTitle: String? = nil, windowID: UInt32?? = nil, text: String? = nil) {
         lock.lock(); defer { lock.unlock() }
         if let bundleID { self.bundleID = bundleID }
         if let windowTitle { self.windowTitle = windowTitle }
+        if let windowID { self.windowID = windowID }
         if let text { self.text = text }
     }
 
     private func snapshot() -> ScreenContent {
         lock.lock(); defer { lock.unlock() }
-        return .text(WindowSnapshot(bundleID: bundleID, windowTitle: windowTitle, text: text, source: .screenshot))
+        return .text(WindowSnapshot(
+            bundleID: bundleID, windowTitle: windowTitle, windowID: windowID, text: text, source: .screenshot
+        ))
     }
 
     func read() async -> ScreenContent? { snapshot() }
@@ -317,5 +322,81 @@ struct ScreenContextExtractionRateLimitTests {
         extractor.release()
         await second.value
         #expect(extractor.calls == 2, "the limit is per window, never global")
+    }
+}
+
+// Terminals retitle on every command and browsers on every tab, so a
+// title is a poor name for "the same window". Where the reader can
+// supply the CGWindowID, that is the identity the caches, the rate
+// limit and the in-flight join key on — and a retitle is just content
+// moving inside one window, which is the case the gate exists for.
+@Suite("Screen context — window identity")
+struct ScreenContextWindowIdentityTests {
+
+    @Test func a_retitled_window_with_the_same_id_is_still_rate_limited() async {
+        let source = SwitchableSource(windowTitle: "make build — ~/howl", windowID: 4242, text: body(100))
+        let extractor = GatedExtractor()
+        let recorder = Recorder()
+        let coordinator = makeCoordinator(source: source, extractor: extractor, recorder: recorder, minExtractionInterval: 60)
+
+        let first = Task { await coordinator.refresh(now: t0) }
+        await extractor.waitForCalls(1)
+        extractor.release()
+        await first.value
+
+        // Same terminal, next command: new title, new content.
+        source.set(windowTitle: "go test ./... — ~/howl", text: body(100, prefix: "moved"))
+        await coordinator.refresh(now: t0.addingTimeInterval(15))
+
+        #expect(extractor.calls == 1, "a retitle is not a new window")
+        let last = await recorder.activities.last
+        #expect(last?.outcome == .extractionRateLimited)
+    }
+
+    @Test func a_retitled_window_with_the_same_id_joins_the_in_flight_extraction() async {
+        let source = SwitchableSource(windowTitle: "A", windowID: 4242, text: body(100))
+        let extractor = GatedExtractor()
+        let recorder = Recorder()
+        let coordinator = makeCoordinator(source: source, extractor: extractor, recorder: recorder)
+
+        let first = Task { await coordinator.refresh(now: t0) }
+        await extractor.waitForCalls(1)
+        source.set(windowTitle: "B")
+        let second = Task { await coordinator.refresh(now: t0.addingTimeInterval(2)) }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        extractor.release()
+        await first.value
+        await second.value
+
+        #expect(extractor.calls == 1)
+        #expect(extractor.cancels == 0)
+    }
+
+    @Test func without_a_window_id_the_title_still_tells_windows_apart() async {
+        let source = SwitchableSource(windowTitle: "A", windowID: nil, text: body(100))
+        let extractor = GatedExtractor()
+        let recorder = Recorder()
+        let coordinator = makeCoordinator(source: source, extractor: extractor, recorder: recorder, minExtractionInterval: 60)
+
+        let first = Task { await coordinator.refresh(now: t0) }
+        await extractor.waitForCalls(1)
+        extractor.release()
+        await first.value
+
+        source.set(windowTitle: "B", text: body(100, prefix: "other"))
+        let second = Task { await coordinator.refresh(now: t0.addingTimeInterval(15)) }
+        await extractor.waitForCalls(2)
+        extractor.release()
+        await second.value
+        #expect(extractor.calls == 2)
+    }
+
+    @Test func the_window_key_prefers_the_id_over_the_title() {
+        let byID = WindowSnapshot(bundleID: "com.a", windowTitle: "x", windowID: 7, text: "t", source: .accessibility)
+        let retitled = WindowSnapshot(bundleID: "com.a", windowTitle: "y", windowID: 7, text: "t", source: .accessibility)
+        let byTitle = WindowSnapshot(bundleID: "com.a", windowTitle: "x", text: "t", source: .accessibility)
+        #expect(byID.windowKey == retitled.windowKey)
+        #expect(byID.windowKey != byTitle.windowKey)
+        #expect(byTitle.windowKey != WindowSnapshot(bundleID: "com.a", windowTitle: "y", text: "t", source: .accessibility).windowKey)
     }
 }
