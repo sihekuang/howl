@@ -43,6 +43,27 @@ private func handOffScheduler(_ times: Int = 100) async {
     for _ in 0..<times { await Task.yield() }
 }
 
+/// Wait for a condition instead of guessing how long it takes.
+///
+/// The CI runner is a 3-vCPU VM where a concurrently running Vision
+/// test pins every core at high priority for ~16s; on 2026-09-08 the
+/// debouncer's 50ms timer task had still not been given a slice 258ms
+/// after being scheduled, and three fixed-sleep tests in this suite
+/// failed for the third time in a week (also 2026-09-03 on main). A
+/// timer that is merely late is not a broken debouncer, so the
+/// positive assertions poll — up to a limit generous enough that a
+/// debouncer that never fires still fails, clearly.
+private func waitUntil(
+    _ condition: @escaping @Sendable () -> Bool, timeout: TimeInterval = 5
+) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() { return true }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+    return condition()
+}
+
 @Suite("Debouncer")
 struct DebouncerTests {
 
@@ -50,8 +71,8 @@ struct DebouncerTests {
         let c = Counter()
         let d = Debouncer(interval: 0.05)
         d.schedule { c.increment() }
-        try await Task.sleep(nanoseconds: 200_000_000)
-        #expect(c.count == 1)
+        #expect(c.count == 0, "nothing runs synchronously at schedule time")
+        #expect(await waitUntil { c.count == 1 }, "the action never ran")
     }
 
     @Test func rapid_schedules_collapse_to_one_run() async throws {
@@ -83,10 +104,12 @@ struct DebouncerTests {
         let c = Counter()
         let d = Debouncer(interval: 0.05)
         d.schedule { c.increment() }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(await waitUntil { c.count == 1 }, "the first schedule never ran")
+        // Separated by the FIRST run having completed, not by a sleep
+        // — that is what makes the second one a new run and not a
+        // collapse into the first.
         d.schedule { c.increment() }
-        try await Task.sleep(nanoseconds: 200_000_000)
-        #expect(c.count == 2)
+        #expect(await waitUntil { c.count == 2 }, "the second schedule never ran")
     }
 
     @Test func sustained_rapid_schedules_still_fire_via_max_delay() async throws {
@@ -102,29 +125,27 @@ struct DebouncerTests {
         // own duration (25 * 20ms = 500ms), so if the cap works the
         // action fires mid-burst, well before the burst naturally
         // ends — and if the cap is broken, it can only fire AFTER the
-        // burst ends (once real quiet finally occurs), which the
-        // elapsed-time assertion below distinguishes.
+        // burst ends (once real quiet finally occurs). Asserted as an
+        // ORDERING against the burst itself rather than against the
+        // wall clock: on a starved runner the burst's sleeps stretch
+        // exactly as much as the debouncer's do, so the order survives
+        // while a fixed bound like "< 0.45s" does not (0.46s measured
+        // on CI, 2026-09-08).
         let fired = Signal()
+        let burstEnded = Counter()
         let d = Debouncer(interval: 0.1, maxDelay: 0.3)
-        let start = Date()
 
         let burst = Task {
             for _ in 0..<25 {
                 d.schedule { await fired.set() }
                 try? await Task.sleep(nanoseconds: 20_000_000)   // faster than `interval`
             }
+            burstEnded.increment()
         }
-
-        // Deterministic: returns exactly when the action has actually
-        // run, not after a guessed sleep. If `maxDelay` regressed to
-        // "no cap", this would only return once the burst above
-        // finishes and a genuine `interval`-long gap occurs — i.e.
-        // around 500ms+, not ~300ms.
         await fired.wait()
-        let elapsed = Date().timeIntervalSince(start)
+        let endedBeforeFiring = burstEnded.count
         burst.cancel()
-
-        #expect(elapsed < 0.45)   // comfortably before the burst's own ~500ms natural end
+        #expect(endedBeforeFiring == 0, "the action fired only after the burst ended, so maxDelay did not cap the wait")
     }
 
     @Test func a_finishing_run_does_not_orphan_a_newer_scheduled_run() async throws {
