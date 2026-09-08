@@ -193,6 +193,23 @@ public final class ScreenContextSimilarityCache: @unchecked Sendable {
     /// using it, and letting a measurement count as a use would keep
     /// a window alive in the LRU on the strength of scans that never
     /// reused its keywords.
+    /// The keywords last extracted for this window, if that extraction
+    /// happened within `interval` of `now`. The rate limit's question:
+    /// "did we already pay for this window a moment ago?"
+    public func recentKeywords(
+        bundleID: String, windowTitle: String, now: Date, within interval: TimeInterval
+    ) -> [String]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[identity(bundleID: bundleID, windowTitle: windowTitle)] else { return nil }
+        // A non-positive interval means "no limit", which is how the
+        // gate's own tests switch this off; it is not "only this instant".
+        guard interval > 0 else { return nil }
+        let age = now.timeIntervalSince(entry.storedAt)
+        guard age >= 0, age < min(interval, ttl) else { return nil }
+        return entry.keywords
+    }
+
     public func score(
         bundleID: String, windowTitle: String, tokens: Set<String>, now: Date
     ) -> Double? {

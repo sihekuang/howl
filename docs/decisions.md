@@ -326,3 +326,41 @@ in-app smoke test. Do not merge locally.
 - `~/.claude/skills/shipping-a-pr` — the user's own workflow starts at
   "opening the pull request", and `tag-and-release` runs from `main` after
   the merge.
+
+## 2026-09-08 — Screen-context LLM load: one extraction in flight + a per-window rate limit
+
+**Decision:** Two rules on top of the similarity gate. (1) At most ONE
+text extraction is in flight at a time: a refresh for the same window
+joins it, a refresh for a different window aborts it — and the abort
+crosses the C ABI (`howl_cancel_extract_keywords`) so the provider
+request actually stops. (2) A window is re-extracted at most once per
+`ScreenContextLimits.minExtractionInterval` (60s), however far its
+content moved; a different window identity is never held back.
+
+**Trigger:** The user reported the periodic scan "using too much system
+resource". Measured from `/tmp/howl.log` over 12:06–12:37 with the
+feature on: 83 Ollama calls, median 4.1s each, 662s of GPU busy in
+1863s of wall (36%), 6 calls timing out at 60s, up to 3 in flight at
+once, 51 of 82 start-to-start gaps shorter than the 15s tick. Every
+"applied N keyword(s)" log line is a real LLM call (the near-hit path
+does not log), so the 0.95 gate was passing nearly everything.
+
+**Basis:** Measurement, not literature. Two defects compounded:
+- `ScreenContextCoordinator` cancelled the Swift Task of a superseded
+  refresh, but its own comment (line 66) admitted the blocking C call
+  cannot see that. The Go request ran to completion or timeout while
+  the replacement queued behind it in Ollama — hence 3 in flight and
+  the 60s timeouts. Ollama stops generating on client disconnect, so
+  cancelling the Go context frees the GPU, not just a goroutine.
+- The gate not holding on real windows meant a 15s tick was a 15s LLM
+  cadence. The threshold is still untuned (see 2026-09-02); the rate
+  limit is the backstop that makes the tick safe while it is tuned.
+
+**Not done:** a separate, smaller extraction model. It would cut the
+per-call cost from ~4s to <1s but needs a new setting; the two rules
+above cut the CALL COUNT, which is the larger term.
+
+**Sources:**
+- `/tmp/howl.log` 2026-09-08 12:06–12:37 (Go core log; `ollama.Clean` lines)
+- Unified log, `com.howl.app:screencontext`, same window: 33 "applied" in 30 min
+- `ScreenContextExtractionLoadTests.swift`, `screenctx_cancel_export_test.go`

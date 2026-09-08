@@ -115,6 +115,9 @@ public protocol CoreEngine: Sendable {
     /// response and every sanitizer rejection, not just the surviving
     /// keywords — see `ScreenContextActivity`.
     func extractScreenKeywords(text: String) async -> ScreenKeywordExtraction?
+    /// Abort the `extractScreenKeywords(text:)` call in flight, if any.
+    /// Returns at once; the aborted call itself then returns nil.
+    func cancelScreenExtraction()
 
     /// Derive whisper biasing keywords from a PNG screenshot of the
     /// focused window, by asking the configured provider's VISION

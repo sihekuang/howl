@@ -234,7 +234,9 @@ struct ScreenContextActivityDetail: View {
             return "No readable window text"
         case .superseded:
             return "Superseded before it finished"
-        case .cacheHit, .unchangedContent, .extractionSucceeded, .extractionFailed:
+        case .extractionCancelled:
+            return "Cancelled — focus moved to another window before the provider answered"
+        case .cacheHit, .unchangedContent, .extractionRateLimited, .extractionSucceeded, .extractionFailed:
             return "—"
         }
     }
@@ -301,6 +303,8 @@ struct ScreenContextActivityDetail: View {
             return "Reused from an earlier read — no LLM call this time"
         case .unchangedContent:
             return "Content had not moved enough to re-read — no LLM call this time"
+        case .extractionRateLimited:
+            return "Read less than \(Int(ScreenContextLimits.minExtractionInterval))s ago — kept those keywords, no LLM call this time"
         default:
             return "—"
         }
@@ -419,7 +423,9 @@ struct ScreenContextActivityDetail: View {
         switch outcome {
         case .unchangedContent:
             return "\(percent) — under the threshold, so no re-read"
-        case .extractionSucceeded, .extractionFailed:
+        case .extractionRateLimited:
+            return "\(percent) — past the threshold, but read under \(Int(ScreenContextLimits.minExtractionInterval))s ago, so not re-read yet"
+        case .extractionSucceeded, .extractionFailed, .extractionCancelled:
             return "\(percent) — past the threshold, so it was re-read"
         default:
             return percent

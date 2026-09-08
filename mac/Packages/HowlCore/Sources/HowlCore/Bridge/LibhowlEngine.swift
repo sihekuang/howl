@@ -277,6 +277,15 @@ public actor LibhowlEngine: CoreEngine {
         )
     }
 
+    /// Abort the text extraction in flight, if any. `nonisolated` and
+    /// NOT routed through `screenContextQueue`: that queue is serial
+    /// and the extraction is what is occupying it, so a cancel queued
+    /// behind it would run only after the thing it meant to cancel.
+    /// The Go side takes its own lock and returns at once.
+    public nonisolated func cancelScreenExtraction() {
+        howl_cancel_extract_keywords()
+    }
+
     /// `nonisolated` and routed through `screenContextQueue`, for
     /// exactly the reasons spelled out on `extractScreenKeywords(text:)`
     /// above: `howl_extract_keywords_image` carries the identical

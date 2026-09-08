@@ -50,6 +50,43 @@ func howl_set_screen_keywords(jsonC *C.char) C.int {
 	return C.int(setScreenKeywordsJSON(C.GoString(jsonC)))
 }
 
+// howl_cancel_extract_keywords aborts the text extraction currently
+// in flight, if any. Safe to call when there is none.
+//
+// This exists because the Swift coordinator's cancellation is
+// cooperative and the blocking C call cannot observe it: without an
+// explicit abort, a superseded request kept running on the provider —
+// up to ExtractTimeout — while the replacement started behind it.
+// Measured on 2026-09-08: three requests in flight at once, six of
+// them timing out at 60s. Ollama stops generating when the client
+// disconnects, so cancelling here frees the GPU, not just the goroutine.
+//
+//export howl_cancel_extract_keywords
+func howl_cancel_extract_keywords() {
+	cancelExtractKeywords()
+}
+
+// inFlightExtract identifies one extraction so that its own deferred
+// cleanup can tell whether it is still the registered one — a later
+// call may already have replaced it.
+type inFlightExtract struct {
+	cancel context.CancelFunc
+}
+
+func cancelExtractKeywords() {
+	e := getEngine()
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	h := e.screenExtract
+	e.screenExtract = nil
+	e.mu.Unlock()
+	if h != nil {
+		h.cancel()
+	}
+}
+
 // extractKeywordsJSON is the testable body of howl_extract_keywords.
 func extractKeywordsJSON(in string) string {
 	e := getEngine()
@@ -74,7 +111,25 @@ func extractKeywordsJSON(in string) string {
 		return errorJSON(err.Error())
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), screenctx.ExtractTimeout)
-	defer cancel()
+	h := &inFlightExtract{cancel: cancel}
+	// At most one extraction in flight: a new one displaces (and
+	// aborts) whatever was still running. The host coalesces
+	// same-window refreshes onto the running call, so anything this
+	// displaces was for a window the user has already left.
+	e.mu.Lock()
+	if prev := e.screenExtract; prev != nil {
+		prev.cancel()
+	}
+	e.screenExtract = h
+	e.mu.Unlock()
+	defer func() {
+		cancel()
+		e.mu.Lock()
+		if e.screenExtract == h {
+			e.screenExtract = nil
+		}
+		e.mu.Unlock()
+	}()
 
 	res, err := screenctx.Extract(ctx, cleaner, req.Text, cfg.CustomDict)
 	if err != nil {

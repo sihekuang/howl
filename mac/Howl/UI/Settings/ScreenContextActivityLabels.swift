@@ -20,6 +20,8 @@ extension ScreenContextActivity.Outcome {
         case .extractionSucceeded: return "Extracted"
         case .extractionFailed: return "Extraction failed"
         case .superseded: return "Superseded"
+        case .extractionRateLimited: return "Rate limited"
+        case .extractionCancelled: return "Cancelled"
         }
     }
 
@@ -34,6 +36,8 @@ extension ScreenContextActivity.Outcome {
         case .extractionSucceeded: return "Extracted"
         case .extractionFailed: return "Failed"
         case .superseded: return "Superseded"
+        case .extractionRateLimited: return "Rate limited"
+        case .extractionCancelled: return "Cancelled"
         }
     }
 
@@ -49,10 +53,10 @@ extension ScreenContextActivity.Outcome {
     var tint: Color {
         switch self {
         case .extractionSucceeded: return .green
-        case .cacheHit, .unchangedContent: return .blue
+        case .cacheHit, .unchangedContent, .extractionRateLimited: return .blue
         case .extractionFailed: return .red
         case .noReadableWindowText: return .orange
-        case .skippedPreReadDenylist, .skippedPostReadDenylist, .superseded, .disabled:
+        case .skippedPreReadDenylist, .skippedPostReadDenylist, .superseded, .extractionCancelled, .disabled:
             return .secondary
         }
     }

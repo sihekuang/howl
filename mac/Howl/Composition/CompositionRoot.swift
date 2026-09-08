@@ -141,6 +141,7 @@ public final class CompositionRoot {
         },
         extractImage: { [engine] png in await engine.extractScreenKeywords(image: png) },
         extractText: { [engine] text in await engine.extractScreenKeywords(text: text) },
+        cancelExtraction: { [engine] in engine.cancelScreenExtraction() },
         apply: { [engine] keywords in await engine.setScreenKeywords(keywords) },
         // `record(_:)` is `@MainActor`-isolated (the whole store is);
         // this `await` is the hop off the coordinator's own actor onto

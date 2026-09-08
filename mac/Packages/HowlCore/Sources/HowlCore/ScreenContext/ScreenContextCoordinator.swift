@@ -35,6 +35,14 @@ public actor ScreenContextCoordinator {
     /// can later be driven from settings without reshaping the graph;
     /// today every caller passes the default constant.
     private let similarityThreshold: @Sendable () -> Double
+    /// Floor on how often one window is re-extracted, whatever the
+    /// gate says. See `ScreenContextLimits.minExtractionInterval`.
+    private let minExtractionInterval: TimeInterval
+    /// Aborts the provider request behind `extractText`. Swift's
+    /// cancellation is cooperative and the blocking C call cannot see
+    /// it, so without this a superseded extraction ran to completion
+    /// (or its 60s timeout) while its replacement queued behind it.
+    private let cancelExtraction: @Sendable () -> Void
     private let denylist: @Sendable () -> ScreenContextDenylist
     private let isEnabled: @Sendable () -> Bool
     private let frontmostBundleID: @Sendable () async -> String?
@@ -70,6 +78,41 @@ public actor ScreenContextCoordinator {
     // (now stale) result without this check.
     private var generation: UInt64 = 0
 
+    /// The one LLM extraction allowed in flight. Every refresh that
+    /// needs an extraction for the SAME window joins this one instead
+    /// of starting another — the periodic tick landing mid-call is the
+    /// common case — and a refresh for a DIFFERENT window aborts it.
+    /// A class, not a struct: refreshes that join need to see the
+    /// same `participants`/`cancelled` the starter does.
+    private final class InFlightExtraction {
+        let identity: String
+        let task: Task<ScreenKeywordExtraction?, Never>
+        /// The refresh that started this call. A refresh that outranks
+        /// it and is not among `participants` has no use for the
+        /// result, and says so by cancelling it when it finishes (see
+        /// `refresh`). An OLDER refresh finishing late — typically one
+        /// whose own extraction this call displaced — must leave it
+        /// alone, which is what `startedBy` is compared against.
+        let startedBy: UInt64
+        /// Generations of every refresh awaiting this call, starter
+        /// included.
+        var participants: Set<UInt64>
+        var cancelled = false
+
+        init(identity: String, task: Task<ScreenKeywordExtraction?, Never>, startedBy generation: UInt64) {
+            self.identity = identity
+            self.task = task
+            self.startedBy = generation
+            self.participants = [generation]
+        }
+    }
+    private var inFlightExtraction: InFlightExtraction?
+
+    private enum ExtractionResult {
+        case finished(ScreenKeywordExtraction?)
+        case cancelled
+    }
+
     /// The (outcome, bundleID) of the last activity actually recorded,
     /// used to coalesce a repeating denylist skip into one entry.
     ///
@@ -88,17 +131,21 @@ public actor ScreenContextCoordinator {
         cache: ScreenContextCache,
         similarityCache: ScreenContextSimilarityCache = ScreenContextSimilarityCache(),
         similarityThreshold: @escaping @Sendable () -> Double = { ScreenContextLimits.defaultSimilarityThreshold },
+        minExtractionInterval: TimeInterval = ScreenContextLimits.minExtractionInterval,
         denylist: @escaping @Sendable () -> ScreenContextDenylist,
         isEnabled: @escaping @Sendable () -> Bool,
         frontmostBundleID: @escaping @Sendable () async -> String?,
         extractImage: @escaping @Sendable (Data) async -> ScreenImageExtractionResult,
         extractText: @escaping @Sendable (String) async -> ScreenKeywordExtraction?,
+        cancelExtraction: @escaping @Sendable () -> Void = {},
         apply: @escaping @Sendable ([String]) async -> Void,
         onActivity: @escaping @Sendable (ScreenContextActivity) async -> Void
     ) {
         self.source = source
         self.similarityCache = similarityCache
         self.similarityThreshold = similarityThreshold
+        self.minExtractionInterval = minExtractionInterval
+        self.cancelExtraction = cancelExtraction
         self.cache = cache
         self.denylist = denylist
         self.isEnabled = isEnabled
@@ -121,6 +168,21 @@ public actor ScreenContextCoordinator {
         // one would then report a total measured from the wrong start.
         let startedAt = ContinuousClock().now
 
+        await runRefresh(myGeneration: myGeneration, startedAt: startedAt, now: now)
+
+        // This refresh resolved without needing the extraction that is
+        // still running — focus moved to a denylisted app, the feature
+        // was switched off, the new window hit a cache. That
+        // extraction's result would be dropped by the generation check
+        // anyway; stop paying the provider for it.
+        if let current = inFlightExtraction,
+           current.startedBy < myGeneration,
+           !current.participants.contains(myGeneration) {
+            abort(current)
+        }
+    }
+
+    private func runRefresh(myGeneration: UInt64, startedAt: ContinuousClock.Instant, now: Date) async {
         // Disabled must CLEAR any previously-applied keywords, not just
         // skip applying new ones — mirroring the denylist path four
         // lines below. Returning bare here would stop the read but not
@@ -287,8 +349,46 @@ public actor ScreenContextCoordinator {
             return
         }
 
+        // BACKSTOP. The gate said the content moved, but if this window
+        // was extracted less than `minExtractionInterval` ago, the
+        // keywords in force are recent enough: re-apply them and record
+        // the score. Per window identity, so a real focus change to a
+        // new window is never held back by it. Not re-anchored, for
+        // the same reason a near-hit is not.
+        if let recent = similarityCache.recentKeywords(
+            bundleID: snapshot.bundleID, windowTitle: snapshot.windowTitle,
+            now: now, within: minExtractionInterval
+        ) {
+            await recordAndApply(
+                recent, myGeneration: myGeneration, startedAt: startedAt, now: now,
+                bundleID: snapshot.bundleID, outcome: .extractionRateLimited,
+                source: snapshot.source, fallbackReason: reason,
+                capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: snapshot.timings,
+                similarity: priorSimilarity
+            )
+            return
+        }
+
         let extractStart = ContinuousClock().now
-        let extractionOrNil = await extractText(snapshot.text)
+        let identity = "\(snapshot.bundleID)\u{0}\(snapshot.windowTitle)"
+        let extractionOrNil: ScreenKeywordExtraction?
+        switch await runExtraction(text: snapshot.text, identity: identity, myGeneration: myGeneration) {
+        case .cancelled:
+            log.notice("screen context extraction cancelled; focus moved on")
+            await recordAndApply(
+                [], myGeneration: myGeneration, startedAt: startedAt, now: now, bundleID: snapshot.bundleID,
+                outcome: .extractionCancelled, source: snapshot.source, fallbackReason: reason,
+                capturedText: snapshot.text, capturedTextLength: snapshot.text.count,
+                capturedImagePixelSize: snapshot.pixelSize,
+                timings: snapshot.timings,
+                similarity: priorSimilarity
+            )
+            return
+        case .finished(let value):
+            extractionOrNil = value
+        }
         let extractSeconds = (ContinuousClock().now - extractStart).timeInterval
         // Carried on EVERY outcome below, not just the successful one:
         // a refresh that spent nine seconds in the model and then
@@ -341,6 +441,37 @@ public actor ScreenContextCoordinator {
     }
 
     /// Pixels for the provider's vision model, which reads them itself.
+    /// The single funnel every text extraction goes through. Same
+    /// window as the call in flight: join it. Different window: abort
+    /// the stale call — on the Go side too — and start this one.
+    private func runExtraction(text: String, identity: String, myGeneration: UInt64) async -> ExtractionResult {
+        if let current = inFlightExtraction {
+            if current.identity == identity {
+                current.participants.insert(myGeneration)
+                let value = await current.task.value
+                return current.cancelled ? .cancelled : .finished(value)
+            }
+            abort(current)
+        }
+        let extractText = self.extractText
+        let handle = InFlightExtraction(
+            identity: identity,
+            task: Task { await extractText(text) },
+            startedBy: myGeneration
+        )
+        inFlightExtraction = handle
+        let value = await handle.task.value
+        if inFlightExtraction === handle { inFlightExtraction = nil }
+        return handle.cancelled ? .cancelled : .finished(value)
+    }
+
+    private func abort(_ current: InFlightExtraction) {
+        current.cancelled = true
+        cancelExtraction()
+        current.task.cancel()
+        if inFlightExtraction === current { inFlightExtraction = nil }
+    }
+
     private func extractFromImage(
         _ capture: WindowImageCapture, myGeneration: UInt64,
         startedAt: ContinuousClock.Instant, now: Date, allowAlternate: Bool
@@ -474,7 +605,11 @@ public actor ScreenContextCoordinator {
         let activity = ScreenContextActivity(
             timestamp: now,
             bundleID: bundleID,
-            outcome: applied ? outcome : .superseded,
+            // A cancelled extraction is by construction never current —
+            // something newer displaced it — but "superseded" would hide
+            // the fact that matters here: the provider call was aborted,
+            // not merely its result discarded.
+            outcome: applied || outcome == .extractionCancelled ? outcome : .superseded,
             source: source,
             capturedText: capturedText,
             capturedTextLength: capturedTextLength,

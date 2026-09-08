@@ -30,6 +30,16 @@ public enum ScreenContextLimits {
     /// How often the periodic scan re-reads the focused window, in
     /// seconds. See `ScreenContextObserver`.
     public static let defaultScanInterval: TimeInterval = 15
+
+    /// The shortest gap between two LLM extractions of the SAME window,
+    /// whatever its content did in between. The similarity gate is the
+    /// first line of defence; this is the backstop for when it does not
+    /// hold — measured on 2026-09-08 it mostly did not, and the periodic
+    /// scan became 83 Ollama calls in 31 minutes on one machine. A
+    /// window the user is still looking at is well served by keywords
+    /// that are a minute old; a different window is never held back by
+    /// this, because the limit is per window identity.
+    public static let minExtractionInterval: TimeInterval = 60
 }
 
 /// Which read actually produced what the model saw on a given refresh
@@ -246,6 +256,16 @@ public struct ScreenContextActivity: Identifiable, Equatable, Sendable {
         /// before this refresh's own apply could land — its result,
         /// whatever it would have been, was correctly discarded.
         case superseded
+        /// The window's content had moved past the threshold, but it
+        /// had been extracted less than `minExtractionInterval` ago, so
+        /// the previous keywords were re-applied instead of spending
+        /// another LLM call. `similarity` still carries the score.
+        case extractionRateLimited
+        /// The LLM call was aborted on purpose — focus moved to a
+        /// different window before the provider answered — rather than
+        /// failing. Distinct from `extractionFailed` so a flaky provider
+        /// and a busy user do not look alike in the inspector.
+        case extractionCancelled
     }
 
     public init(
