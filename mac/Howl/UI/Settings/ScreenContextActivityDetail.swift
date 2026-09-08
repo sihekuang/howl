@@ -70,6 +70,7 @@ struct ScreenContextActivityDetail: View {
             if isSelfSkip { selfSkipNote }
             SettingsGroupHeader("This capture")
             capturedRow(activity)
+            changedRow(activity)
             llmReturnedRow(activity)
             sanitizedRow(activity)
             timingRows(activity)
@@ -233,7 +234,7 @@ struct ScreenContextActivityDetail: View {
             return "No readable window text"
         case .superseded:
             return "Superseded before it finished"
-        case .cacheHit, .extractionSucceeded, .extractionFailed:
+        case .cacheHit, .unchangedContent, .extractionSucceeded, .extractionFailed:
             return "—"
         }
     }
@@ -298,6 +299,8 @@ struct ScreenContextActivityDetail: View {
             return "Extraction failed — provider unreachable, rate-limited, or timed out"
         case .cacheHit:
             return "Reused from an earlier read — no LLM call this time"
+        case .unchangedContent:
+            return "Content had not moved enough to re-read — no LLM call this time"
         default:
             return "—"
         }
@@ -379,6 +382,48 @@ struct ScreenContextActivityDetail: View {
             return "\(Int((seconds * 1000).rounded())) ms"
         }
         return String(format: "%.2f s", seconds)
+    }
+
+    // MARK: - Changed
+
+    /// How far this reading had moved from the one that produced the
+    /// keywords currently in force, and what that bought.
+    ///
+    /// The row exists to make the threshold tunable from real windows
+    /// rather than guessed. It is shown on BOTH sides of the decision
+    /// — the readings that were skipped AND the ones that went to the
+    /// model — because a column that only ever showed scores above the
+    /// threshold would tell you nothing about where the threshold
+    /// should sit.
+    @ViewBuilder
+    private func changedRow(_ activity: ScreenContextActivity) -> some View {
+        if let similarity = activity.similarity {
+            HStack(alignment: .top) {
+                rowLabel("Changed")
+                Text(changedSummary(similarity, outcome: activity.outcome))
+                    .font(.callout)
+                    .monospacedDigit()
+                Spacer()
+            }
+        }
+    }
+
+    private func changedSummary(_ similarity: Double, outcome: ScreenContextActivity.Outcome) -> String {
+        // Reported as CHANGE, not as similarity: "3% changed" is the
+        // way the question is actually asked, and the threshold is
+        // discussed the same way.
+        let changed = max(0, min(100, (1 - similarity) * 100))
+        let percent = changed < 10
+            ? String(format: "%.1f%%", changed)
+            : String(format: "%.0f%%", changed)
+        switch outcome {
+        case .unchangedContent:
+            return "\(percent) — under the threshold, so no re-read"
+        case .extractionSucceeded, .extractionFailed:
+            return "\(percent) — past the threshold, so it was re-read"
+        default:
+            return percent
+        }
     }
 
     // MARK: - Shared row chrome

@@ -16,6 +16,7 @@ extension ScreenContextActivity.Outcome {
         case .skippedPostReadDenylist: return "Skipped (denylist, post-read)"
         case .noReadableWindowText: return "No readable text"
         case .cacheHit: return "Cache hit"
+        case .unchangedContent: return "Unchanged"
         case .extractionSucceeded: return "Extracted"
         case .extractionFailed: return "Extraction failed"
         case .superseded: return "Superseded"
@@ -29,6 +30,7 @@ extension ScreenContextActivity.Outcome {
         case .skippedPreReadDenylist, .skippedPostReadDenylist: return "Skipped"
         case .noReadableWindowText: return "No text"
         case .cacheHit: return "Cached"
+        case .unchangedContent: return "Unchanged"
         case .extractionSucceeded: return "Extracted"
         case .extractionFailed: return "Failed"
         case .superseded: return "Superseded"
@@ -47,7 +49,7 @@ extension ScreenContextActivity.Outcome {
     var tint: Color {
         switch self {
         case .extractionSucceeded: return .green
-        case .cacheHit: return .blue
+        case .cacheHit, .unchangedContent: return .blue
         case .extractionFailed: return .red
         case .noReadableWindowText: return .orange
         case .skippedPreReadDenylist, .skippedPostReadDenylist, .superseded, .disabled:

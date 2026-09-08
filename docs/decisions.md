@@ -261,3 +261,68 @@ cancels the previous in-flight task on every refresh.
 - `core/internal/screenctx/extract.go` — the constant and its reasoning
 - `core/internal/screenctx/latency_live_test.go` — the harness and prior numbers
 - The 2026-08-31 entry above, which fixed the same defect class on the image path
+
+## 2026-09-02 — Screen-context change gate: exact pairwise Jaccard, not SimHash/MinHash
+
+**Decision:** Gate re-extraction on an **exact pairwise similarity** between
+the fresh capture and the last *extracted* content, computed as **Jaccard
+overlap of the normalized distinct token set**. Do NOT use SimHash + Hamming
+distance or MinHash/LSH.
+
+**Trigger:** Adding a periodic screen-context scan means an unchanged (or
+trivially changed) window would otherwise re-hit the LLM on every tick, since
+`ScreenContextCache` keys on an exact SHA256 of the captured text. A
+similarity gate is needed; the question was which representation.
+
+**Basis:** Unanimous across independent sources on the part that decides it —
+SimHash and MinHash are *locality-sensitive hashes*, and their entire purpose
+is avoiding all-pairs comparison when searching a large corpus. Here N is 1:
+one fresh capture against one stored value per window. At N=1 an LSH buys no
+search speedup and actively costs the thing the gate needs — LSH tells you
+"probably above threshold" while an exact metric returns the score itself.
+Every source frames LSH as a scale technique and says exact pairwise
+comparison is the right tool for a small comparison set.
+
+Cosine-over-term-counts vs Jaccard-over-token-set was NOT settled by the
+sources — they agree it turns on whether term *frequency* is signal. That
+half was resolved locally, not from external evidence: the consumer is
+keyword extraction for a Whisper `initial_prompt`, where a term is present or
+absent and repetition count carries nothing, so the set metric is the right
+one and is cheaper (set intersection, no vector norms).
+
+**Local precedent considered and rejected:** `HowlCore/Editor/Levenshtein.swift`
+is the repo's existing string-similarity helper (Compare view's closest-match
+badge). It does not transfer — Levenshtein is O(n*m), so comparing two 8 KB
+captures is ~64M cell operations on every scan tick. `RecentSimilarityProbe`
+is unrelated (TSE *audio* cosine values read from manifests).
+
+**Threshold deliberately NOT decided here.** Published near-duplicate
+thresholds diverge (0.8 / 0.9 / 0.95) and every source ties the value to a
+precision-recall balance for the specific corpus. It must come from measuring
+real windows, not from the literature.
+
+**Sources:**
+- rOpenSci `textreuse`, "Minhash and locality-sensitive hashing" vignette — https://docs.ropensci.org/textreuse/articles/textreuse-minhash.html
+- Nelson Elhage, "Finding near-duplicates with Jaccard similarity and MinHash" — https://blog.nelhage.com/post/fuzzy-dedup/
+- Shrivastava & Li, "In Defense of MinHash Over SimHash", AISTATS 2014 — http://proceedings.mlr.press/v33/shrivastava14.pdf
+- Manku, Jain & Das Sarma, "Detecting Near-Duplicates for Web Crawling", WWW 2007 (the k=3-of-64-bits SimHash convention, and its indexed-retrieval framing) — https://research.google.com/pubs/archive/33026.pdf
+- Lee et al., "Deduplicating Training Data Makes Language Models Better" (threshold divergence: 0.8 Jaccard + 0.8 edit similarity) — https://arxiv.org/pdf/2107.06499
+
+## 2026-09-08 — Feature branches land via a pushed PR, never a local merge
+
+**Decision:** A finished feature branch is pushed and opened as a GitHub PR
+against `main`. The merge itself is the user's step, taken after their manual
+in-app smoke test. Do not merge locally.
+
+**Trigger:** `feat/screen-context-periodic-scan` was complete and verified
+(406 tests / 69 suites, `make build` green) and needed integrating.
+
+**Basis:** Existing project convention.
+- `git log main` — every feature since `#56` carries a `(#NN)` squash-merge
+  suffix; only version bumps from the release flow land on `main` directly.
+- `.superpowers/sdd/progress.md` — the modifier-only-PTT branch: "Pushed
+  origin/…; DRAFT PR #60 opened … user runs manual GUI smoke, then mark PR
+  ready + merge."
+- `~/.claude/skills/shipping-a-pr` — the user's own workflow starts at
+  "opening the pull request", and `tag-and-release` runs from `main` after
+  the merge.
