@@ -52,7 +52,7 @@ public enum AudioCaptureError: Error, Equatable {
 /// invoking the callback.
 public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private let engine = AVAudioEngine()
-    private var isRunning = false
+    private let lifecycle = AudioTapLifecycle()
 
     // Optional converter for the rare case the input device isn't
     // 48 kHz (most macOS mics are). For 48 kHz we do channel mix
@@ -67,11 +67,14 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private var diagCounter: Int = 0
     private var diagPeak: Float = 0
 
-    // No lock: start/stop are driven serially from the
-    // MainActor-isolated EngineCoordinator, so concurrent calls don't
-    // happen. The audio-thread callback only reads `converter` and
-    // `targetFormat` after start has completed; they're set once and
-    // never reassigned during a session.
+    // start/stop are NOT serialized by the caller: EngineCoordinator
+    // is MainActor-isolated, but `await`ing `start` hands the actor
+    // back, so a release or a second press can run while `start` is
+    // still inside `AVAudioEngine.start()`. `lifecycle` holds the
+    // lock; everything from device selection to `engine.start()` runs
+    // under it, and so does `stop`. The audio-thread callback only
+    // reads `converter` after the tap is installed; it's assigned
+    // under the same lock, before the tap exists.
 
     public init() {}
 
@@ -120,10 +123,33 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
             throw AudioCaptureError.permissionDenied
         }
 
-        if isRunning { return }
-
         let inputNode = engine.inputNode
+        let installed = try lifecycle.start(
+            installTap: { try self.prepareAndInstallTap(on: inputNode, deviceUID: deviceUID, onFrame: onFrame) },
+            removeTap: { inputNode.removeTap(onBus: 0) },
+            runEngine: {
+                do {
+                    try self.engine.start()
+                } catch {
+                    throw AudioCaptureError.engineStartFailed(String(describing: error))
+                }
+            }
+        )
+        if installed {
+            log.info("AVAudioInputCapture.start: engine started")
+        } else {
+            log.info("AVAudioInputCapture.start: already started — ignoring")
+        }
+    }
 
+    /// Everything between "we have permission" and "the tap is in":
+    /// device selection, format discovery, converter setup, tap
+    /// install. Runs under the lifecycle lock.
+    private func prepareAndInstallTap(
+        on inputNode: AVAudioInputNode,
+        deviceUID: String?,
+        onFrame: @escaping @Sendable ([Float]) -> Void
+    ) throws {
         // Optional explicit device. Resolve the AVCaptureDevice UID
         // to a CoreAudio AudioDeviceID and tell the input AU to use
         // it. With `nil` we don't touch deviceID — the AU follows
@@ -169,23 +195,16 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
             self.diagnose(buffer: buffer)
             self.deliver(buffer: buffer, onFrame: onFrame)
         }
-
-        do {
-            try engine.start()
-            isRunning = true
-            log.info("AVAudioInputCapture.start: engine started")
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            throw AudioCaptureError.engineStartFailed(String(describing: error))
-        }
     }
 
     public func stop() {
-        guard isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        isRunning = false
-        log.info("AVAudioInputCapture.stop: engine stopped")
+        lifecycle.stop(
+            removeTap: { engine.inputNode.removeTap(onBus: 0) },
+            stopEngine: {
+                engine.stop()
+                log.info("AVAudioInputCapture.stop: engine stopped")
+            }
+        )
     }
 
     /// Throttled diagnostic: log every ~30 tap callbacks (~1s at typical
