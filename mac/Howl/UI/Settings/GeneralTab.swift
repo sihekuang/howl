@@ -43,7 +43,7 @@ struct GeneralTab: View {
             Picker("Microphone", selection: micBinding) {
                 Text("System Default").tag("")
                 ForEach(devices) { dev in
-                    Text(dev.name).tag(dev.id)
+                    Text(dev.isBluetooth ? "\(dev.name) (Bluetooth)" : dev.name).tag(dev.id)
                 }
                 // Saved selection points to a device that isn't in the
                 // discovery list (disconnected, or `.task` hasn't loaded
@@ -58,6 +58,7 @@ struct GeneralTab: View {
                     Text("\(displayName(for: savedUID)) — not connected").tag(savedUID)
                 }
             }
+            micRecommendationRow
             micPermissionRow
             Picker("Whisper model", selection: $settings.whisperModelSize) {
                 ForEach(modelSizes, id: \.size) { m in
@@ -163,6 +164,22 @@ struct GeneralTab: View {
             await MainActor.run {
                 self.presetLoadError = "Couldn't load presets: \(error.localizedDescription)"
             }
+        }
+    }
+
+    /// Steers people to a built-in or USB mic. Bluetooth headsets have
+    /// to switch into call mode before they deliver audio — 2–4 s from
+    /// an idle start for AirPods — so the first words get lost, and
+    /// headphone playback drops to call quality while recording.
+    @ViewBuilder
+    private var micRecommendationRow: some View {
+        let selectedIsBluetooth = devices.first { $0.id == settings.inputDeviceUID }?.isBluetooth ?? false
+        if selectedIsBluetooth {
+            Label("Bluetooth mics take a few seconds to start, so your first words may be cut off, and headphone audio drops to call quality while recording. Use the built-in or a USB mic for best results — your headphones can still play audio.", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.caption)
+        } else {
+            Text("Built-in or USB mics work best. Bluetooth mics such as AirPods are slow to start and can cut off your first words.")
+                .foregroundStyle(.secondary).font(.caption)
         }
     }
 

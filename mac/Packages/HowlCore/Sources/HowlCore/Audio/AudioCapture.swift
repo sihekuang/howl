@@ -12,10 +12,21 @@ private let log = Logger(subsystem: "com.howl.app", category: "AudioCapture")
 public struct AudioInputDevice: Identifiable, Hashable, Sendable {
     public let id: String      // AVCaptureDevice.uniqueID == CoreAudio UID
     public let name: String
+    /// CoreAudio transport (`kAudioDeviceTransportType*`), 0 if unknown.
+    public let transportType: UInt32
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, transportType: UInt32 = 0) {
         self.id = id
         self.name = name
+        self.transportType = transportType
+    }
+
+    /// Bluetooth mics (AirPods, headsets) start slowly — the headset
+    /// has to switch into call mode first, 2–4 s when it's been idle —
+    /// and drop playback to call quality while recording.
+    public var isBluetooth: Bool {
+        transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
     }
 }
 
@@ -91,7 +102,9 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
             mediaType: .audio,
             position: .unspecified
         )
-        return session.devices.map { AudioInputDevice(id: $0.uniqueID, name: $0.localizedName) }
+        return session.devices.map {
+            AudioInputDevice(id: $0.uniqueID, name: $0.localizedName, transportType: UInt32(bitPattern: $0.transportType))
+        }
     }
 
     public func start(deviceUID: String?, onFrame: @escaping @Sendable ([Float]) -> Void) async throws {
