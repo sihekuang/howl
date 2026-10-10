@@ -11,7 +11,7 @@ public final class CompositionRoot {
     public let hidTrigger: any HIDTriggerMonitor
     public let hidPermission: any HIDInputMonitoringPermission
     public let injector: any TextInjector
-    public let streamTyper: any StreamingTextInjector
+    public let streamTyper: OrderedStreamTyper
     public let settings: any SettingsStore
     public let secrets: any SecretStore
     public let permissions: any AccessibilityPermissions
@@ -28,7 +28,7 @@ public final class CompositionRoot {
             pasteboard: SystemPasteboard(),
             keystroke: CGEventKeystrokeSender()
         )
-        self.streamTyper = CGEventTextTyper()
+        self.streamTyper = OrderedStreamTyper(wrapping: CGEventTextTyper())
         self.settings = UserDefaultsSettingsStore()
         self.secrets = KeychainSecretStore()
         self.permissions = DefaultAccessibilityPermissions()
