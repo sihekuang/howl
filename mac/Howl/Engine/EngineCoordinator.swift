@@ -371,6 +371,13 @@ public final class EngineCoordinator {
     /// has time to actually fire before deinit.
     private let cueSound = CueSound()
 
+    /// Fires the cue on the first captured frame with sound, i.e. when
+    /// the mic is actually live — the same moment the overlay waveform
+    /// starts moving. Playing it on key press was wrong for Bluetooth
+    /// headsets: AirPods deliver silence for 2–4 s while switching into
+    /// call mode, and that switch also cut off the cue itself.
+    private let cueTrigger = FirstSoundDetector()
+
     private func onPress() async {
         log.info("onPress: setting state=recording, starting Swift capture and engine")
         // Preflight: the engine pipeline may not be built yet on a cold
@@ -398,7 +405,7 @@ public final class EngineCoordinator {
         // that got evicted while idle is back in memory by the time
         // Whisper hands the transcript to the LLM.
         await prewarmOllamaIfActive()
-        cueSound.playListening()
+        cueTrigger.reset()
         // New cycle: clear any prior key-cancel state (and a lingering
         // "Cancelled" pill) so this recording starts clean.
         cancelledThisCycle = false
@@ -415,8 +422,16 @@ public final class EngineCoordinator {
             // internally synchronized, so this is safe and avoids the
             // detached-task race that was dropping ~99% of buffers.
             let engine = composition.engine
-            try await composition.audioCapture.start(deviceUID: settings.inputDeviceUID) { samples in
+            let cueTrigger = cueTrigger
+            try await composition.audioCapture.start(deviceUID: settings.inputDeviceUID) { [weak self] samples in
                 try? engine.pushAudio(samples)
+                if cueTrigger.observe(samples) {
+                    Task { @MainActor in
+                        // Released before the mic went live: no cue.
+                        guard let self, self.composition.appState.engineState == .recording else { return }
+                        self.cueSound.playListening()
+                    }
+                }
             }
             log.info("onPress: capture + engine running")
             composition.appState.transientWarning = nil
