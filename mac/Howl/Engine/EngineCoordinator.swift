@@ -479,10 +479,10 @@ public final class EngineCoordinator {
             // Streaming LLM delta — type at the cursor and accumulate
             // for the final paste-fallback comparison. We DON'T set
             // engineState here; .result will flip back to idle.
+            // Enqueue synchronously: deltas must be typed in arrival
+            // order, which per-chunk Tasks do not guarantee.
             streamedSoFar += text
-            Task { @MainActor in
-                try? await composition.streamTyper.injectChunk(text)
-            }
+            composition.streamTyper.enqueue(text)
         case .result(let text):
             Task { @MainActor in
                 composition.cancelKeyMonitor.stop()
@@ -495,7 +495,8 @@ public final class EngineCoordinator {
                         setTransientWarning("paste: \(error)")
                     }
                 } else if !streamedSoFar.isEmpty {
-                    try? await composition.streamTyper.injectChunk(" ")
+                    // Same queue as the deltas, so the space lands after them.
+                    composition.streamTyper.enqueue(" ")
                 }
                 streamedSoFar = ""
                 composition.appState.engineState = .idle

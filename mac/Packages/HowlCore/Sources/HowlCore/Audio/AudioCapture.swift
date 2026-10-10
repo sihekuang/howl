@@ -54,13 +54,10 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let lifecycle = AudioTapLifecycle()
 
-    // Optional converter for the rare case the input device isn't
-    // 48 kHz (most macOS mics are). For 48 kHz we do channel mix
-    // manually — way simpler than wrestling with AVAudioConverter's
-    // input-block contract, which we previously got wrong (single-shot
-    // Once flag caused all buffers after the first to convert to 0
-    // samples and silently drop).
-    private var converter: AVAudioConverter?
+    // Resampler for non-48 kHz inputs (Bluetooth headsets such as
+    // AirPods; most macOS mics are 48 kHz). For 48 kHz we do channel
+    // mix manually in deliver().
+    private var resampler: InputResampler?
 
     // Throttled tap-callback diagnostics: every ~30 callbacks, log
     // frame count + peak amplitude.
@@ -73,7 +70,7 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
     // still inside `AVAudioEngine.start()`. `lifecycle` holds the
     // lock; everything from device selection to `engine.start()` runs
     // under it, and so does `stop`. The audio-thread callback only
-    // reads `converter` after the tap is installed; it's assigned
+    // reads `resampler` after the tap is installed; it's assigned
     // under the same lock, before the tap exists.
 
     public init() {}
@@ -172,21 +169,16 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
         let inputFormat = inputNode.inputFormat(forBus: 0)
         log.info("AVAudioInputCapture.start: input format sr=\(inputFormat.sampleRate, privacy: .public) ch=\(inputFormat.channelCount, privacy: .public)")
 
-        // Build a converter only if we need rate conversion. For pure
+        // Build a resampler only if we need rate conversion. For pure
         // channel mixing at 48 kHz we mix manually in deliver().
         if inputFormat.sampleRate != 48000 {
-            guard let target = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: 48000,
-                channels: 1,
-                interleaved: false
-            ), let conv = AVAudioConverter(from: inputFormat, to: target) else {
+            guard let r = InputResampler(from: inputFormat) else {
                 throw AudioCaptureError.formatUnavailable
             }
-            converter = conv
-            log.info("AVAudioInputCapture.start: using AVAudioConverter for non-48k input")
+            resampler = r
+            log.info("AVAudioInputCapture.start: resampling \(inputFormat.sampleRate, privacy: .public) Hz input to 48 kHz")
         } else {
-            converter = nil
+            resampler = nil
         }
 
         log.info("AVAudioInputCapture.start: installing tap")
@@ -252,42 +244,15 @@ public final class AVAudioInputCapture: AudioCapture, @unchecked Sendable {
             return
         }
 
-        // Fallback path: non-48 kHz input — use AVAudioConverter.
-        // Recreate the converter's expected output format each call;
-        // AVAudioConverter is stateful around rate conversion.
-        guard let converter else { return }
-        guard let target = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 48000,
-            channels: 1,
-            interleaved: false
-        ) else { return }
-        let ratio = target.sampleRate / buffer.format.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(n) * ratio + 64)
-        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outCapacity) else {
-            return
-        }
-        final class Once: @unchecked Sendable { var done = false }
-        let once = Once()
-        var error: NSError?
-        let status = converter.convert(to: outBuffer, error: &error) { _, outStatus in
-            if once.done {
-                outStatus.pointee = .endOfStream
-                return nil
+        // Fallback path: non-48 kHz input — resample.
+        guard let resampler else { return }
+        do {
+            if let samples = try resampler.convert(buffer) {
+                onFrame(samples)
             }
-            once.done = true
-            outStatus.pointee = .haveData
-            return buffer
-        }
-        if status == .error {
+        } catch {
             log.error("AVAudioInputCapture: convert FAILED: \(String(describing: error), privacy: .public)")
-            return
         }
-        guard let cd = outBuffer.floatChannelData?[0] else { return }
-        let count = Int(outBuffer.frameLength)
-        if count == 0 { return }
-        let samples = Array(UnsafeBufferPointer(start: cd, count: count))
-        onFrame(samples)
     }
 
     /// Resolve an AVCaptureDevice / CoreAudio UID string to its
